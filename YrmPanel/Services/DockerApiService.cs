@@ -109,7 +109,7 @@ public sealed class DockerApiService : IDisposable
             using var response = await _client.GetAsync($"{prefix}/containers/{id}/logs?stdout=1&stderr=1&tail=150&timestamps=1", ct);
             if (!response.IsSuccessStatusCode) return $"Docker returned HTTP {(int)response.StatusCode}.";
             var bytes = await response.Content.ReadAsByteArrayAsync(ct);
-            if (bytes.Length > 256 * 1024) return "Log output is too large. Open Dockhand for longer logs.";
+            if (bytes.Length > 256 * 1024) return "Log output is too large. Showing the latest lines is recommended.";
             // Docker multiplexes stdout/stderr with an 8-byte frame header on non-TTY containers.
             var output = new System.Text.StringBuilder();
             var pos = 0;

@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace YrmPanel.Services;
 
-public sealed record SambaShare(string Name, string Path, bool ReadOnly);
+public sealed record SambaShare(string Name, string Path, bool ReadOnly, bool Managed);
 public sealed record SambaOverview(bool Available, string Message, string Account, bool AccountConfigured, IReadOnlyList<SambaShare> Shares);
 
 /// <summary>
@@ -27,7 +27,8 @@ public sealed class SambaManagementService
                 root.GetProperty("shares").EnumerateArray().Select(x => new SambaShare(
                     x.GetProperty("name").GetString() ?? "",
                     x.GetProperty("path").GetString() ?? "",
-                    x.GetProperty("readOnly").GetBoolean())).ToArray());
+                    x.GetProperty("readOnly").GetBoolean(),
+                    x.TryGetProperty("managed", out var m) ? m.GetBoolean() : true)).ToArray());
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or JsonException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
         {
@@ -61,11 +62,13 @@ public sealed class SambaManagementService
         try
         {
             using var result = await CallAsync(action, args, input, ct);
-            return result.RootElement.TryGetProperty("message", out var message)
-                ? message.GetString() ?? "Completed." : "Completed.";
+            var message = result.RootElement.TryGetProperty("message", out var value)
+                ? value.GetString() ?? "Completed." : "Completed.";
+            return result.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean()
+                ? message : "Error: " + message;
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or JsonException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
-        { return ex.Message; }
+        { return "Error: " + ex.Message; }
     }
 
     private async Task<JsonDocument> CallAsync(string action, string[] args, string? input, CancellationToken ct)

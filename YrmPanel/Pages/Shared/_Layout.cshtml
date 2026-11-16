@@ -26,6 +26,12 @@
         <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></symbol>
         <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-8h6v8"/></symbol>
         <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 7 9 5 9-5M3 7v10l9 5 9-5V7M12 12v10"/></symbol>
+        <symbol id="i-docker-symbol" viewBox="0 0 64 64"><g fill="currentColor" stroke="none">
+          <rect x="7" y="24" width="9" height="8" rx="1"/><rect x="18" y="24" width="9" height="8" rx="1"/><rect x="29" y="24" width="9" height="8" rx="1"/>
+          <rect x="18" y="14" width="9" height="8" rx="1"/><rect x="29" y="14" width="9" height="8" rx="1"/>
+          <rect x="40" y="24" width="9" height="8" rx="1"/><path d="M5 35h45c-2 11-10 18-23 18C15 53 7 46 5 35Z"/>
+          <path d="M49 32c1-6 6-9 12-8-1 5-4 8-10 9Z"/>
+        </g></symbol>
         <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
         <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h7M11 17h7"/></symbol>
         <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v6c0 6-4 9-9 10-5-1-9-4-9-10V6z"/><path d="m9 12 2 2 4-4"/></symbol>
@@ -41,6 +47,7 @@
         <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M14 16l4-4-4-4M8 12h10"/></symbol>
         <symbol id="i-pin" viewBox="0 0 24 24"><path d="m8 3 8 8-3 2-2 7-2-6-5-2z"/></symbol>
         <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7a8 8 0 0 0-14-1L4 8M4 3v5h5M4 17a8 8 0 0 0 14 1l2-2m0 5v-5h-5"/></symbol>
+        <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10M6.5 5.5a9 9 0 1 0 11 0"/></symbol>
     </svg>
 
 
@@ -73,11 +80,11 @@
     </header>
 
     <nav id="app-launcher" class="app-launcher" hidden aria-label="Application launcher">
-        <div class="launcher-title"><div><strong>Applications</strong><small>Open a tool to manage your server</small></div><span class="launcher-badge">v1.0 RC</span></div>
+        <div class="launcher-title"><div><strong>Applications</strong></div></div>
         <div class="launcher-group-title">WORKSPACE</div>
         <div class="launcher-grid">
             <a asp-page="/Applications" class="launcher-app"><span class="app-visual app-apps"><svg class="ui-icon"><use href="#i-grid"/></svg></span><span>Apps</span></a>
-            <a asp-page="/Docker" class="launcher-app"><span class="app-visual app-docker"><svg class="ui-icon"><use href="#i-box"/></svg></span><span>Docker</span></a>
+            <a asp-page="/Docker" class="launcher-app"><span class="app-visual app-docker"><svg class="ui-icon"><use href="#i-docker-symbol"/></svg></span><span>Docker</span></a>
             <a asp-page="/Services" class="launcher-app"><span class="app-visual app-services"><svg class="ui-icon"><use href="#i-server"/></svg></span><span>Services</span></a>
             <a asp-page="/Files" class="launcher-app"><span class="app-visual app-files"><svg class="ui-icon"><use href="#i-folder"/></svg></span><span>Files</span></a>
         </div>
@@ -104,6 +111,15 @@
     <div class="profile-menu" id="profile-menu" hidden>
         <div class="profile-menu-head"><span class="profile-avatar">@firstLetter</span><div><strong>@userName</strong><small>Signed in</small></div></div>
         <a asp-page="/Settings" class="profile-menu-link"><svg class="ui-icon"><use href="#i-settings"/></svg> Settings</a>
+        @if (OperatingSystem.IsLinux())
+        {
+            <form method="post" asp-page="/Index" asp-page-handler="Reboot" data-confirm="Restart this server now? All connected services will briefly disconnect.">
+                <button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-refresh"/></svg> Restart server</button>
+            </form>
+            <form method="post" asp-page="/Index" asp-page-handler="Shutdown" data-confirm="Shut down this server now? You will need to power it on again to reconnect.">
+                <button class="profile-menu-link profile-danger" type="submit"><svg class="ui-icon"><use href="#i-power"/></svg> Shut down</button>
+            </form>
+        }
         <form method="post" asp-page="/Account/Logout"><button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-logout"/></svg> Sign out</button></form>
     </div>
 
@@ -115,7 +131,7 @@
         else
         {
             <div class="desktop-safe-space" aria-label="Your desktop wallpaper"></div>
-            <div class="desktop-corner-caption"><span class="status-light"></span><span>YRM Panel</span><span class="caption-separator">/</span><span id="desktop-caption-host">Server</span></div>
+
         }
     </main>
 
@@ -158,11 +174,28 @@
             <div class="monitor-network"><div><span>Download</span><strong id="net-down">—</strong></div><div><span>Upload</span><strong id="net-up">—</strong></div></div>
             <div class="monitor-section-title">STORAGE</div>
             <div id="storage-list" class="storage-list"><p class="muted">Loading volumes…</p></div>
-            <div class="monitor-bottom"><span id="uptime">Uptime —</span><span id="metric-connection">Connecting…</span></div>
+            <div class="monitor-bottom"><span id="uptime">Uptime —</span></div>
         </div>
     </aside>
 
 
+    <dialog id="folder-browser-dialog" class="panel-modal folder-browser-dialog" aria-labelledby="folder-browser-title">
+      <div class="panel-modal-head"><strong id="folder-browser-title">Choose shared folder</strong><button type="button" id="folder-browser-close" aria-label="Close">×</button></div>
+      <div class="folder-browser-body">
+        <div class="folder-browser-roots"><button type="button" data-folder-root="data" class="button button-secondary">/data</button><button type="button" data-folder-root="backup" class="button button-secondary">/backup</button></div>
+        <div id="folder-browser-path" class="folder-browser-path">/data</div>
+        <div id="folder-browser-items" class="folder-browser-items"></div>
+        <div id="folder-browser-error" class="folder-browser-error" role="status"></div>
+        <div class="folder-browser-create"><input id="folder-browser-new-name" type="text" maxlength="100" aria-label="New folder name" placeholder="New folder name"/><button id="folder-browser-create" type="button" class="button button-secondary">New folder</button></div>
+      </div>
+      <div class="panel-modal-actions"><button type="button" class="button button-primary" id="folder-browser-choose">Use this folder</button></div>
+    </dialog>
+    <dialog id="docker-log-dialog" class="panel-modal" aria-labelledby="docker-log-title">
+        <div class="panel-modal-head"><strong id="docker-log-title">Container logs</strong><button id="docker-log-close" type="button" aria-label="Close logs">×</button></div>
+        <pre id="docker-log-output" class="docker-log-output">Loading…</pre>
+        <div class="panel-modal-actions"><button type="button" class="button button-secondary" id="docker-log-refresh">Refresh</button><button type="button" class="button button-secondary" id="docker-log-copy">Copy</button></div>
+    </dialog>
+    <div id="toast-host" class="toast-host" aria-live="polite" aria-atomic="true"></div>
     <script asp-append-version="true" src="~/js/panel.js" defer></script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>

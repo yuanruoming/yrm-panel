@@ -83,7 +83,9 @@ def save(parser):
 
 def is_mounted(path):
     with open('/proc/self/mountinfo', encoding='utf-8') as file:
-        return any(line.split()[4].replace('\\040', ' ') == str(path) for line in file)
+        devices = {line.split()[4].replace('\\040', ' '): line.split()[2]
+                   for line in file if len(line.split()) > 4}
+    return str(path) in devices and '/' in devices and devices[str(path)] != devices['/']
 
 
 def validate_path(raw):
@@ -164,6 +166,38 @@ def delete_share(name):
     save(parser)
 
 
+def list_shares():
+    """Use Samba's effective config to show both managed and existing shares.
+
+    Existing shares are read-only from the Panel's perspective; they cannot be
+    overwritten or removed by the YRM helper.
+    """
+    managed = parse()
+    result = [{'name': name, 'path': managed.get(name, 'path', fallback=''),
+               'readOnly': managed.getboolean(name, 'read only', fallback=False),
+               'managed': True} for name in managed.sections()]
+    seen = {x['name'].casefold() for x in result}
+    active = None
+    for line in run(['testparm', '-s', str(MAIN)]).splitlines():
+        section = re.match(r'^\s*\[([^\]]+)\]\s*$', line)
+        if section:
+            name = section.group(1)
+            active = None
+            if name.casefold() not in seen and name.casefold() not in ('global', 'printers', 'print$', 'homes', 'ipc$'):
+                active = {'name': name, 'path': '', 'readOnly': True, 'managed': False}
+                result.append(active)
+                seen.add(name.casefold())
+            continue
+        if active is not None:
+            option = re.match(r'^\s*(path|read only)\s*=\s*(.*?)\s*$', line, re.I)
+            if option:
+                if option.group(1).lower() == 'path':
+                    active['path'] = option.group(2)
+                else:
+                    active['readOnly'] = option.group(2).lower() in ('yes', 'true', '1')
+    return result
+
+
 def password_state(user):
     try:
         return any(line.split(':', 1)[0] == user for line in run(['pdbedit', '-L']).splitlines())
@@ -188,9 +222,7 @@ def main():
             bootstrap(); emit(True, 'Samba integration installed.')
         elif action == 'list' and len(sys.argv) == 2:
             samba_exists(); user = account(); parser = parse()
-            shares = [{'name': name, 'path': parser.get(name, 'path', fallback=''),
-                       'readOnly': parser.getboolean(name, 'read only', fallback=False)}
-                      for name in parser.sections()]
+            shares = list_shares()
             emit(True, 'OK', shares=shares, account=user, accountConfigured=password_state(user))
         elif action == 'save' and len(sys.argv) == 5:
             update_share(sys.argv[2], sys.argv[3], sys.argv[4] == 'true')

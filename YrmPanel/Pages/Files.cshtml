@@ -1,8 +1,8 @@
 @page
 @model YrmPanel.Pages.FilesModel
 @{ ViewData["Title"] = "Files"; }
-<div class="page-heading"><div><p class="eyebrow">FILE MANAGER</p><h1>Files<span class="accent-period">.</span></h1><p class="page-subtitle">Work directly with your Linux folders. No copies are stored in YRM Panel.</p></div></div>
-@if (!string.IsNullOrEmpty(Model.Notice)) { <div class="notice">@Model.Notice</div> }
+<div class="page-heading"><div><p class="eyebrow">FILE MANAGER</p><h1>Files<span class="accent-period">.</span></h1></div></div>
+@if (!string.IsNullOrEmpty(Model.Notice)) { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || Model.Notice.Contains("denied", StringComparison.OrdinalIgnoreCase) ? "error" : "success")">@Model.Notice</div> }
 <section class="surface-card">
     <div class="fm-toolbar">
         <a asp-page="/Files" asp-route-root="data" asp-route-path="" class="button @(Model.Root == "data" ? "button-primary" : "button-secondary")">/data</a>

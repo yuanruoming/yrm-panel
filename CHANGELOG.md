@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.0.0-rc.2 — integration and usability fixes
+
+- Installer now defaults to network-accessible IPv4 HTTP (LAN/VPN); opt into localhost binding with `--bind 127.0.0.1`. For active UFW, add rules limited to detected private interface subnets.
+- Deduplicate system/data disk metrics using actual Linux mount IDs; only show an independent backup volume when it is mounted and differs from the system filesystem.
+- Display uptime in seconds/minutes/hours as appropriate; remove redundant monitor status caption.
+- Make pinned desktop icons clickable, use consistent vector icons, and synchronize pin updates without a full desktop refresh.
+- Dock a compact neutral toolbar to the top edge; eliminate the redundant corner caption and remove excess placeholder copy.
+- Docker logs now open inside a modal; operation notices appear in transient toasts instead of persistent page cards.
+- Replace the Samba path text field with a restricted folder picker, folder creation and root volume selection.
+- Add restart/shutdown entries and a dedicated allowlisted system power helper. Uninstall removes the helper but retains Docker, Samba and user data.
+- Retain the existing 1.0 design and no additional third-party NuGet/JS runtime dependencies.
+
+# Changelog
+
 ## 1.0.0-rc.1 (release candidate)
 
 - Keep v0.3's top taskbar, wall-paper-first desktop and persistent application window.

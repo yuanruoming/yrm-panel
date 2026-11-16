@@ -12,7 +12,8 @@ rm -f /etc/systemd/system/yrm-panel.service
 systemctl daemon-reload
 rm -rf /opt/yrm-panel /opt/yrm-panel.previous
 rm -f /usr/local/sbin/yrm-panel-update /usr/local/sbin/yrm-panel-uninstall
-rm -f /etc/sudoers.d/yrm-panel-samba /usr/local/libexec/yrm-panel-samba
+rm -f /etc/sudoers.d/yrm-panel-samba /etc/sudoers.d/yrm-panel-power
+rm -f /usr/local/libexec/yrm-panel-power /usr/local/libexec/yrm-panel-samba
 # Revoke the Panel's root-equivalent Docker socket access; do not touch Docker itself.
 if command -v gpasswd >/dev/null 2>&1 && getent group docker >/dev/null 2>&1; then
   gpasswd -d yrm-panel docker >/dev/null 2>&1 || true

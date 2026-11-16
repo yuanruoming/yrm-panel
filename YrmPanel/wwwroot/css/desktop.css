@@ -255,3 +255,59 @@ body.is-desktop .workspace-stage { display:none; }
 .desktop-pin:hover,.desktop-pin:focus-visible{background:rgba(8,20,38,.6);outline:1px solid rgba(215,233,255,.35)}
 .desktop-pin-icon{display:grid;place-items:center;font-size:27px;width:53px;height:53px;border-radius:15px;background:linear-gradient(135deg,rgba(71,122,179,.9),rgba(33,72,111,.85));border:1px solid rgba(255,255,255,.24);box-shadow:0 8px 24px rgba(0,0,0,.22)}
 @media(max-width:640px){.desktop-pins{top:78px;left:12px;grid-template-columns:repeat(2,85px);gap:7px}.desktop-pin-icon{width:46px;height:46px;font-size:24px}}
+
+/* RC2 – neutral desktop chrome, compact top bar and genuinely clickable pins */
+.os-topbar { inset:0 0 auto; height:49px; border-radius:0; border-width:0 0 1px; padding:0 14px;
+  background:rgba(24,27,33,.78); box-shadow:0 2px 12px rgba(0,0,0,.14); }
+.app-launcher,.profile-menu { top:55px; background:rgba(25,28,35,.95); }
+.workspace-stage { padding-top:69px; }
+.workspace-window { background:rgba(24,27,33,.97); border-color:rgba(255,255,255,.14); }
+.window-page .surface-card { background:rgba(37,41,48,.84); }
+.monitor-drawer { top:57px; background:rgba(28,32,39,.96); }
+.pinned-monitor { top:63px; background:rgba(38,42,49,.8); }
+.desktop-pins { top:64px; pointer-events:auto; }
+.desktop-pin-icon .ui-icon { width:27px; height:27px; }
+.desktop-pin-icon { background:rgba(35,47,61,.72); backdrop-filter:blur(10px); }
+.desktop-pin { cursor:pointer; }
+.profile-danger { color:#ffb6b6; }
+.panel-modal { width:min(860px,calc(100vw - 30px)); max-height:min(780px,90vh); border:1px solid #4b5664;
+  background:#20252b; color:#f0f4f9; border-radius:14px; padding:0; box-shadow:0 20px 80px #000a; }
+.panel-modal::backdrop { background:rgba(0,0,0,.65); }
+.panel-modal-head,.panel-modal-actions { padding:14px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.panel-modal-head { border-bottom:1px solid #39414c; }
+.panel-modal-head button { background:none;border:0;color:inherit;font-size:24px;cursor:pointer; }
+.panel-modal-actions { justify-content:flex-end;border-top:1px solid #39414c; }
+.docker-log-output { margin:0; padding:18px; min-height:120px; max-height:65vh; overflow:auto;
+  white-space:pre-wrap; overflow-wrap:anywhere; color:#dce5eb; font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace; }
+.toast-host { position:fixed;right:18px;top:62px;z-index:180;display:flex;flex-direction:column;gap:9px;max-width:min(380px,calc(100vw - 32px)); }
+.panel-toast { padding:13px 15px;border-radius:11px;display:flex;gap:12px;align-items:center;justify-content:space-between;
+  background:#293d39;border:1px solid #4a8c78;box-shadow:0 12px 40px #0007;font-size:12px; }
+.panel-toast.toast-error {background:#4a292d;border-color:#9d5963;}
+.panel-toast button {background:transparent;color:inherit;border:0;font-size:18px;cursor:pointer;}
+@media(max-width:750px){.os-topbar{inset:0 0 auto;height:49px;padding:0 7px}.workspace-stage{padding-top:61px}.desktop-pins{top:59px}.app-launcher,.profile-menu{top:53px}}
+
+.folder-browser-dialog { width:min(600px,calc(100vw - 28px)); }
+.folder-browser-body { padding:16px 20px; }
+.folder-browser-roots { display:flex;gap:10px; }
+.folder-browser-path { margin:14px 0;font-size:12px;color:#d9e4ef;overflow-wrap:anywhere; }
+.folder-browser-items { display:flex; flex-direction:column; gap:3px; height:min(320px,40vh);overflow-y:auto; }
+.folder-browser-item { text-align:left;background:transparent;border:0;color:#e6edf6;padding:11px;border-radius:8px;cursor:pointer; }
+.folder-browser-item:hover { background:#3c444f; }
+.folder-browser-item:disabled {opacity:.35;cursor:default;}
+.folder-browser-error { min-height:20px; font-size:12px;color:#ffa7ae; }
+.folder-browser-create { display:flex;gap:8px; }
+.folder-browser-create input { flex:1;min-width:0;background:#161e27;color:#fff;border:1px solid #576373;padding:10px;border-radius:8px; }
+.share-folder-row {display:flex;gap:8px;align-items:center;min-width:0;}
+.share-folder-row input {flex:1;min-width:0;}
+.shares-grid {align-items:start;}
+.app-section {margin-top:18px;}
+.app-section:first-child {margin-top:0;}
+.application-grid {grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;}
+.shortcut-grid {grid-template-columns:repeat(auto-fit,minmax(145px,1fr));}
+@media(max-width:680px){.share-folder-row{flex-wrap:wrap}.share-folder-row input{flex-basis:100%}}
+
+/* Original local vector artwork; no icon fonts or remote image requests. */
+.app-visual.app-docker { color:#e4f8ff; }
+.app-visual.app-docker .ui-icon,.desktop-pin-icon .ui-icon:has(use[href="#i-docker-symbol"]) {width:30px;height:30px;}
+.nginx-app-icon {background:#177f55 !important;color:#ecfff3;}
+.app-logo-letter {font-size:22px;font-family:ui-sans-serif,system-ui,sans-serif;}

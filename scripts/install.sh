@@ -3,7 +3,7 @@
 # Existing Docker/Samba data is NEVER deleted or replaced by this installer.
 set -Eeuo pipefail
 umask 027
-REPO=""; CHANNEL="dev"; BRANCH="master"; PORT="6080"; BIND="127.0.0.1"; FILE_USER=""; NONINTERACTIVE=0
+REPO=""; CHANNEL="dev"; BRANCH="master"; PORT="6080"; BIND="0.0.0.0"; FILE_USER=""; NONINTERACTIVE=0
 while (($#)); do
   case "$1" in
     --repo) REPO="${2:?}"; shift 2;;
@@ -145,16 +145,22 @@ curl -fLSs --retry 3 "$base/$asset.sha256" -o "$workdir/$asset.sha256"
 (cd "$workdir" && sha256sum -c "$asset.sha256")
 install -d "$workdir/publish"
 tar -xzf "$workdir/$asset" -C "$workdir/publish"
-[[ -f "$workdir/publish/YrmPanel" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-samba.py" ]] || { echo 'Invalid release package.' >&2; exit 1; }
+[[ -f "$workdir/publish/YrmPanel" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-samba.py" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-power.sh" ]] || { echo 'Invalid release package.' >&2; exit 1; }
 [[ ! -L /opt/yrm-panel ]] || { echo '/opt/yrm-panel must not be a symlink.' >&2; exit 1; }
 
 # Configure the root-owned narrowly scoped Samba integration; preserve its share file upon uninstall.
 install -d -o root -g root -m 0755 /usr/local/libexec
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-samba.py" /usr/local/libexec/yrm-panel-samba
+install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-power.sh" /usr/local/libexec/yrm-panel-power
 cat >/etc/sudoers.d/yrm-panel-samba <<'SUDO'
 yrm-panel ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba *
 SUDO
 chmod 0440 /etc/sudoers.d/yrm-panel-samba
+cat >/etc/sudoers.d/yrm-panel-power <<'SUDO'
+yrm-panel ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-power reboot, /usr/local/libexec/yrm-panel-power shutdown
+SUDO
+chmod 0440 /etc/sudoers.d/yrm-panel-power
+visudo -cf /etc/sudoers.d/yrm-panel-power >/dev/null
 visudo -cf /etc/sudoers.d/yrm-panel-samba >/dev/null
 /usr/local/libexec/yrm-panel-samba bootstrap
 
@@ -192,6 +198,33 @@ printf '\nYRM Panel installed successfully.\n'
 if [[ "$BIND" == 127.0.0.1 ]]; then
   echo "Access via SSH tunnel: ssh -L ${PORT}:127.0.0.1:${PORT} ${FILE_USER}@YOUR_SERVER_IP"
 else
-  echo "Listening on 0.0.0.0:${PORT}; use HTTPS + a trusted private network."
+  echo "Panel is listening on all IPv4 interfaces, port ${PORT}."
+  echo 'Open http://SERVER_LAN_IP:'"${PORT}"' from your trusted LAN or VPN.'
+  if command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then
+    echo 'UFW is active. Configuring access from detected private LAN subnets.'
+    if command -v ip >/dev/null 2>&1; then
+      while IFS= read -r subnet; do
+        [[ -n "$subnet" ]] || continue
+        ufw allow from "$subnet" to any port "$PORT" proto tcp comment 'YRM Panel private LAN' >/dev/null
+        echo "  Allow ${subnet} -> TCP ${PORT}"
+      done < <(python3 - <<'PYNET'
+import ipaddress, json, subprocess
+try:
+    interfaces = json.loads(subprocess.check_output(['ip','-j','-4','address','show','scope','global'],timeout=5))
+    networks = set()
+    for iface in interfaces:
+        name = iface.get('ifname', '')
+        if name.startswith(('docker','veth','br-','virbr')): continue
+        for info in iface.get('addr_info', []):
+            addr = ipaddress.ip_interface(f"{info['local']}/{info['prefixlen']}")
+            if addr.ip.is_private and not addr.ip.is_loopback and not addr.ip.is_link_local:
+                networks.add(str(addr.network))
+    print('\n'.join(sorted(networks)))
+except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+    pass
+PYNET
+      )
+    fi
+  fi
 fi
 echo 'Docker, Samba, shared files and Compose projects are independent of YRM Panel.'

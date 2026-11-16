@@ -54,6 +54,18 @@ class SambaPathTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Invalid share name'):
             helper.update_share('[global]\nadmin users = root', str(self.data), False)
 
+    def test_existing_share_is_visible_but_not_managed(self):
+        managed = self.base / 'yrm-shares.conf'
+        managed.write_text('[own]\npath = /data/own\nread only = no\n')
+        output = '[global]\n    server min protocol = SMB2\n\n[own]\n  path = /data/own\n\n[Manual]\n  path = /data/manual\n  read only = Yes\n'
+        with patch.object(helper, 'MANAGED', managed), patch.object(helper, 'run', return_value=output):
+            rows = helper.list_shares()
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(next(x for x in rows if x['name'] == 'own')['managed'])
+        external = next(x for x in rows if x['name'] == 'Manual')
+        self.assertFalse(external['managed'])
+        self.assertTrue(external['readOnly'])
+
     def test_bootstrap_preserves_existing_share(self):
         original = '[global]\n  server min protocol = SMB2\n\n[Downloads]\n  path = /DATA/Downloads\n'
         config = self.base / 'smb.conf'

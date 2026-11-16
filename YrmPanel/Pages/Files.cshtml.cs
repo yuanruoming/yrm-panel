@@ -23,14 +23,11 @@ public sealed class FilesModel : PageModel
         {
             var (stream, fileName) = _files.OpenDownload(Root, Path, name);
             return new FileStreamResult(stream, "application/octet-stream")
-            {
-                FileDownloadName = fileName,
-                EnableRangeProcessing = true
-            };
+            { FileDownloadName = fileName, EnableRangeProcessing = true };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            Notice = FileManagerService.SafeError(ex);
+            Notice = "Error: " + FileManagerService.SafeError(ex);
             return RedirectToPage(new { root = Root, path = Path });
         }
     }
@@ -44,14 +41,14 @@ public sealed class FilesModel : PageModel
         if (upload is null) { Notice = "Select a file to upload."; return RedirectBack(); }
         try { await _files.UploadAsync(Root, Path, upload, HttpContext.RequestAborted); Notice = "File uploaded."; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        { Notice = FileManagerService.SafeError(ex); }
+        { Notice = "Error: " + FileManagerService.SafeError(ex); }
         return RedirectBack();
     }
     private IActionResult Run(Action action, string success)
     {
         try { action(); Notice = success; }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        { Notice = FileManagerService.SafeError(ex); }
+        { Notice = "Error: " + FileManagerService.SafeError(ex); }
         return RedirectBack();
     }
     private IActionResult RedirectBack() => RedirectToPage(new { root = Root, path = Path });

@@ -111,7 +111,7 @@
 
   const iconName = (url) => {
     const path = url?.split("?")[0];
-    return ({"/Docker":"i-box","/Services":"i-server","/Applications":"i-grid","/Settings":"i-settings","/Files":"i-folder","/Shares":"i-globe","/Features":"i-grid"})[path] || "i-grid";
+    return ({"/Docker":"i-docker-symbol","/Services":"i-server","/Applications":"i-grid","/Settings":"i-settings","/Files":"i-folder","/Shares":"i-globe","/Features":"i-grid"})[path] || "i-grid";
   };
   function createTab(name, url) {
     const tab = document.createElement("div");
@@ -174,6 +174,7 @@
       const current = $("desktop-main");
       if (!fresh || !current || !doc.body.classList.contains("os-shell")) return;
       current.replaceChildren(...Array.from(fresh.childNodes).map(n => document.importNode(n, true)));
+      harvestDesktopNotices();
     } catch { /* Desktop remains usable when a refresh fails. */ }
   }
   function showDesktop(push = true) {
@@ -216,18 +217,128 @@
     }
     return true;
   }
-  function errorToast(message) {
-    let node = $("shell-error");
-    if (!node) {
-      node = document.createElement("div");
-      node.id = "shell-error";
-      node.className = "shell-error";
-      node.setAttribute("role", "alert");
-      body.append(node);
-    }
-    node.textContent = message;
-    node.hidden = false;
+  function showToast(message, type = "info") {
+    const host = $("toast-host");
+    if (!host || !message?.trim()) return;
+    const item = document.createElement("div");
+    item.className = `panel-toast ${type === "error" ? "toast-error" : "toast-success"}`;
+    item.setAttribute("role", type === "error" ? "alert" : "status");
+    const label = document.createElement("span"); label.textContent = message;
+    const close = document.createElement("button");
+    close.type = "button"; close.setAttribute("aria-label", "Dismiss notification"); close.textContent = "×";
+    close.addEventListener("click", () => item.remove());
+    item.append(label, close);
+    host.append(item);
+    if (type !== "error") setTimeout(() => item.remove(), 4200);
   }
+  function errorToast(message) { showToast(message, "error"); }
+  function harvestNotices(container) {
+    container?.querySelectorAll(".notice[data-result-notice]").forEach(note => {
+      showToast(note.textContent.trim(), note.dataset.resultNotice === "error" ? "error" : "success");
+      note.remove();
+    });
+  }
+  harvestNotices(page);
+  function harvestDesktopNotices() {
+    $("desktop-main")?.querySelectorAll(".desktop-power-notice[data-result-notice]").forEach(note => {
+      showToast(note.textContent.trim(), note.dataset.resultNotice === "error" ? "error" : "success");
+      note.remove();
+    });
+  }
+  harvestDesktopNotices();
+  // Samba directory picker: all paths come from the restricted FileManagerService.
+  const folderDialog = $("folder-browser-dialog");
+  const folderState = {root:"data",path:"",absolute:"/data"};
+  async function browseFolder(root, relative) {
+    if (!folderDialog?.open) return;
+    folderState.root = root; folderState.path = relative || "";
+    const items = $("folder-browser-items"), error = $("folder-browser-error");
+    items.replaceChildren(); error.textContent = "";
+    $("folder-browser-path").textContent = "Loading…";
+    try {
+      const address = `/Shares?handler=Folders&root=${encodeURIComponent(root)}&path=${encodeURIComponent(folderState.path)}`;
+      const response = await fetch(address, {credentials:"same-origin",cache:"no-store"});
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "This folder is unavailable.");
+      folderState.absolute = data.absolute;
+      $("folder-browser-path").textContent = data.absolute;
+      const parent = document.createElement("button"); parent.type = "button";
+      parent.className = "folder-browser-item"; parent.textContent = "↰  Parent folder";
+      parent.disabled = !folderState.path;
+      parent.addEventListener("click", () => {
+        const path = folderState.path.split("/").filter(Boolean).slice(0,-1).join("/");
+        void browseFolder(root,path);
+      });
+      items.append(parent);
+      for (const name of data.folders || []) {
+        const button = document.createElement("button"); button.type = "button";
+        button.className = "folder-browser-item"; button.textContent = `📁  ${name}`;
+        button.addEventListener("click", () => void browseFolder(root, folderState.path ? folderState.path + "/" + name : name));
+        items.append(button);
+      }
+      $("folder-browser-choose").disabled = false;
+    } catch (ex) {
+      $("folder-browser-path").textContent = root === "backup" ? "/backup" : "/data";
+      error.textContent = ex.message;
+      $("folder-browser-choose").disabled = true;
+    }
+  }
+  document.addEventListener("click", event => {
+    if (event.target.closest?.("[data-open-folder-browser]")) {
+      if (!folderDialog) return;
+      folderDialog.showModal(); void browseFolder("data", "");
+      return;
+    }
+    const root = event.target.closest?.("[data-folder-root]")?.dataset.folderRoot;
+    if (root) void browseFolder(root, "");
+  });
+  $("folder-browser-close")?.addEventListener("click", () => folderDialog?.close());
+  $("folder-browser-choose")?.addEventListener("click", () => {
+    const target = $("share-path");
+    if (!target || !folderState.absolute) return;
+    target.value = folderState.absolute;
+    target.dispatchEvent(new Event("input",{bubbles:true}));
+    folderDialog.close();
+  });
+  $("folder-browser-create")?.addEventListener("click", async () => {
+    const input = $("folder-browser-new-name");
+    const name = input.value.trim();
+    const token = document.querySelector('#window-page input[name="__RequestVerificationToken"]')?.value;
+    if (!name || !token) { $("folder-browser-error").textContent = "Enter a folder name."; return; }
+    const body = new URLSearchParams({root:folderState.root,path:folderState.path,name,
+      __RequestVerificationToken:token});
+    try {
+      const result = await fetch("/Shares?handler=MakeFolder",{method:"POST",credentials:"same-origin",
+        headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
+      const data = await result.json();
+      if (!result.ok || !data.ok) throw new Error(data.error || "Could not create folder.");
+      input.value = "";
+      await browseFolder(folderState.root,folderState.path);
+      showToast("Folder created.");
+    } catch (ex) { $("folder-browser-error").textContent = ex.message; }
+  });
+  let lastLogsUrl = null;
+  const logDialog = $("docker-log-dialog");
+  async function openLogs(url) {
+    const request = new URL(url, location.href);
+    if (request.origin !== location.origin || request.pathname !== "/Docker" ||
+        request.searchParams.get("handler") !== "Logs") return;
+    lastLogsUrl = request.href;
+    $("docker-log-output").textContent = "Loading logs…";
+    if (!logDialog.open) logDialog.showModal();
+    try {
+      const result = await fetch(lastLogsUrl, {credentials:"same-origin",cache:"no-store"});
+      if (!result.ok || result.redirected) throw new Error(`HTTP ${result.status}`);
+      const data = await result.text();
+      if (lastLogsUrl === request.href) $("docker-log-output").textContent = data || "No logs available.";
+    } catch { $("docker-log-output").textContent = "Unable to load logs."; }
+  }
+  $("docker-log-close")?.addEventListener("click", () => logDialog?.close());
+  $("docker-log-refresh")?.addEventListener("click", () => { if (lastLogsUrl) void openLogs(lastLogsUrl); });
+  $("docker-log-copy")?.addEventListener("click", async () => {
+    try { await navigator.clipboard.writeText($("docker-log-output")?.textContent || ""); showToast("Logs copied."); }
+    catch { showToast("Copy failed. Select the text to copy.", "error"); }
+  });
   async function loadPage(url, refresh = false, push = true) {
     const token = ++navigationId;
     appWindow?.classList.add("is-loading");
@@ -263,6 +374,7 @@
       }
       activeUrl = url;
       page.replaceChildren(fragment);
+      harvestNotices(page);
       windowScroll.scrollTop = 0;
       setPageShell(false, title);
       renderTabs();
@@ -316,6 +428,9 @@
   $("window-maximize")?.addEventListener("click", () => appWindow?.classList.toggle("is-maximized"));
   document.addEventListener("click", (event) => {
     const anchor = event.target.closest?.("a[href]");
+    if (anchor?.hasAttribute("data-log-viewer")) {
+      event.preventDefault(); void openLogs(anchor.href); return;
+    }
     if (!anchor || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (anchor.hasAttribute("data-native-download") || anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) return;
     if (isDesktopUrl(anchor.href)) {
@@ -383,6 +498,8 @@
       const fragment = document.createDocumentFragment();
       for (const node of Array.from(remotePage.childNodes)) fragment.append(document.importNode(node, true));
       page.replaceChildren(fragment);
+      harvestNotices(page);
+      if (canonicalPath(submittedUrl.split("?")[0]) === "/Settings") void refreshDesktop();
       windowScroll.scrollTop = 0;
       const title = doc.body.dataset.initialTitle || "Application";
       if (tabs.has(activeUrl)) { tabs.get(activeUrl).title = title; tabs.get(activeUrl).fragment = null; }
@@ -437,9 +554,10 @@
     text("net-up", `${bytes(s.uploadBytesPerSecond)}/s`);
     text("pinned-download", `${bytes(s.downloadBytesPerSecond)}/s`);
     text("pinned-upload", `${bytes(s.uploadBytesPerSecond)}/s`);
-    text("metric-connection", s.isDemo ? "Preview data" : "Live metrics");
-    const uptime = Number(s.uptimeSeconds) || 0;
-    text("uptime", `Uptime ${Math.floor(uptime / 86400)}d ${Math.floor((uptime % 86400) / 3600)}h`);
+    const uptime = Math.max(0, Math.floor(Number(s.uptimeSeconds) || 0));
+    const d = Math.floor(uptime / 86400), h = Math.floor(uptime % 86400 / 3600);
+    const m = Math.floor(uptime % 3600 / 60), sec = uptime % 60;
+    text("uptime", `Uptime · ${d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`}`);
     for (const id of ["cpu-meter","pinned-cpu-meter"]) { const el = $(id); if (el) el.style.width = `${cpu}%`; }
     for (const id of ["ram-meter","pinned-ram-meter"]) { const el = $(id); if (el) el.style.width = `${ram}%`; }
     const storage = $("storage-list");
@@ -460,11 +578,6 @@
       const fill = document.createElement("div"); fill.className = "disk-fill";
       fill.style.width = `${disk.totalBytes > 0 ? pct((disk.usedBytes / disk.totalBytes) * 100) : 0}%`;
       track.append(fill); row.append(head, track);
-      if (disk.available && !disk.isMountPoint && disk.name === "Data") {
-        const note = document.createElement("div"); note.className = "disk-note";
-        note.textContent = "Part of the system filesystem";
-        row.append(note);
-      }
       list.append(row);
     }
     storage.replaceChildren(list);
@@ -475,9 +588,9 @@
     polling = true;
     try {
       const response = await fetch("/api/metrics", {credentials:"same-origin", cache:"no-store"});
-      if (!response.ok) { text("metric-connection", response.status === 401 ? "Session expired" : "Metrics unavailable"); return; }
+      if (!response.ok) return;
       applySnapshot(await response.json());
-    } catch { text("metric-connection", "Connection lost"); }
+    } catch { /* Next poll can reconnect. */ }
     finally { polling = false; }
   }
   void poll();

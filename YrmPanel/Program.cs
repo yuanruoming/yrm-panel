@@ -37,6 +37,7 @@ builder.Services.AddSingleton<DockerApiService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<SambaManagementService>();
 builder.Services.AddSingleton<SystemdStatusService>();
+builder.Services.AddSingleton<SystemPowerService>();
 builder.Services.AddSingleton<ISystemMetricsService>(sp =>
     OperatingSystem.IsLinux()
         ? ActivatorUtilities.CreateInstance<LinuxSystemMetricsService>(sp)

@@ -2,9 +2,9 @@
 @model YrmPanel.Pages.SettingsModel
 @{ ViewData["Title"] = "Settings"; }
 <div class="page-heading"><div><p class="eyebrow">PERSONALIZE</p><h1>Settings<span class="accent-period">.</span></h1><p class="page-subtitle">Make your panel feel like your own.</p></div></div>
-@if (!string.IsNullOrWhiteSpace(Model.Notice)) { <div class="notice">@Model.Notice</div> }
+@if (!string.IsNullOrWhiteSpace(Model.Notice)) { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || Model.Notice.Contains("denied", StringComparison.OrdinalIgnoreCase) ? "error" : "success")">@Model.Notice</div> }
 <div class="settings-grid">
-    <section class="surface-card"><div class="card-header"><div><p class="eyebrow">APPEARANCE</p><h3>Desktop wallpaper</h3></div><span class="header-icon">▧</span></div><p class="muted">JPEG, PNG or WebP up to 8 MB. Your wallpaper covers the desktop; it is not publicly visible on the sign-in page.</p>
+    <section class="surface-card"><div class="card-header"><div><p class="eyebrow">APPEARANCE</p><h3>Desktop wallpaper</h3></div><span class="header-icon">▧</span></div><p class="muted">JPEG, PNG or WebP · up to 8 MB.</p>
         @if (Model.HasWallpaper) { <div class="wallpaper-preview" style="background-image: url('/wallpaper?v=@(DateTimeOffset.UtcNow.ToUnixTimeSeconds())')"></div> }
         <form method="post" enctype="multipart/form-data" asp-page-handler="Wallpaper" class="form-stack"><label class="field-label" for="wallpaper">Choose an image</label><input id="wallpaper" type="file" name="wallpaper" accept="image/png,image/jpeg,image/webp" required /><button type="submit" class="button button-primary">Apply wallpaper</button></form>
         @if (Model.HasWallpaper) { <form method="post" asp-page-handler="ClearWallpaper" class="inline-form"><button type="submit" class="button button-secondary">Restore default background</button></form> }
@@ -19,10 +19,9 @@
         </div>
     </section>
 </div>
-<section class="surface-card system-settings"><div class="card-header"><div><p class="eyebrow">SERVER CONFIGURATION</p><h3>Runtime</h3></div></div><div class="config-row"><span>Listening endpoint</span><code>@Model.ListenUrl</code></div><div class="config-row"><span>Authentication</span><strong>@Model.AccountName / local password hash</strong></div><div class="config-row"><span>Default theme</span><strong>Dark only</strong></div><div class="config-row"><span>Account management</span><span>Use <code>--set-admin</code> on the host to change credentials</span></div><p class="muted small">Change listening ports through <code>Panel__Url</code> in the service environment file, then restart YRM Panel.</p></section>
 
 <section class="surface-card"><div class="card-header"><div><p class="eyebrow">DESKTOP</p><h3>Pin to desktop</h3></div></div>
-<p class="muted">Show only the apps you use regularly. The wallpaper stays uncluttered by default.</p>
+
 <div class="pin-settings-grid">
 @foreach (var app in YrmPanel.Pages.SettingsModel.BuiltIn)
 {

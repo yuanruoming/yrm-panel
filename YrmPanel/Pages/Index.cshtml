@@ -3,8 +3,10 @@
 @{
     ViewData["Title"] = "Desktop";
 }
+@if (TempData["PowerMessage"] is string powerMessage)
+{ <div class="desktop-power-notice" data-result-notice="@(powerMessage.StartsWith("Error:") ? "error" : "success")">@powerMessage</div> }
 <div class="desktop-safe-space" aria-label="Your desktop wallpaper"></div>
-<div class="desktop-corner-caption"><span class="status-light"></span><span>YRM Panel</span><span class="caption-separator">/</span><span id="desktop-caption-host">@Model.Snapshot.Hostname</span></div>
+
 
 @inject YrmPanel.Services.PanelSettingsStore DesktopSettings
 @{ var desktop = DesktopSettings.Read(); }
@@ -15,15 +17,15 @@
 {
     if (id.StartsWith("link:") && int.TryParse(id[5..], out var idx) && idx >= 0 && idx < desktop.Shortcuts.Count)
     {
-        <a href="@desktop.Shortcuts[idx].Url" target="_blank" rel="noopener noreferrer" class="desktop-pin"><span class="desktop-pin-icon">↗</span><span>@desktop.Shortcuts[idx].Name</span></a>
+        <a href="@desktop.Shortcuts[idx].Url" target="_blank" rel="noopener noreferrer" class="desktop-pin"><span class="desktop-pin-icon"><svg class="ui-icon"><use href="#i-arrow" /></svg></span><span>@desktop.Shortcuts[idx].Name</span></a>
     }
     else
     {
         var name = id switch { "/Applications" => "Apps", "/Docker" => "Docker", "/Services" => "Services", "/Files" => "Files", "/Shares" => "File Sharing", "/Settings" => "Settings", _ => null };
         if (name is not null)
         {
-            var glyph = id switch { "/Docker" => "◈", "/Files" => "▣", "/Shares" => "◎", "/Services" => "▤", "/Settings" => "⚙", _ => "▦" };
-            <a href="@id" class="desktop-pin"><span class="desktop-pin-icon">@glyph</span><span>@name</span></a>
+            var icon = id switch { "/Docker" => "i-docker-symbol", "/Files" => "i-folder", "/Shares" => "i-globe", "/Services" => "i-server", "/Settings" => "i-settings", _ => "i-grid" };
+            <a href="@id" class="desktop-pin"><span class="desktop-pin-icon"><svg class="ui-icon"><use href="@("#" + icon)" /></svg></span><span>@name</span></a>
         }
     }
 }

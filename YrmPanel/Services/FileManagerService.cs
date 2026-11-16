@@ -168,11 +168,17 @@ public sealed class FileManagerService
     {
         try
         {
-            return File.ReadLines("/proc/self/mountinfo").Any(line =>
+            string? rootDevice = null, backupDevice = null;
+            foreach (var line in File.ReadLines("/proc/self/mountinfo"))
             {
-                var fields = line.Split(' ');
-                return fields.Length > 4 && fields[4].Replace("\\040", " ", StringComparison.Ordinal) == path;
-            });
+                var fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (fields.Length < 5) continue;
+                var mountPoint = fields[4].Replace("\\040", " ");
+                if (mountPoint == "/") rootDevice = fields[2];
+                if (mountPoint == path) backupDevice = fields[2];
+            }
+            // A bind mount of the system disk does not count as an independent backup disk.
+            return backupDevice is not null && rootDevice is not null && backupDevice != rootDevice;
         }
         catch (IOException) { return false; }
     }

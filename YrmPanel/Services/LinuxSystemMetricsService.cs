@@ -40,11 +40,10 @@ public sealed class LinuxSystemMetricsService : ISystemMetricsService
             var main = _configuration["Storage:MainPath"] ?? "/data";
             var backup = _configuration["Storage:BackupPath"] ?? "/backup";
             var mounts = ReadMounts();
+            var disks = BuildDisks(main, backup, mounts);
             return new SystemSnapshot(Environment.MachineName, ReadOsName(), false,
                 cpu, memory.total == 0 ? 0 : 100.0 * memory.used / memory.total,
-                memory.used, memory.total, down, up, ReadUptime(),
-                new[] { BuildDisk("System", "/", mounts), BuildDisk("Data", main, mounts),
-                        BuildDisk("Backup", backup, mounts) }, now);
+                memory.used, memory.total, down, up, ReadUptime(), disks, now);
         }
     }
 
@@ -104,41 +103,66 @@ public sealed class LinuxSystemMetricsService : ISystemMetricsService
         catch (IOException) { return "Linux"; }
     }
 
-    private static HashSet<string> ReadMounts()
+    // Resolve paths to the filesystem that actually backs them. /data and / are
+    // frequently the SAME filesystem; directory names are not disk identities.
+    private sealed record MountInfo(string Point, string Device, string FileSystem);
+
+    private static List<MountInfo> ReadMounts()
     {
-        var mounts = new HashSet<string>(StringComparer.Ordinal);
+        var mounts = new List<MountInfo>();
         foreach (var line in File.ReadLines("/proc/self/mountinfo"))
         {
-            var parts = line.Split(' ');
-            if (parts.Length < 5) continue;
-            mounts.Add(parts[4].Replace("\\040", " "));
+            var parts = line.Split(" - ", 2, StringSplitOptions.None);
+            if (parts.Length != 2) continue;
+            var left = parts[0].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var right = parts[1].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (left.Length < 5 || right.Length < 1) continue;
+            mounts.Add(new MountInfo(left[4].Replace("\\040", " "), left[2], right[0]));
         }
         return mounts;
     }
 
-    private static DiskSnapshot BuildDisk(string name, string path, HashSet<string> mounts)
+    private static MountInfo? BackingMount(string path, List<MountInfo> mounts) =>
+        mounts.Where(m => path == m.Point || m.Point == "/" ||
+                          path.StartsWith(m.Point.TrimEnd('/') + "/", StringComparison.Ordinal))
+              .OrderByDescending(m => m.Point.Length).FirstOrDefault();
+
+    private static IReadOnlyList<DiskSnapshot> BuildDisks(string main, string backup, List<MountInfo> mounts)
     {
-        path = Path.GetFullPath(path).TrimEnd('/');
-        if (path.Length == 0) path = "/";
-        bool mounted = mounts.Contains(path);
-        // /backup is intentionally considered unavailable if a physical disk is not mounted:
-        // this avoids making a missing backup disk look like usable backup storage.
-        bool available = Directory.Exists(path) && (name != "Backup" || mounted);
-        if (!available) return new DiskSnapshot(name, path, false, mounted, 0, 0);
-        try
+        main = Path.GetFullPath(main);
+        backup = Path.GetFullPath(backup);
+        var results = new List<DiskSnapshot>();
+        var system = BackingMount("/", mounts);
+        if (system is null) return results;
+        var primaryIncludesData = BackingMount(main, mounts)?.Device == system.Device;
+        Add(system, primaryIncludesData ? $"/ · {main}" : "/", "Disk 1 · Main");
+
+        var data = BackingMount(main, mounts);
+        if (Directory.Exists(main) && data is not null && data.Device != system.Device &&
+            data.Point != "/" && data.Point == main)
+            Add(data, main, $"Disk {results.Count + 1} · Data");
+
+        // An ordinary /backup directory must NEVER appear as a second disk.
+        // A bind mount of the system filesystem is not an independent backup disk.
+        var target = mounts.LastOrDefault(m => m.Point == backup);
+        if (target is not null && target.Device != system.Device &&
+            (data?.Device != target.Device || data.Device == system.Device))
+            Add(target, backup, $"Disk {results.Count + 1} · Backup");
+        return results;
+
+        void Add(MountInfo mount, string labelPath, string label)
         {
-            var matching = DriveInfo.GetDrives()
-                .Where(d => path == d.RootDirectory.FullName.TrimEnd('/') ||
-                    (d.RootDirectory.FullName == "/" ||
-                     path.StartsWith(d.RootDirectory.FullName.TrimEnd('/') + "/", StringComparison.Ordinal)))
-                .OrderByDescending(d => d.RootDirectory.FullName.Length)
-                .FirstOrDefault();
-            if (matching is null || !matching.IsReady)
-                return new DiskSnapshot(name, path, false, mounted, 0, 0);
-            return new DiskSnapshot(name, path, true, mounted,
-                matching.TotalSize, matching.TotalSize - matching.AvailableFreeSpace);
+            try
+            {
+                // DriveInfo works with Linux mountpoints; the filesystem's actual
+                // mountpoint is used, NOT an arbitrary child directory.
+                var drive = new DriveInfo(mount.Point);
+                if (!drive.IsReady) return;
+                results.Add(new DiskSnapshot(label, labelPath, true, true,
+                    drive.TotalSize, drive.TotalSize - drive.AvailableFreeSpace));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+            { /* A removed drive is omitted until the next poll. */ }
         }
-        catch (IOException) { return new DiskSnapshot(name, path, false, mounted, 0, 0); }
-        catch (UnauthorizedAccessException) { return new DiskSnapshot(name, path, false, mounted, 0, 0); }
     }
 }

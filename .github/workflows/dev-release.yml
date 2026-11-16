@@ -31,7 +31,7 @@ jobs:
               -o "publish/$pair"
             mkdir -p "publish/$pair/deployment"
             cp packaging/yrm-panel.service "publish/$pair/deployment/"
-            cp scripts/yrm-panel-samba.py "publish/$pair/deployment/"
+            cp scripts/yrm-panel-samba.py scripts/yrm-panel-power.sh "publish/$pair/deployment/"
             cp scripts/update.sh "publish/$pair/deployment/"
             cp scripts/uninstall.sh "publish/$pair/deployment/"
             (cd "publish/$pair" && tar -czf "../../artifacts/yrm-panel-$pair.tar.gz" .)
