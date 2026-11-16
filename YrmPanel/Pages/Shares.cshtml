@@ -1,0 +1,38 @@
+@page
+@model YrmPanel.Pages.SharesModel
+@{ ViewData["Title"] = "File Sharing"; }
+<div class="page-heading"><div><p class="eyebrow">SAMBA</p><h1>File Sharing<span class="accent-period">.</span></h1><p class="page-subtitle">Native Ubuntu Samba shares. Shares remain after YRM Panel is uninstalled.</p></div></div>
+@if (!string.IsNullOrEmpty(Model.Notice)) { <div class="notice">@Model.Notice</div> }
+@if (!Model.Samba.Available)
+{
+    <section class="surface-card"><div class="empty-hint">Samba management is not available.<small>@Model.Samba.Message</small><small>Install this Panel on Ubuntu using install.sh to enable the privileged Samba helper.</small></div></section>
+}
+else
+{
+<div class="settings-grid">
+    <section class="surface-card"><div class="card-header"><div><p class="eyebrow">MANAGED SHARES</p><h3>Shared folders</h3></div></div>
+        <div class="responsive-table"><table class="data-table"><thead><tr><th>Share</th><th>Linux path</th><th>Mode</th><th></th></tr></thead><tbody>
+        @foreach(var share in Model.Samba.Shares)
+        {
+            <tr><td><strong>@share.Name</strong></td><td class="muted">@share.Path</td><td>@(share.ReadOnly ? "Read only" : "Read / Write")</td><td><form method="post" asp-page-handler="Delete" data-confirm="Remove the @share.Name SMB share? Files will be kept."><input type="hidden" name="name" value="@share.Name"/><button type="submit" class="mini-button danger">Remove</button></form></td></tr>
+        }
+        </tbody></table></div>
+        @if (Model.Samba.Shares.Count == 0) { <div class="empty-hint">No YRM-managed shares yet.<small>Existing Samba and ReCasaOS shares are not modified.</small></div> }
+    </section>
+    <section class="surface-card"><div class="card-header"><div><p class="eyebrow">ADD OR UPDATE</p><h3>SMB share</h3></div></div>
+        <form method="post" asp-page-handler="Save" class="form-stack">
+            <label class="field-label" for="share-name">Share name</label><input id="share-name" name="name" required maxlength="32" pattern="[A-Za-z][A-Za-z0-9_-]*" placeholder="downloads" />
+            <label class="field-label" for="share-path">Existing folder path</label><input id="share-path" name="path" required placeholder="/data/downloads" />
+            <label class="field-label"><input type="checkbox" name="readOnly" value="true"/> Read-only share</label>
+            <button type="submit" class="button button-primary">Save share</button>
+            <p class="muted small">Only real folders inside /data or a mounted /backup are accepted. Reusing a share name updates its YRM-managed definition.</p>
+        </form>
+    </section>
+</div>
+<section class="surface-card"><div class="card-header"><div><p class="eyebrow">ACCOUNT</p><h3>Ubuntu / Samba user</h3></div></div>
+    <p>Account: <strong>@Model.Samba.Account</strong> · @(Model.Samba.AccountConfigured ? "SMB password configured" : "SMB password not configured")</p>
+    <p class="muted">The account is an existing Ubuntu user. YRM Panel does not create a second independent Linux account.</p>
+    <form method="post" asp-page-handler="Password" class="fm-inline-form"><input type="password" name="password" minlength="12" maxlength="256" autocomplete="new-password" placeholder="Set Samba password" required/><button type="submit" class="button button-secondary">Set SMB password</button></form>
+    <p class="muted small">Windows may cache old SMB credentials. If login fails after changing the password, disconnect the previous connection.</p>
+</section>
+}

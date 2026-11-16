@@ -1,0 +1,38 @@
+@page
+@model YrmPanel.Pages.SettingsModel
+@{ ViewData["Title"] = "Settings"; }
+<div class="page-heading"><div><p class="eyebrow">PERSONALIZE</p><h1>Settings<span class="accent-period">.</span></h1><p class="page-subtitle">Make your panel feel like your own.</p></div></div>
+@if (!string.IsNullOrWhiteSpace(Model.Notice)) { <div class="notice">@Model.Notice</div> }
+<div class="settings-grid">
+    <section class="surface-card"><div class="card-header"><div><p class="eyebrow">APPEARANCE</p><h3>Desktop wallpaper</h3></div><span class="header-icon">▧</span></div><p class="muted">JPEG, PNG or WebP up to 8 MB. Your wallpaper covers the desktop; it is not publicly visible on the sign-in page.</p>
+        @if (Model.HasWallpaper) { <div class="wallpaper-preview" style="background-image: url('/wallpaper?v=@(DateTimeOffset.UtcNow.ToUnixTimeSeconds())')"></div> }
+        <form method="post" enctype="multipart/form-data" asp-page-handler="Wallpaper" class="form-stack"><label class="field-label" for="wallpaper">Choose an image</label><input id="wallpaper" type="file" name="wallpaper" accept="image/png,image/jpeg,image/webp" required /><button type="submit" class="button button-primary">Apply wallpaper</button></form>
+        @if (Model.HasWallpaper) { <form method="post" asp-page-handler="ClearWallpaper" class="inline-form"><button type="submit" class="button button-secondary">Restore default background</button></form> }
+    </section>
+    <section class="surface-card"><div class="card-header"><div><p class="eyebrow">APPLICATIONS</p><h3>Quick links</h3></div></div>
+        <form method="post" asp-page-handler="AddShortcut" class="form-stack"><label class="field-label" for="shortcut-name">Display name</label><input id="shortcut-name" type="text" name="name" maxlength="40" placeholder="Dockhand" required /><label class="field-label" for="shortcut-url">WebUI address</label><input id="shortcut-url" type="url" name="url" maxlength="2000" placeholder="http://192.168.0.200:3300" required /><button class="button button-primary" type="submit">+ Add shortcut</button></form>
+        <div class="shortcuts-settings">
+            @for (int i = 0; i < Model.Shortcuts.Count; i++)
+            {
+                <div class="shortcut-row"><div class="truncate"><strong>@Model.Shortcuts[i].Name</strong><small>@Model.Shortcuts[i].Url</small></div><form method="post" asp-page-handler="RemoveShortcut"><input type="hidden" name="index" value="@i"/><button type="submit" class="mini-button">Remove</button></form></div>
+            }
+        </div>
+    </section>
+</div>
+<section class="surface-card system-settings"><div class="card-header"><div><p class="eyebrow">SERVER CONFIGURATION</p><h3>Runtime</h3></div></div><div class="config-row"><span>Listening endpoint</span><code>@Model.ListenUrl</code></div><div class="config-row"><span>Authentication</span><strong>@Model.AccountName / local password hash</strong></div><div class="config-row"><span>Default theme</span><strong>Dark only</strong></div><div class="config-row"><span>Account management</span><span>Use <code>--set-admin</code> on the host to change credentials</span></div><p class="muted small">Change listening ports through <code>Panel__Url</code> in the service environment file, then restart YRM Panel.</p></section>
+
+<section class="surface-card"><div class="card-header"><div><p class="eyebrow">DESKTOP</p><h3>Pin to desktop</h3></div></div>
+<p class="muted">Show only the apps you use regularly. The wallpaper stays uncluttered by default.</p>
+<div class="pin-settings-grid">
+@foreach (var app in YrmPanel.Pages.SettingsModel.BuiltIn)
+{
+  var on = Model.Pins.Contains(app.Id);
+  <form method="post" asp-page-handler="Pin"><input type="hidden" name="id" value="@app.Id"/><input type="hidden" name="pinned" value="@(!on ? "true" : "false")"/><button class="button @(on ? "button-primary" : "button-secondary")" type="submit">@(on ? "✓ " : "+ ")@app.Label</button></form>
+}
+@for (var i = 0; i < Model.Shortcuts.Count; i++)
+{
+  var id = "link:" + i;
+  var on = Model.Pins.Contains(id);
+  <form method="post" asp-page-handler="Pin"><input type="hidden" name="id" value="@id"/><input type="hidden" name="pinned" value="@(!on ? "true" : "false")"/><button class="button @(on ? "button-primary" : "button-secondary")" type="submit">@(on ? "✓ " : "+ ")@Model.Shortcuts[i].Name</button></form>
+}
+</div></section>

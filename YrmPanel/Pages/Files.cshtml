@@ -1,0 +1,47 @@
+@page
+@model YrmPanel.Pages.FilesModel
+@{ ViewData["Title"] = "Files"; }
+<div class="page-heading"><div><p class="eyebrow">FILE MANAGER</p><h1>Files<span class="accent-period">.</span></h1><p class="page-subtitle">Work directly with your Linux folders. No copies are stored in YRM Panel.</p></div></div>
+@if (!string.IsNullOrEmpty(Model.Notice)) { <div class="notice">@Model.Notice</div> }
+<section class="surface-card">
+    <div class="fm-toolbar">
+        <a asp-page="/Files" asp-route-root="data" asp-route-path="" class="button @(Model.Root == "data" ? "button-primary" : "button-secondary")">/data</a>
+        <a asp-page="/Files" asp-route-root="backup" asp-route-path="" class="button @(Model.Root == "backup" ? "button-primary" : "button-secondary")">/backup</a>
+        <span class="fm-path">@Model.DisplayRoot/@Model.Path</span>
+        <a asp-page="/Files" asp-route-root="@Model.Root" asp-route-path="@Model.Path" class="button button-secondary">Refresh</a>
+    </div>
+    @if (!Model.View.Available)
+    {
+        <div class="empty-hint">Storage unavailable<small>@Model.View.Error</small><small>On Windows this feature is unavailable. On Ubuntu, the Panel user needs access to the directory.</small></div>
+    }
+    else
+    {
+        <div class="fm-toolbar">
+            @if (!string.IsNullOrEmpty(Model.Path)) { <a class="button button-secondary" asp-page="/Files" asp-route-root="@Model.Root" asp-route-path="@Model.Parent">↑ Parent</a> }
+            <form method="post" asp-page-handler="Create" class="fm-inline-form">
+                <input type="hidden" name="Root" value="@Model.Root" /><input type="hidden" name="Path" value="@Model.Path" />
+                <input name="name" required maxlength="100" placeholder="New folder name" aria-label="New folder name" />
+                <button class="button button-primary" type="submit">New folder</button>
+            </form>
+        </div>
+        <div class="responsive-table"><table class="data-table"><thead><tr><th>Name</th><th>Size</th><th>Modified</th><th>Actions</th></tr></thead><tbody>
+        @foreach (var item in Model.View.Items)
+        {
+            <tr><td>
+                @if (item.IsDirectory)
+                { <a asp-page="/Files" asp-route-root="@Model.Root" asp-route-path="@(System.IO.Path.Combine(Model.Path, item.Name).Replace('\\','/'))"><strong>📁 @item.Name</strong></a> }
+                else { <strong>📄 @item.Name</strong> }
+            </td><td class="muted">@(item.IsDirectory ? "Folder" : $"{item.Size:N0} B")</td><td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+            <td><div class="action-group fm-actions">
+                @if (!item.IsDirectory) { <a class="mini-button" asp-page="/Files" asp-page-handler="Download" asp-route-root="@Model.Root" asp-route-path="@Model.Path" asp-route-name="@item.Name" data-native-download>Download</a> }
+                <form method="post" asp-page-handler="Rename" class="fm-inline-form"><input type="hidden" name="Root" value="@Model.Root" /><input type="hidden" name="Path" value="@Model.Path" /><input type="hidden" name="name" value="@item.Name"/><input type="text" name="newName" required placeholder="New name" aria-label="Rename @item.Name" maxlength="100"/><button class="mini-button">Rename</button></form>
+                <form method="post" asp-page-handler="Delete" data-confirm="Delete @item.Name? Non-empty folders cannot be deleted." class="fm-inline-form"><input type="hidden" name="Root" value="@Model.Root"/><input type="hidden" name="Path" value="@Model.Path"/><input type="hidden" name="name" value="@item.Name"/><button class="mini-button danger">Delete</button></form>
+            </div></td></tr>
+        }
+        </tbody></table></div>
+        @if (Model.View.Items.Count == 0) { <div class="empty-hint">This folder is empty.</div> }
+        @if (Model.View.Items.Count >= 1000) { <p class="muted">Showing the first 1,000 items.</p> }
+        <div class="fm-upload"><p class="eyebrow">UPLOAD</p><form method="post" asp-page-handler="Upload" enctype="multipart/form-data" class="fm-inline-form"><input type="hidden" name="Root" value="@Model.Root"/><input type="hidden" name="Path" value="@Model.Path"/><input type="file" name="upload" required/><button class="button button-secondary" type="submit">Upload (max 256 MiB)</button></form></div>
+        <details class="fm-move"><summary>Move an item to another folder on this volume</summary><form method="post" asp-page-handler="Move" class="fm-inline-form"><input type="hidden" name="Root" value="@Model.Root"/><input type="hidden" name="Path" value="@Model.Path"/><input type="text" name="name" placeholder="Existing item name" required/><input type="text" name="destination" placeholder="Destination relative path (e.g. downloads)"/><button class="button button-secondary">Move</button></form></details>
+    }
+</section>

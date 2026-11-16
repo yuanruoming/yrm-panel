@@ -1,10 +1,31 @@
-﻿@page
-@model IndexModel
+@page
+@model YrmPanel.Pages.IndexModel
 @{
-    ViewData["Title"] = "Home page";
+    ViewData["Title"] = "Desktop";
 }
+<div class="desktop-safe-space" aria-label="Your desktop wallpaper"></div>
+<div class="desktop-corner-caption"><span class="status-light"></span><span>YRM Panel</span><span class="caption-separator">/</span><span id="desktop-caption-host">@Model.Snapshot.Hostname</span></div>
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+@inject YrmPanel.Services.PanelSettingsStore DesktopSettings
+@{ var desktop = DesktopSettings.Read(); }
+@if (desktop.PinnedApps.Count > 0)
+{
+<div class="desktop-pins" aria-label="Pinned desktop applications">
+@foreach (var id in desktop.PinnedApps)
+{
+    if (id.StartsWith("link:") && int.TryParse(id[5..], out var idx) && idx >= 0 && idx < desktop.Shortcuts.Count)
+    {
+        <a href="@desktop.Shortcuts[idx].Url" target="_blank" rel="noopener noreferrer" class="desktop-pin"><span class="desktop-pin-icon">↗</span><span>@desktop.Shortcuts[idx].Name</span></a>
+    }
+    else
+    {
+        var name = id switch { "/Applications" => "Apps", "/Docker" => "Docker", "/Services" => "Services", "/Files" => "Files", "/Shares" => "File Sharing", "/Settings" => "Settings", _ => null };
+        if (name is not null)
+        {
+            var glyph = id switch { "/Docker" => "◈", "/Files" => "▣", "/Shares" => "◎", "/Services" => "▤", "/Settings" => "⚙", _ => "▦" };
+            <a href="@id" class="desktop-pin"><span class="desktop-pin-icon">@glyph</span><span>@name</span></a>
+        }
+    }
+}
 </div>
+}

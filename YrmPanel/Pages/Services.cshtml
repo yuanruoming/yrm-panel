@@ -1,0 +1,10 @@
+@page
+@model YrmPanel.Pages.ServicesModel
+@{ ViewData["Title"] = "Services"; }
+<div class="page-heading"><div><p class="eyebrow">LINUX SERVICES</p><h1>System services<span class="accent-period">.</span></h1><p class="page-subtitle">A read-only view of essential systemd services.</p></div><a asp-page="/Services" class="button button-secondary">↻ Refresh</a></div>
+<section class="surface-card"><div class="card-header"><div><p class="eyebrow">SYSTEMD</p><h3>Service health</h3></div><span class="tag">READ ONLY</span></div>
+@foreach (var item in Model.Items)
+{
+    <div class="service-row"><span class="status-circle @(item.State == "active" ? "on" : "off")"></span><div class="service-name"><strong>@item.Name</strong><small>@item.Detail</small></div><span class="status-pill @(item.State == "active" ? "is-running" : "is-stopped")">@item.State</span></div>
+}
+</section>

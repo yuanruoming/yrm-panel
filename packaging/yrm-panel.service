@@ -1,0 +1,30 @@
+[Unit]
+Description=YRM Panel - Linux Server Management
+After=network.target docker.service smbd.service
+Wants=network.target
+
+[Service]
+Type=simple
+User=yrm-panel
+Group=yrm-panel
+WorkingDirectory=/opt/yrm-panel
+EnvironmentFile=/etc/yrm-panel/panel.env
+ExecStart=/opt/yrm-panel/YrmPanel
+Restart=on-failure
+RestartSec=5
+UMask=0007
+# sudo is needed exclusively for the root-owned Samba adapter (sudoers-allowlisted).
+# Do not grant a shell or broad sudo access to the panel account.
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/yrm-panel /data /backup /etc/samba /var/lib/samba
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

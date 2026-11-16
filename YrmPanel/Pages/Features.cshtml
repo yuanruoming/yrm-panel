@@ -1,0 +1,5 @@
+@page
+@model YrmPanel.Pages.FeaturesModel
+@{ ViewData["Title"] = Model.FeatureTitle; }
+<div class="page-heading"><div><p class="eyebrow">ROADMAP MODULE</p><h1>@Model.FeatureTitle<span class="accent-period">.</span></h1><p class="page-subtitle">@Model.Description</p></div></div>
+<section class="surface-card planned-card"><span class="planned-symbol">⌘</span><h3>Planned for a future release</h3><p>There is no simulated system control behind this page. The module will be implemented and tested before activation.</p><a asp-page="/Index" class="button button-secondary">← Back to overview</a></section>
