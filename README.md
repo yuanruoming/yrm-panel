@@ -1,75 +1,31 @@
 # YRM Panel
 
-![Desktop preview](docs/screenshots/desktop-preview.png)
+Lightweight self-hosted Linux server management in ASP.NET Core 10 (Razor Pages).
+Dark, wallpaper-first desktop; built-in monitoring; Docker container control; file browser;
+folder sharing through native Samba; settings and system power controls.
 
-**A lightweight, dark-first Linux server management panel.** Built with **C# / ASP.NET Core 10 Razor Pages** and a small amount of native CSS/JavaScript. Runs as a native Ubuntu/Debian `systemd` service, not inside Docker.
-
-> **Status: v1.0.0 release candidate (RC2).** The code and packaging are provided for testing, not represented as an audited stable release. Build in VS2026 and complete the Ubuntu VM acceptance checklist before tagging `v1.0.0`.
+**Release candidate `1.0.0-rc.3` — requires .NET build and Ubuntu VM acceptance testing.**
+Do not assume the software has been independently security audited.
 
 ## Features
 
-| Feature | v1.0 RC2 |
+| Component | Current status |
 |---|---|
-| Desktop | Wallpaper-focused UI, top taskbar, launcher, optional pinned monitor and pinned app shortcuts |
-| Monitoring | Linux CPU, memory, unique mounted filesystems, network traffic and uptime; clearly marked preview data on Windows |
-| Docker | List containers and Compose project groups; start, stop, restart and view recent logs within the Panel; transient operation notifications |
-| Linux services | View systemd status; restart or shut down the server from a confirmation-protected account menu |
-| Files | Browse `/data` and mounted `/backup`; create folders, upload/download, rename, move inside a volume, delete files or empty folders |
-| File Sharing | Choose folders through a GUI, create folders, manage Samba shares and an existing Ubuntu account's SMB password |
-| Setup | Install missing official Docker Engine and Compose plugin, plus Ubuntu/Debian Samba; set up autostart |
-| Maintenance | `yrm-panel-update` and `yrm-panel-uninstall`; Panel uninstall leaves services and file shares intact |
-| Firewall and DDNS | **Not implemented**; planned for v2.0 |
-| Compose editing/deployment | **Not implemented**; planned for v3.0; use Dockhand or the Docker CLI in the meantime |
+| Desktop, user wallpaper, launcher, pinned applications | Implemented |
+| CPU/RAM/network/uptime/disk metrics | Linux backend implemented |
+| Docker discovery, start/stop/restart, logs | Implemented; root-equivalent Docker Socket permissions apply |
+| Applications: manual HTTP(S) shortcuts, edit/remove, pin | Implemented |
+| Files: browse `/`, choose parent directory, create folder, upload, download, rename, move, remove empty folder | Implemented; actual operations limited to explicitly enabled data directories |
+| File sharing: select directory in Files, share with Samba, SMB account password | Implemented; requires system integration testing |
+| Settings: Overview, Storage, Network, Accounts, Appearance, About | Implemented; Network and Storage currently informational only |
+| Docker Compose creation/deployment, UFW, DDNS, disk format/mount | **Not implemented** |
 
-The Panel is a management UI. Actual Docker data, Samba configuration and your files are independent of this app.
+## Installation (Ubuntu / Debian)
 
-## Design and repository structure
+The installer automatically installs missing Docker Engine, Compose plugin, Samba and the
+`acl` package. **It does NOT create `/data`, `/backup`, `/data/docker`, or any other user-data folders.**
 
-```text
-YrmPanel/                     # ASP.NET Core Razor Pages source
-  Pages/                      # Razor UI pages and handlers
-  Services/                   # Linux monitoring, Docker, file access, Samba API
-  Models/                     # shared data structures
-  wwwroot/                    # desktop UI, CSS, JS, default wallpaper
-scripts/
-  install.sh                  # initial install and safe upgrades
-  update.sh                   # downloads latest installer from chosen repository
-  uninstall.sh                # removes Panel, not Docker or Samba
-  yrm-panel-samba.py          # root-owned Samba configuration helper
-  yrm-panel-power.sh          # restricted reboot/shutdown helper
-packaging/yrm-panel.service   # systemd unit
-.github/workflows/            # build Linux x64/arm64 GitHub release assets
-```
-
-**Third-party components:** no extra NuGet dependencies, no JS frameworks and no external CDN. The application uses Microsoft's ASP.NET Core SDK/runtime and the host's native Docker, Samba, Python 3, `sudo` and `systemd`. CI uses GitHub's `checkout`, `setup-dotnet` and `gh` tools. All non-built-in system components are installed explicitly by the install script when absent.
-
-## 1. Local development (Windows / Visual Studio 2026)
-
-1. Merge this repository's files into the root of your existing Git repository, preserving `.git` and the Visual Studio `.sln` file. Do not nest an extra repository directory.
-2. Build with `dotnet build YrmPanel/YrmPanel.csproj` (or the VS Build command).
-3. On first local launch, create the Panel account:
-
-   ```powershell
-   dotnet run --project .\YrmPanel\YrmPanel.csproj -- --set-admin
-   ```
-
-4. Start YRM Panel:
-
-   ```powershell
-   dotnet run --project .\YrmPanel\YrmPanel.csproj
-   ```
-
-5. Open `http://127.0.0.1:6080`. Windows displays **demo monitoring**, and Linux-only Files/Samba/Docker integration reports that it is unavailable. This is expected. Changes to CSS and Razor can be developed locally without Linux.
-
-## 2. GitHub development build
-
-The workflow `.github/workflows/dev-release.yml` runs on pushes to the repository's default branch (`main` or `master`). It publishes pre-release assets to the rolling tag `dev` for both `linux-x64` and `linux-arm64`. Check that the workflow succeeds before installing a new version on Ubuntu.
-
-If the release upload is rejected, in GitHub **Settings → Actions → General** allow Actions to write to the repository, or adjust the repository's workflow permissions.
-
-## 3. Ubuntu installation
-
-**Use a test VM first.** The installer uses the currently published `dev` Release, not the Git source directly. These commands use the project's `master` branch:
+Once a current `dev` GitHub Release has been built by Actions:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/yuanruoming/yrm-panel/master/scripts/install.sh -o install.sh
@@ -77,96 +33,86 @@ less install.sh
 sudo bash install.sh --repo yuanruoming/yrm-panel --branch master --channel dev --file-user yuanruoming
 ```
 
-The installer will:
+`--file-user` specifies an **existing Ubuntu account** for Samba/file ownership, not the
+YRM Panel website login. On first install you choose a **separate Panel username/password**.
+The default listening address is `0.0.0.0:6080` (all IPv4 interfaces), suitable for a trusted
+LAN/VPN, **not safe to expose unencrypted to the public Internet**. Use `--bind 127.0.0.1`
+for localhost-only installation or `--port N` to change the port.
 
-- Check Ubuntu/Debian, architecture and systemd.
-- Install **Docker Engine from Docker's official APT repository** if absent, plus the Compose plugin. If Docker already exists, keep its current installation. Try to add the Compose plugin without replacing an existing Engine.
-- Install Samba if absent, leave existing Samba shares untouched.
-- Ensure `/data`, `/data/docker`, `/data/downloads`, `/data/transfer`, and `/backup` directories exist. **This does not format or mount drives.** `/backup` must independently be mounted at `/backup` through `/etc/fstab` if you wish to use it.
-- Create a dedicated service user and install the unprivileged Panel service.
-- Install the narrow, root-owned Samba helper. Add a `smb.conf` include for `/etc/samba/yrm-panel-shares.conf`, retaining existing shares.
-- Ask you to choose your own Panel username and 12+ character password.
-- Enable `yrm-panel.service` to start with the system.
+The installer creates a systemd service and installs a root-owned, allowlisted Samba helper,
+a storage/ACL helper, and a power helper. Review each helper and its sudoers rules before
+using this on a real server. Docker Socket access is root-equivalent.
 
-Default listen endpoint: **`http://0.0.0.0:6080`**, so you can visit `http://SERVER_LAN_IP:6080` from your LAN/VPN without an SSH tunnel. Use `--port 6090` to choose a different port or `--bind 127.0.0.1` to restrict access to localhost. The installer preserves an existing endpoint on reinstallation.
+### File manager workflow
 
-On systems with active UFW, the installer creates an allow rule limited to detected private interface subnets. Verify the actual rule and interface reachability; VPN clients routed through a different source subnet may need their own rule. The default binds all IPv4 interfaces, **not only private ones**. Do not forward this HTTP port to the public Internet; for ongoing use provide HTTPS via a trusted reverse proxy or VPN. Login cookies and passwords are not protected against sniffing over plain HTTP outside a secure transport.
+1. Open **Files** and browse the actual Linux `/` tree. Outside user-authorized data directories, only folder names are shown (read-only).
+2. Select **New folder** and browse to the desired parent directory. To create a new top-level `/data`, select `/` and enter `data`.
+3. For an existing data folder (for example `/data`), click **Enable management here**, or choose **Enable folder management** from its row. This explicitly grants the Panel account non-recursive access with Linux ACLs. Do not use `chmod 777`.
+4. Browse into that directory, create folders or files; click `⋯ → Share via SMB` on a folder. The Samba share name defaults to the folder name. Use advanced settings only when you want a different name.
+5. Expand **Shared folders** to set the Samba password for the selected Ubuntu account, view and remove shares. Remove share does **not** remove its files.
 
-The chosen `--file-user` must be a preexisting, non-system Ubuntu account. This same Unix account is used for Samba authentication. If that account has its own private primary group, the installer adds the Panel service account to that group for access to the newly-created `/data` subfolders. **Existing folder trees are not recursively chowned or chmodded.** For preexisting folders, you may need to grant the Panel user group access explicitly. The Panel never runs the main ASP.NET Core application as root.
+A regular file manager is not the same as root access. `/etc`, `/root`, `/usr`, and other
+system folders are **not editable**. `/backup` can be created as a future disk mount point,
+but file writes are blocked until it is mounted on a separate filesystem. Existing nested
+directories may need individual access grants; permission changes are **not recursive**.
 
-### Docker privileges
+The Samba share configuration is stored in the native Samba configuration hierarchy:
+`/etc/samba/yrm-panel-shares.conf` (included from `smb.conf`). It persists if the Panel is
+uninstalled. Nothing is stored in a private "virtual NAS" filesystem.
 
-To control existing Docker containers, `yrm-panel` joins the system `docker` group. **Docker socket access is root-equivalent** and is a deliberate security tradeoff, even if the web application is otherwise unprivileged. Only use this with a strong Panel password on a trusted network or VPN, ideally behind HTTPS. If you do not want Docker control, remove `yrm-panel` from the Docker group and set `Docker__EnableControls=false` in `/etc/yrm-panel/panel.env`.
-
-### Samba configuration
-
-The native Samba helper stores managed shares in `/etc/samba/yrm-panel-shares.conf`, included by Ubuntu Samba. **File Sharing** offers a folder picker, new-folder action, share creation, read-only toggle and share removal. It only supports directories under `/data` and **an actually mounted** `/backup`. Existing non-managed Samba definitions are not modified. A samba user password can be configured through the same page.
-
-The installer places a root-owned `sudoers` entry permitting only `/usr/local/libexec/yrm-panel-samba` as root, with the helper itself validating every action, share name and folder. The `systemd` unit explicitly permits this very narrow `sudo` operation, so `NoNewPrivileges=false` is needed; the main service still runs as the low-privilege `yrm-panel` account. The elevated helper is part of the trusted computing base and must be reviewed before deployment.
-
-Use the File Sharing page to set a **Samba password for your existing Ubuntu user**. Windows uses that password; it is independent of the Panel login password. The password is sent to `smbpasswd` over a local process pipe, not as a command-line argument.
-
-### Shutdown / reboot
-
-The account menu offers confirmation-protected restart and shutdown on Linux. The web process requests exactly one of two operations through a separate root-owned, sudoers-restricted helper. Shutdown requires manual power-on afterward. The helper is removed when the Panel is uninstalled.
-
-### File manager safety
-
-- Files are accessed directly on the host, never copied into a YRM Panel database.
-- `/data` and `/backup` are the only configured storage roots. The Panel checks `../` traversal and rejects symbolic links in user-controlled paths.
-- `/backup` must be a real mount point. If the disk is missing, the Files page refuses reads and writes to that path.
-- Uploads are currently capped at **256 MiB per file**. Use Nextcloud or SMB for multi-GB transfers.
-- Deletes are explicit and **non-recursive**; a folder must be empty before it can be deleted. Existing files cannot be silently overwritten by an upload or rename.
-- This is a private single-administrator server UI, not a hostile multi-tenant file server. A local attacker able to swap symlinks during operations would need stronger kernel-level path resolution protections (e.g. `openat2`). Do not make this interface publicly accessible.
-
-## 4. Update and uninstall
-
-Update after the GitHub Actions release has completed:
+### Updates and uninstall
 
 ```bash
 sudo yrm-panel-update
-```
-
-The update retains the admin password, wallpaper, app preferences, `/data`, `/backup`, Docker and Samba configuration.
-
-Remove **only** the YRM Panel software:
-
-```bash
 sudo yrm-panel-uninstall
-```
-
-To also remove YRM Panel's own account data, settings and wallpapers:
-
-```bash
+# Optional: also remove Panel-only account settings and wallpapers
 sudo yrm-panel-uninstall --purge
 ```
 
-**Both uninstall modes preserve:** Docker Engine, Docker containers and volumes, Docker Compose projects, Samba daemon, `/etc/samba/smb.conf`, `/etc/samba/yrm-panel-shares.conf`, SMB user database, `/data`, `/backup` and all host files. The Samba include remains valid, so shares continue to work without the Panel. The dedicated `yrm-panel` system user is left in place to avoid unexpected UID reassignment; it can be reviewed manually later.
+Uninstall preserves host files, mounted disks, Docker/Compose containers, Samba and its
+native share definitions. It removes the Panel service and its privileged helpers.
 
-## 5. Acceptance testing before stable 1.0.0
+## Windows development (Visual Studio 2026)
 
-- [ ] `dotnet build YrmPanel/YrmPanel.csproj` succeeds on Windows and on GitHub Actions.
-- [ ] Dashboard, login, wallpaper, immediate Pin-to-Desktop and internal app navigation work.
-- [ ] Install on a clean Ubuntu VM: Docker, Compose, Samba and Panel start automatically on reboot.
-- [ ] Existing Docker containers appear; start/stop/restart, inline logs and transient toast feedback work.
-- [ ] Files: create, upload, download, rename, move and delete under `/data` with real permissions.
-- [ ] Files: `/backup` is inaccessible if the disk is not mounted, but accessible after proper mount.
-- [ ] Samba: choose/create a folder through the GUI, set an SMB password, create a share, read/write from Windows, remove the share without deleting files.
-- [ ] Installer rerun does not destroy or replace existing Docker/Samba configurations.
-- [ ] `yrm-panel-update` preserves credentials, wallpaper, data and shares.
-- [ ] Reboot / shutdown helper triggers only the confirmed power operation.
-- [ ] `yrm-panel-uninstall` removes the Panel but Docker and Samba keep functioning.
+```powershell
+dotnet build .\YrmPanel\YrmPanel.csproj
+dotnet run --project .\YrmPanel\YrmPanel.csproj -- --set-admin
+dotnet run --project .\YrmPanel\YrmPanel.csproj
+```
 
-## Security disclaimer
+Windows runs demo metrics. Linux file management and Samba operations require an actual
+Ubuntu/Debian host. UI code is Razor Pages + CSS + native JavaScript; no additional NuGet
+or JavaScript UI framework is required. Installer uses OS-native Docker, Samba, ACL, Python,
+`sudo`, and systemd.
 
-There are no known deliberate backdoors or telemetry endpoints, and the code uses standard web authentication, CSRF protection, cookie security settings, input validation, and explicit privilege boundaries. **This is not a security audit and not a promise of zero vulnerabilities.** Review any root-executed installer or helper before using it on a real server. Keep YRM Panel private behind SSH/VPN or an appropriately configured HTTPS reverse proxy.
+## Repository layout
 
-## Roadmap
+- `YrmPanel/Pages`: Razor UI and handlers.
+- `YrmPanel/Services`: Linux system data, Docker, authorization boundaries, file/Samba operations.
+- `YrmPanel/wwwroot`: browser JavaScript, CSS and wallpaper assets.
+- `scripts/install.sh`, `scripts/update.sh`, `scripts/uninstall.sh`.
+- `scripts/yrm-panel-samba.py`: native Samba share configuration helper.
+- `scripts/yrm-panel-storage.py`: explicitly approved data folders and scoped ACL grants.
+- `scripts/yrm-panel-power.sh`: allowlisted reboot/shutdown.
+- `.github/workflows/dev-release.yml`: automated Linux self-contained binaries.
 
-- **v2.0:** UFW firewall GUI and first-party Cloudflare DDNS updater.
-- **v3.0:** Docker Compose editor, installation and Stack management (Dockhand replacement). The v1 Docker integration intentionally does not deploy or delete Compose projects.
-- Dynamic third-party plugin loading is **not** part of the current roadmap. Built-in modules are structured for normal source-code contributions.
+## Acceptance checklist
 
-## Contributing / License
+- [ ] Visual Studio/.NET 10 builds with 0 errors.
+- [ ] GitHub Actions produces x64 and ARM64 release assets containing all three helpers.
+- [ ] Clean Ubuntu VM does **not** get default NAS folders created by installer.
+- [ ] Browser can list `/`, create `/data` and opt into an existing data directory.
+- [ ] GUI file operations work in an enabled root; system folders remain read-only.
+- [ ] GUI-created Samba share is readable/writable over SMB from Windows, and persists after Panel uninstall.
+- [ ] Manual apps and `docker run` containers appear in Applications; desktop Pin works.
+- [ ] Docker operations and inline logs, wallpaper and Settings navigation work.
+- [ ] Reboot, update, uninstall preserve Docker, Samba and existing files.
+- [ ] Negative tests for path traversal, symlink, unexpected mount and missing permissions.
 
-Pull Requests and Issues are welcome. Public source code does not grant write access to this repository. Licensed under [MIT](LICENSE). Please include a test plan when proposing changes to privileged system interactions.
+## Planned
+
+- v2: UFW GUI, native Cloudflare DDNS, more network/system configuration.
+- v3: complete Compose Stack import, creation, deployment, upgrades and editing.
+
+MIT licensed. Contributions via Pull Request are welcome; the open-source status does
+not imply an untrusted-plugin execution system.

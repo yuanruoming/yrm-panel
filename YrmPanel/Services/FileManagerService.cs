@@ -1,46 +1,57 @@
-using Microsoft.AspNetCore.Http;
+using System.Text.Json;
 
 namespace YrmPanel.Services;
 
 public sealed record FileItem(string Name, bool IsDirectory, long Size, DateTime ModifiedUtc);
-public sealed record FileView(string Root, string Relative, bool Available, string? Error, IReadOnlyList<FileItem> Items);
+public sealed record FileView(string Root, string Relative, bool Available, string? Error,
+    IReadOnlyList<FileItem> Items, bool CanWrite = false, bool CanEnable = false);
 
 /// <summary>
-/// File access is confined to administrator-configured roots. Symlinks and mount-point
-/// substitutions are rejected. Run under a dedicated, non-root system user.
+/// Read-only Linux filesystem navigation begins at /. File mutations are permitted
+/// only inside explicitly registered data roots. Privileged root creation and scoped
+/// ACL grants are performed by the separate storage helper, never here.
 /// </summary>
 public sealed class FileManagerService
 {
-    private readonly Dictionary<string, string> _roots;
-    public FileManagerService(IConfiguration configuration)
-    {
-        _roots = new(StringComparer.Ordinal)
-        {
-            ["data"] = Path.GetFullPath(configuration["Storage:MainPath"] ?? "/data"),
-            ["backup"] = Path.GetFullPath(configuration["Storage:BackupPath"] ?? "/backup")
-        };
-    }
+    private const string Registry = "/etc/yrm-panel/managed-roots.json";
+    private static readonly HashSet<string> SystemFolders = new(StringComparer.Ordinal)
+    { "bin", "boot", "dev", "etc", "home", "lib", "lib64", "lost+found", "media", "mnt",
+      "opt", "proc", "root", "run", "sbin", "snap", "srv", "sys", "tmp", "usr", "var" };
 
-    public string DisplayRoot(string root) => _roots.GetValueOrDefault(root, "Unavailable");
+    public string DisplayRoot(string root) => root == "system" ? "/" : "Unavailable";
+    public static string Absolute(string? relative) => string.IsNullOrEmpty(relative) ? "/" : "/" + relative.Trim('/');
+    public static string ParentOf(string? relative)
+    {
+        var parts = (relative ?? "").Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return string.Join('/', parts.Take(Math.Max(0, parts.Length - 1)));
+    }
 
     public FileView Browse(string root, string? relative)
     {
         try
         {
             var directory = Resolve(root, relative, requireExisting: true);
-            if (!Directory.Exists(directory)) throw new IOException("This folder does not exist.");
-            var items = Directory.EnumerateFileSystemEntries(directory)
-                .Select(path =>
+            if (!Directory.Exists(directory)) throw new IOException("Folder not found.");
+            var managed = IsManaged(directory);
+            // Outside the managed roots, disclose only folder names, not file contents.
+            var items = new List<FileItem>();
+            foreach (var path in Directory.EnumerateFileSystemEntries(directory).Take(3000))
+            {
+                try
                 {
-                    var info = new FileInfo(path);
-                    var attrs = File.GetAttributes(path);
-                    return new FileItem(Path.GetFileName(path), attrs.HasFlag(FileAttributes.Directory),
-                        attrs.HasFlag(FileAttributes.Directory) ? 0 : info.Length,
-                        File.GetLastWriteTimeUtc(path));
-                })
-                .OrderByDescending(x => x.IsDirectory).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                .Take(1000).ToArray();
-            return new FileView(root, relative ?? "", true, null, items);
+                    var attributes = File.GetAttributes(path);
+                    if (attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                    var folder = attributes.HasFlag(FileAttributes.Directory);
+                    if (!folder && !managed) continue;
+                    items.Add(new FileItem(Path.GetFileName(path), folder,
+                        folder ? 0 : new FileInfo(path).Length, File.GetLastWriteTimeUtc(path)));
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { /* Individual inaccessible entry. */ }
+            }
+            var ordered = items.OrderByDescending(x => x.IsDirectory)
+                .ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).Take(1000).ToArray();
+            return new FileView(root, relative ?? "", true, null, ordered,
+                managed, CanEnable(directory));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
@@ -48,47 +59,79 @@ public sealed class FileManagerService
         }
     }
 
+    public IReadOnlyList<string> ManagedRoots()
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(File.ReadAllText(Registry))?.Where(x => x.StartsWith("/", StringComparison.Ordinal)).Distinct(StringComparer.Ordinal).ToArray() ?? [];
+        }
+        catch (Exception ex) when (ex is IOException or JsonException or UnauthorizedAccessException) { return []; }
+    }
+
+    public bool IsManaged(string absolute)
+    {
+        var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(absolute));
+        var isManaged = ManagedRoots().Any(root => path == root || path.StartsWith(root + "/", StringComparison.Ordinal));
+        if (!isManaged) return false;
+        if ((path == "/backup" || path.StartsWith("/backup/", StringComparison.Ordinal)) && !BackupMounted())
+            return false;
+        return true;
+    }
+
+    public bool CanEnable(string absolute)
+    {
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(absolute));
+        var components = full.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (components.Length == 0 || SystemFolders.Contains(components[0]) || components[0].StartsWith('.')) return false;
+        if ((full == "/backup" || full.StartsWith("/backup/", StringComparison.Ordinal)) && !BackupMounted()) return false;
+        return components.Length == 1 || ManagedRoots().Contains("/" + components[0]);
+    }
+
     public void CreateFolder(string root, string? relative, string name)
     {
-        var parent = Resolve(root, relative, true);
-        if (!Directory.Exists(parent)) throw new IOException("Destination folder is unavailable.");
+        var parent = ResolveWritable(root, relative);
         ValidateName(name);
-        var dest = Resolve(root, Path.Combine(relative ?? "", name));
-        EnsureAbsent(dest);
-        Directory.CreateDirectory(dest);
+        var destination = Resolve(root, Combine(relative, name));
+        EnsureAbsent(destination);
+        Directory.CreateDirectory(destination);
     }
 
     public void Rename(string root, string? relative, string name, string newName)
     {
         ValidateName(name); ValidateName(newName);
-        var source = Resolve(root, Path.Combine(relative ?? "", name), true);
-        var target = Resolve(root, Path.Combine(relative ?? "", newName));
+        _ = ResolveWritable(root, relative);
+        var source = Resolve(root, Combine(relative, name), true);
+        var target = Resolve(root, Combine(relative, newName));
         EnsureAbsent(target);
         if (Directory.Exists(source)) Directory.Move(source, target);
         else if (File.Exists(source)) File.Move(source, target);
-        else throw new IOException("The selected item no longer exists.");
+        else throw new IOException("Item not found.");
     }
 
     public void Delete(string root, string? relative, string name)
     {
         ValidateName(name);
-        var target = Resolve(root, Path.Combine(relative ?? "", name), true);
+        _ = ResolveWritable(root, relative);
+        var target = Resolve(root, Combine(relative, name), true);
         if (File.Exists(target)) File.Delete(target);
         else if (Directory.Exists(target)) Directory.Delete(target, recursive: false);
-        else throw new IOException("The selected item no longer exists.");
+        else throw new IOException("Item not found.");
     }
 
     public void Move(string root, string? relative, string name, string destinationRelative)
     {
         ValidateName(name);
-        var source = Resolve(root, Path.Combine(relative ?? "", name), true);
-        var destDir = Resolve(root, destinationRelative, true);
-        if (!Directory.Exists(destDir)) throw new IOException("The destination folder does not exist.");
-        var target = Resolve(root, Path.Combine(destinationRelative, name));
+        _ = ResolveWritable(root, relative);
+        var source = Resolve(root, Combine(relative, name), true);
+        var folder = ResolveWritable(root, destinationRelative);
+        if (!Directory.Exists(folder)) throw new IOException("Destination folder is missing.");
+        var target = Resolve(root, Combine(destinationRelative, name));
+        if (Directory.Exists(source) && folder.StartsWith(source + "/", StringComparison.Ordinal))
+            throw new IOException("A folder cannot be moved into itself.");
         EnsureAbsent(target);
         if (Directory.Exists(source)) Directory.Move(source, target);
         else if (File.Exists(source)) File.Move(source, target);
-        else throw new IOException("The selected item no longer exists.");
+        else throw new IOException("Item not found.");
     }
 
     public async Task UploadAsync(string root, string? relative, IFormFile file, CancellationToken ct)
@@ -96,108 +139,89 @@ public sealed class FileManagerService
         if (file.Length <= 0 || file.Length > 256L * 1024 * 1024)
             throw new IOException("Upload limit: 256 MiB per file.");
         ValidateName(file.FileName);
-        var folder = Resolve(root, relative, true);
-        if (!Directory.Exists(folder)) throw new IOException("Destination folder is unavailable.");
-        var target = Resolve(root, Path.Combine(relative ?? "", file.FileName));
+        _ = ResolveWritable(root, relative);
+        var target = Resolve(root, Combine(relative, file.FileName));
         EnsureAbsent(target);
-        // Exclusive creation prevents accidentally replacing user files.
-        await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write,
-            FileShare.None, 1024 * 1024, FileOptions.Asynchronous);
-        try
-        {
-            await file.CopyToAsync(output, ct);
-        }
-        catch
-        {
-            await output.DisposeAsync();
-            File.Delete(target);
-            throw;
-        }
+        await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+            1024 * 1024, FileOptions.Asynchronous);
+        try { await file.CopyToAsync(output, ct); }
+        catch { await output.DisposeAsync(); File.Delete(target); throw; }
     }
 
     public (FileStream Stream, string Name) OpenDownload(string root, string? relative, string name)
     {
         ValidateName(name);
-        var target = Resolve(root, Path.Combine(relative ?? "", name), true);
-        if (!File.Exists(target)) throw new IOException("File not found.");
-        return (new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.Read), name);
+        _ = ResolveWritable(root, relative);
+        var path = Resolve(root, Combine(relative, name), true);
+        if (!File.Exists(path)) throw new IOException("File not found.");
+        return (new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read), name);
     }
 
-    private string Resolve(string root, string? relative, bool requireExisting = false)
+    private string ResolveWritable(string root, string? relative)
     {
-        if (!OperatingSystem.IsLinux()) throw new NotSupportedException("File management is available on Linux only.");
-        if (!_roots.TryGetValue(root, out var basePath)) throw new ArgumentException("Invalid storage volume.");
-        if (!Path.IsPathFullyQualified(basePath)) throw new ArgumentException("Storage root must be absolute.");
-        var normalizedBase = Path.TrimEndingDirectorySeparator(basePath);
-        if (normalizedBase is "/" or "/home" or "/root" or "/etc" or "/var" or "/opt")
-            throw new ArgumentException("System directories cannot be configured as file roots.");
-        var rel = relative ?? "";
-        if (Path.IsPathRooted(rel) || rel.Contains('\\') || rel.Contains('\0'))
-            throw new ArgumentException("Invalid relative path.");
-        if (rel.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(x => x is "." or ".."))
-            throw new ArgumentException("Parent traversal is not allowed.");
-        var full = Path.GetFullPath(Path.Combine(normalizedBase, rel));
-        if (full != normalizedBase && !full.StartsWith(normalizedBase + "/", StringComparison.Ordinal))
-            throw new ArgumentException("Path is outside the selected storage volume.");
-        // Backup MUST be a mounted filesystem, not an empty directory on the system disk.
-        if (root == "backup" && !IsMountPoint(normalizedBase))
-            throw new IOException($"Backup disk is not mounted at {normalizedBase}.");
-        // Check every existing component, including root itself. This deliberately forbids symlinks.
-        var current = normalizedBase;
-        CheckLink(current);
-        if (full != normalizedBase)
-        {
-            foreach (var component in Path.GetRelativePath(normalizedBase, full).Split('/'))
-            {
-                current = Path.Combine(current, component);
-                if (File.Exists(current) || Directory.Exists(current)) CheckLink(current);
-            }
-        }
-        if (requireExisting && !File.Exists(full) && !Directory.Exists(full))
-            throw new IOException("Path does not exist.");
+        var full = Resolve(root, relative, true);
+        if (!IsManaged(full)) throw new UnauthorizedAccessException("Select 'Enable management' on this folder first.");
         return full;
     }
 
-    private static void CheckLink(string path)
+    private static string Combine(string? folder, string name) =>
+        string.IsNullOrEmpty(folder) ? name : folder.Trim('/') + "/" + name;
+
+    private string Resolve(string root, string? relative, bool requireExisting = false)
     {
-        if (File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint))
-            throw new UnauthorizedAccessException("Symbolic links cannot be accessed in the file manager.");
+        if (!OperatingSystem.IsLinux()) throw new NotSupportedException("File management requires Linux.");
+        if (root != "system") throw new ArgumentException("Invalid file root.");
+        var rel = relative ?? "";
+        if (rel.StartsWith('/') || rel.Contains('\\') || rel.Contains('\0') ||
+            rel.Split('/', StringSplitOptions.RemoveEmptyEntries).Any(x => x is "." or ".."))
+            throw new ArgumentException("Invalid folder path.");
+        var full = Path.GetFullPath(Path.Combine("/", rel));
+        if (full != "/" && !full.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Invalid path.");
+        var current = "/";
+        foreach (var part in rel.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            current = Path.Combine(current, part);
+            try
+            {
+                if (File.GetAttributes(current).HasFlag(FileAttributes.ReparsePoint))
+                    throw new UnauthorizedAccessException("Symbolic links cannot be opened.");
+            }
+            catch (FileNotFoundException) { if (requireExisting) throw new IOException("Folder not found."); }
+            catch (DirectoryNotFoundException) { if (requireExisting) throw new IOException("Folder not found."); }
+        }
+        if (requireExisting && !File.Exists(full) && !Directory.Exists(full)) throw new IOException("Path not found.");
+        return full;
     }
 
-    private static bool IsMountPoint(string path)
+    private static bool BackupMounted()
     {
         try
         {
             string? rootDevice = null, backupDevice = null;
             foreach (var line in File.ReadLines("/proc/self/mountinfo"))
             {
-                var fields = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (fields.Length < 5) continue;
-                var mountPoint = fields[4].Replace("\\040", " ");
-                if (mountPoint == "/") rootDevice = fields[2];
-                if (mountPoint == path) backupDevice = fields[2];
+                var words = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (words.Length < 5) continue;
+                if (words[4] == "/") rootDevice = words[2];
+                if (words[4] == "/backup") backupDevice = words[2];
             }
-            // A bind mount of the system disk does not count as an independent backup disk.
-            return backupDevice is not null && rootDevice is not null && backupDevice != rootDevice;
+            return backupDevice != null && rootDevice != null && backupDevice != rootDevice;
         }
         catch (IOException) { return false; }
     }
-
     private static void ValidateName(string? name)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name is "." or ".." ||
             name.Contains('/') || name.Contains('\\') || name.Contains('\0') || name.Any(char.IsControl))
-            throw new ArgumentException("Invalid file or folder name.");
+            throw new ArgumentException("Invalid item name.");
     }
     private static void EnsureAbsent(string path)
     {
-        if (File.Exists(path) || Directory.Exists(path)) throw new IOException("A file or folder with this name already exists.");
+        if (File.Exists(path) || Directory.Exists(path)) throw new IOException("The destination already exists.");
     }
     public static string SafeError(Exception ex) => ex switch
     {
-        UnauthorizedAccessException => "Permission denied. Grant the Panel service account access to this folder.",
-        ArgumentException => ex.Message,
-        NotSupportedException => ex.Message,
+        UnauthorizedAccessException => "Access denied. Select a managed folder or grant access to it.",
         _ => ex.Message
     };
 }

@@ -129,40 +129,33 @@ public sealed class LinuxSystemMetricsService : ISystemMetricsService
 
     private static IReadOnlyList<DiskSnapshot> BuildDisks(string main, string backup, List<MountInfo> mounts)
     {
-        main = Path.GetFullPath(main);
-        backup = Path.GetFullPath(backup);
-        var results = new List<DiskSnapshot>();
-        var system = BackingMount("/", mounts);
-        if (system is null) return results;
-        var primaryIncludesData = BackingMount(main, mounts)?.Device == system.Device;
-        Add(system, primaryIncludesData ? $"/ · {main}" : "/", "Disk 1 · Main");
-
-        var data = BackingMount(main, mounts);
-        if (Directory.Exists(main) && data is not null && data.Device != system.Device &&
-            data.Point != "/" && data.Point == main)
-            Add(data, main, $"Disk {results.Count + 1} · Data");
-
-        // An ordinary /backup directory must NEVER appear as a second disk.
-        // A bind mount of the system filesystem is not an independent backup disk.
-        var target = mounts.LastOrDefault(m => m.Point == backup);
-        if (target is not null && target.Device != system.Device &&
-            (data?.Device != target.Device || data.Device == system.Device))
-            Add(target, backup, $"Disk {results.Count + 1} · Backup");
-        return results;
-
-        void Add(MountInfo mount, string labelPath, string label)
+        // Derive actual mounted filesystems, without inventing /data or /backup.
+        // Deduplicate bind mounts using the kernel's major:minor filesystem identity.
+        var allowedTypes = new HashSet<string>(StringComparer.Ordinal)
+            { "ext4", "ext3", "xfs", "btrfs", "zfs", "ntfs3", "exfat", "f2fs" };
+        var candidates = mounts.Where(m => m.Point == "/" || allowedTypes.Contains(m.FileSystem))
+            .Where(m => !m.Point.StartsWith("/var/lib/docker", StringComparison.Ordinal) &&
+                        !m.Point.StartsWith("/var/lib/containerd", StringComparison.Ordinal) &&
+                        !m.Point.StartsWith("/run/", StringComparison.Ordinal))
+            .OrderBy(m => m.Point == "/" ? 0 : 1)
+            .ThenBy(m => m.Point.Length).ToArray();
+        var output = new List<DiskSnapshot>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var mount in candidates)
         {
+            if (!seen.Add(mount.Device)) continue;
             try
             {
-                // DriveInfo works with Linux mountpoints; the filesystem's actual
-                // mountpoint is used, NOT an arbitrary child directory.
                 var drive = new DriveInfo(mount.Point);
-                if (!drive.IsReady) return;
-                results.Add(new DiskSnapshot(label, labelPath, true, true,
+                if (!drive.IsReady || drive.TotalSize <= 0) continue;
+                var label = mount.Point == "/" ? "Disk 1 · System" : $"Disk {output.Count + 1} · Storage";
+                output.Add(new DiskSnapshot(label, mount.Point, true, true,
                     drive.TotalSize, drive.TotalSize - drive.AvailableFreeSpace));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-            { /* A removed drive is omitted until the next poll. */ }
+            { /* Ignore inaccessible or disconnected filesystems. */ }
         }
+        return output;
     }
+
 }

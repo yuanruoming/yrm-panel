@@ -38,22 +38,22 @@ public sealed class SambaManagementService
 
     public async Task<string> SaveAsync(string? name, string? path, bool readOnly, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(path)) return "Enter a share name and folder path.";
-        if (!System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z][A-Za-z0-9_-]{0,31}$"))
-            return "Invalid Samba share name.";
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(path)) return "Error: Enter a share name and folder path.";
+        if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^[\p{L}\p{N}_-]{1,32}$"))
+            return "Error: Invalid Samba share name.";
         return await ActionAsync("save", [name, path, readOnly ? "true" : "false"], null, ct);
     }
 
     public async Task<string> DeleteAsync(string? name, CancellationToken ct)
         => string.IsNullOrWhiteSpace(name) ||
-           !System.Text.RegularExpressions.Regex.IsMatch(name, "^[A-Za-z][A-Za-z0-9_-]{0,31}$")
-           ? "Invalid share name." : await ActionAsync("delete", [name], null, ct);
+           !System.Text.RegularExpressions.Regex.IsMatch(name, @"^[\p{L}\p{N}_-]{1,32}$")
+           ? "Error: Invalid share name." : await ActionAsync("delete", [name], null, ct);
 
     public async Task<string> SetPasswordAsync(string? password, CancellationToken ct)
     {
-        if (password is null) return "Enter a password.";
+        if (password is null) return "Error: Enter a password.";
         if (password.Length < 12 || password.Length > 256 || password.Contains('\n') || password.Contains('\r'))
-            return "Password must be 12–256 characters and cannot contain newlines.";
+            return "Error: Password must be 12–256 characters and cannot contain newlines.";
         return await ActionAsync("set-password", [], password, ct);
     }
 

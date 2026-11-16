@@ -53,10 +53,26 @@ public sealed class PanelSettingsStore
             var settings = Read();
             var shortcutIndex = id.StartsWith("link:", StringComparison.Ordinal) &&
                 int.TryParse(id[5..], out var index) ? index : -1;
-            if (!BuiltInPins.Contains(id) && (shortcutIndex < 0 || shortcutIndex >= settings.Shortcuts.Count))
+            var dockerPin = id.StartsWith("docker:", StringComparison.Ordinal) && id.Length <= 71 &&
+                System.Text.RegularExpressions.Regex.IsMatch(id[7..], @"^[A-Za-z0-9_.-]{1,64}$");
+            if (!dockerPin && !BuiltInPins.Contains(id) && (shortcutIndex < 0 || shortcutIndex >= settings.Shortcuts.Count))
                 throw new InvalidOperationException("This application cannot be pinned.");
             settings.PinnedApps.RemoveAll(x => x == id);
             if (pinned && settings.PinnedApps.Count < 16) settings.PinnedApps.Add(id);
+            await SaveAsync(settings);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task UpdateShortcutAsync(int index, string name, string url)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            var settings = Read();
+            if (index < 0 || index >= settings.Shortcuts.Count)
+                throw new InvalidOperationException("Application not found.");
+            settings.Shortcuts[index] = new Shortcut(name.Trim(), url.Trim());
             await SaveAsync(settings);
         }
         finally { _gate.Release(); }
@@ -70,6 +86,13 @@ public sealed class PanelSettingsStore
             var settings = Read();
             if (index < 0 || index >= settings.Shortcuts.Count) return;
             settings.Shortcuts.RemoveAt(index);
+            // Legacy link pins use a list index. Keep the remaining links aligned.
+            settings.PinnedApps = settings.PinnedApps.Select(id =>
+            {
+                if (!id.StartsWith("link:", StringComparison.Ordinal) || !int.TryParse(id[5..], out var old)) return id;
+                if (old == index) return "";
+                return old > index ? "link:" + (old - 1) : id;
+            }).Where(id => id.Length > 0).ToList();
             await SaveAsync(settings);
         }
         finally { _gate.Release(); }

@@ -79,31 +79,14 @@ else
 fi
 systemctl enable --now smbd
 
-# Non-destructive data directory initialization. Never recursively change an existing tree.
-new_data=0
-if [[ ! -d /data ]]; then install -d /data; new_data=1; fi
-for dir in /data/docker /data/downloads /data/transfer; do
-  if [[ ! -e "$dir" ]]; then
-    install -d -o "$FILE_USER" -g "$(id -gn "$FILE_USER")" -m 2770 "$dir"
-  fi
-done
-if ((new_data)); then
-  chown "$FILE_USER:$(id -gn "$FILE_USER")" /data
-  chmod 2770 /data
-fi
-[[ -d /backup ]] || install -d /backup
+# The installer does not create user data folders. The Files UI can explicitly
+# create a top-level folder or enable management of an existing data directory.
 if ! id yrm-panel >/dev/null 2>&1; then
   useradd --system --home-dir /var/lib/yrm-panel --shell /usr/sbin/nologin --user-group yrm-panel
 fi
-# Allow access to newly created /data folders using the file user's private group.
-# Existing folder permissions are never recursively changed.
-private_group=$(id -gn "$FILE_USER")
-if [[ "$private_group" == "$FILE_USER" ]]; then
-  usermod -aG "$private_group" yrm-panel
-else
-  echo 'WARNING: File user has a shared primary group; no automatic file ACL was granted.'
-  echo 'Give the yrm-panel account scoped access to your chosen folders before using Files.'
-fi
+# Files are accessed through explicit per-directory ACL grants, never broad groups.
+# setfacl is needed by the narrowly scoped storage helper.
+if ! command -v setfacl >/dev/null 2>&1; then apt_install acl; fi
 install -d -o yrm-panel -g yrm-panel -m 0700 /var/lib/yrm-panel
 install -d -o yrm-panel -g yrm-panel -m 0700 /var/lib/yrm-panel/keys
 install -d -o root -g yrm-panel -m 0750 /etc/yrm-panel
@@ -127,7 +110,7 @@ if [[ ! -f /etc/yrm-panel/samba-user ]]; then
 fi
 if getent group docker >/dev/null; then
   echo 'NOTICE: Docker socket access grants the Panel user root-equivalent host control.'
-  echo 'The Panel binds only to localhost by default. Do not expose unsecured HTTP publicly.'
+  echo 'Panel access is limited by your firewall; do not forward the HTTP management port to the public Internet.'
   usermod -aG docker yrm-panel
 fi
 
@@ -145,24 +128,42 @@ curl -fLSs --retry 3 "$base/$asset.sha256" -o "$workdir/$asset.sha256"
 (cd "$workdir" && sha256sum -c "$asset.sha256")
 install -d "$workdir/publish"
 tar -xzf "$workdir/$asset" -C "$workdir/publish"
-[[ -f "$workdir/publish/YrmPanel" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-samba.py" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-power.sh" ]] || { echo 'Invalid release package.' >&2; exit 1; }
+[[ -f "$workdir/publish/YrmPanel" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-samba.py" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-storage.py" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-power.sh" ]] || { echo 'Invalid release package.' >&2; exit 1; }
 [[ ! -L /opt/yrm-panel ]] || { echo '/opt/yrm-panel must not be a symlink.' >&2; exit 1; }
 
 # Configure the root-owned narrowly scoped Samba integration; preserve its share file upon uninstall.
 install -d -o root -g root -m 0755 /usr/local/libexec
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-samba.py" /usr/local/libexec/yrm-panel-samba
+install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-storage.py" /usr/local/libexec/yrm-panel-storage
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-power.sh" /usr/local/libexec/yrm-panel-power
 cat >/etc/sudoers.d/yrm-panel-samba <<'SUDO'
 yrm-panel ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba *
 SUDO
 chmod 0440 /etc/sudoers.d/yrm-panel-samba
+cat >/etc/sudoers.d/yrm-panel-storage <<'SUDO'
+yrm-panel ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-storage create-root *, /usr/local/libexec/yrm-panel-storage grant *, /usr/local/libexec/yrm-panel-storage list
+SUDO
+chmod 0440 /etc/sudoers.d/yrm-panel-storage
 cat >/etc/sudoers.d/yrm-panel-power <<'SUDO'
 yrm-panel ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-power reboot, /usr/local/libexec/yrm-panel-power shutdown
 SUDO
 chmod 0440 /etc/sudoers.d/yrm-panel-power
 visudo -cf /etc/sudoers.d/yrm-panel-power >/dev/null
 visudo -cf /etc/sudoers.d/yrm-panel-samba >/dev/null
+visudo -cf /etc/sudoers.d/yrm-panel-storage >/dev/null
 /usr/local/libexec/yrm-panel-samba bootstrap
+# Restore scoped permissions on directories the owner had previously enabled.
+if [[ -s /etc/yrm-panel/managed-roots.json ]]; then
+  python3 - <<'PYRESTORE'
+import json, pathlib, subprocess
+try:
+    for folder in json.load(open('/etc/yrm-panel/managed-roots.json')):
+        if isinstance(folder,str) and pathlib.Path(folder).is_dir():
+            subprocess.run(['/usr/local/libexec/yrm-panel-storage','grant',folder],check=False,
+                           stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+except (OSError,ValueError,TypeError): pass
+PYRESTORE
+fi
 
 systemctl stop yrm-panel.service 2>/dev/null || true
 if [[ -d /opt/yrm-panel ]]; then

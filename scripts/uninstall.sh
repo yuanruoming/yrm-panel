@@ -12,8 +12,19 @@ rm -f /etc/systemd/system/yrm-panel.service
 systemctl daemon-reload
 rm -rf /opt/yrm-panel /opt/yrm-panel.previous
 rm -f /usr/local/sbin/yrm-panel-update /usr/local/sbin/yrm-panel-uninstall
-rm -f /etc/sudoers.d/yrm-panel-samba /etc/sudoers.d/yrm-panel-power
-rm -f /usr/local/libexec/yrm-panel-power /usr/local/libexec/yrm-panel-samba
+rm -f /etc/sudoers.d/yrm-panel-samba /etc/sudoers.d/yrm-panel-power /etc/sudoers.d/yrm-panel-storage
+rm -f /usr/local/libexec/yrm-panel-power /usr/local/libexec/yrm-panel-samba /usr/local/libexec/yrm-panel-storage
+# Revoke only the explicit Panel ACL grants. Existing data and SMB user ACLs remain.
+if [[ -r /etc/yrm-panel/managed-roots.json ]] && command -v setfacl >/dev/null 2>&1; then
+  python3 - <<'PYROOTS'
+import json, os, subprocess
+try:
+    for folder in json.load(open('/etc/yrm-panel/managed-roots.json')):
+        if isinstance(folder,str) and folder.startswith('/') and os.path.isdir(folder):
+            subprocess.run(['setfacl','-x','u:yrm-panel','-x','d:u:yrm-panel',folder],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+except (OSError,ValueError,TypeError): pass
+PYROOTS
+fi
 # Revoke the Panel's root-equivalent Docker socket access; do not touch Docker itself.
 if command -v gpasswd >/dev/null 2>&1 && getent group docker >/dev/null 2>&1; then
   gpasswd -d yrm-panel docker >/dev/null 2>&1 || true
@@ -36,4 +47,4 @@ if ((PURGE)); then
 else
   echo 'Panel settings and wallpapers preserved in /var/lib/yrm-panel and /etc/yrm-panel.'
 fi
-echo 'YRM Panel uninstalled. Docker, Samba, /data, /backup, and Samba shares are untouched.'
+echo 'YRM Panel uninstalled. Docker, Samba and all existing data and shares are untouched.'

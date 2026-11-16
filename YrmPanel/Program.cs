@@ -35,6 +35,8 @@ builder.Services.AddSingleton(new PanelDataPaths(dataRoot));
 builder.Services.AddSingleton<PanelSettingsStore>();
 builder.Services.AddSingleton<DockerApiService>();
 builder.Services.AddSingleton<FileManagerService>();
+builder.Services.AddSingleton<StorageManagementService>();
+builder.Services.AddSingleton<ServerInfoService>();
 builder.Services.AddSingleton<SambaManagementService>();
 builder.Services.AddSingleton<SystemdStatusService>();
 builder.Services.AddSingleton<SystemPowerService>();

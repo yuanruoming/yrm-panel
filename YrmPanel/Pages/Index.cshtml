@@ -21,11 +21,11 @@
     }
     else
     {
-        var name = id switch { "/Applications" => "Apps", "/Docker" => "Docker", "/Services" => "Services", "/Files" => "Files", "/Shares" => "File Sharing", "/Settings" => "Settings", _ => null };
+        var name = id.StartsWith("docker:", StringComparison.Ordinal) ? id[7..] : id switch { "/Applications" => "Apps", "/Docker" => "Docker", "/Services" => "Services", "/Files" => "Files", "/Shares" => "File Sharing", "/Settings" => "Settings", _ => null };
         if (name is not null)
         {
-            var icon = id switch { "/Docker" => "i-docker-symbol", "/Files" => "i-folder", "/Shares" => "i-globe", "/Services" => "i-server", "/Settings" => "i-settings", _ => "i-grid" };
-            <a href="@id" class="desktop-pin"><span class="desktop-pin-icon"><svg class="ui-icon"><use href="@("#" + icon)" /></svg></span><span>@name</span></a>
+            var icon = id.StartsWith("docker:", StringComparison.Ordinal) ? "i-docker-symbol" : id switch { "/Docker" => "i-docker-symbol", "/Files" => "i-folder", "/Shares" => "i-globe", "/Services" => "i-server", "/Settings" => "i-settings", _ => "i-grid" };
+            <a href="@(id.StartsWith("docker:", StringComparison.Ordinal) ? "/Docker" : id)" class="desktop-pin"><span class="desktop-pin-icon"><svg class="ui-icon"><use href="@("#" + icon)" /></svg></span><span>@name</span></a>
         }
     }
 }

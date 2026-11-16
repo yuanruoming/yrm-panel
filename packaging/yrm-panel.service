@@ -13,17 +13,19 @@ ExecStart=/opt/yrm-panel/YrmPanel
 Restart=on-failure
 RestartSec=5
 UMask=0007
-# sudo is needed exclusively for the root-owned Samba adapter (sudoers-allowlisted).
-# Do not grant a shell or broad sudo access to the panel account.
+# Root-owned allowlisted helpers use sudo; the web application itself remains unprivileged.
 NoNewPrivileges=false
 PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/yrm-panel /data /backup /etc/samba /var/lib/samba
+# /usr, /boot and /etc are read-only except native Samba and Panel helper config.
+# An explicit ACL grant, not a hard-coded folder list or chmod 777, permits files.
+ProtectSystem=full
+ReadWritePaths=/etc/samba /var/lib/samba /etc/yrm-panel /var/lib/yrm-panel
+ProtectHome=read-only
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+# Helper may create a chosen root-level folder and grant ACLs; no mount or raw disk capability.
+CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]

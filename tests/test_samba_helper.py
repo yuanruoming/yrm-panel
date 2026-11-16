@@ -36,7 +36,7 @@ class SambaPathTests(unittest.TestCase):
     def test_sibling_prefix_is_not_allowed(self):
         sibling = self.base / 'data-escape'
         sibling.mkdir()
-        with self.assertRaisesRegex(ValueError, 'Only /data'):
+        with self.assertRaisesRegex(ValueError, 'after enabling'):
             helper.validate_path(str(sibling))
 
     def test_symlink_escape_is_blocked(self):

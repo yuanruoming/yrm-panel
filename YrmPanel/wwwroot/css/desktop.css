@@ -311,3 +311,22 @@ body.is-desktop .workspace-stage { display:none; }
 .app-visual.app-docker .ui-icon,.desktop-pin-icon .ui-icon:has(use[href="#i-docker-symbol"]) {width:30px;height:30px;}
 .nginx-app-icon {background:#177f55 !important;color:#ecfff3;}
 .app-logo-letter {font-size:22px;font-family:ui-sans-serif,system-ui,sans-serif;}
+
+/* RC3 — clearer desktop pins, settings and file management */
+.desktop-pins {
+  top: 82px; right: 28px; left: auto;
+  grid-template-columns: repeat(2, 112px); gap: 18px 14px;
+  max-width: 250px; max-height: calc(100dvh - 100px);
+}
+.desktop-pin-icon { width: 70px; height: 70px; border-radius: 19px; }
+.desktop-pin-icon .ui-icon { width: 36px; height: 36px; }
+.desktop-pin { font-size: 12px; }
+body:has(.pinned-monitor:not([hidden])) .desktop-pins { right: 345px; }
+.profile-menu { z-index: 160; }
+.monitor-drawer { z-index: 100; }
+@media(max-width:800px) {
+  .desktop-pins { right: 10px; top: 62px; grid-template-columns: repeat(2, 85px); gap: 6px; }
+  .desktop-pin-icon { width: 53px; height: 53px; }
+  .desktop-pin-icon .ui-icon { width: 27px; height: 27px; }
+  body:has(.pinned-monitor:not([hidden])) .desktop-pins { right: 10px; top: 276px; }
+}

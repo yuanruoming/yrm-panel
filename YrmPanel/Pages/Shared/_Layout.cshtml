@@ -45,7 +45,7 @@
         <symbol id="i-max" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></symbol>
         <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
         <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M14 16l4-4-4-4M8 12h10"/></symbol>
-        <symbol id="i-pin" viewBox="0 0 24 24"><path d="m8 3 8 8-3 2-2 7-2-6-5-2z"/></symbol>
+        <symbol id="i-pin" viewBox="0 0 24 24"><path d="M16 9V4l1-1H7l1 1v5l-3 4v2h14v-2zM12 15v7"/></symbol>
         <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7a8 8 0 0 0-14-1L4 8M4 3v5h5M4 17a8 8 0 0 0 14 1l2-2m0 5v-5h-5"/></symbol>
         <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10M6.5 5.5a9 9 0 1 0 11 0"/></symbol>
     </svg>
@@ -58,8 +58,6 @@
             <button type="button" class="os-icon-button launcher-trigger" id="launcher-toggle" aria-label="Open applications" aria-expanded="false" aria-controls="app-launcher">
                 <svg class="ui-icon"><use href="#i-grid" /></svg>
             </button>
-            <a asp-page="/Index" class="os-brand" aria-label="YRM Panel desktop"><span class="os-brand-symbol">Y</span><span>YRM <strong>Panel</strong></span></a>
-            <span class="topbar-separator" aria-hidden="true"></span>
         </div>
         <nav class="app-taskbar" id="app-taskbar" aria-label="Open applications">
             <button type="button" id="taskbar-home" class="taskbar-home @(isDesktop ? "is-active" : "")" title="Desktop" aria-label="Show desktop">
@@ -88,24 +86,10 @@
             <a asp-page="/Services" class="launcher-app"><span class="app-visual app-services"><svg class="ui-icon"><use href="#i-server"/></svg></span><span>Services</span></a>
             <a asp-page="/Files" class="launcher-app"><span class="app-visual app-files"><svg class="ui-icon"><use href="#i-folder"/></svg></span><span>Files</span></a>
         </div>
-        <div class="launcher-group-title">SYSTEM &amp; NETWORK</div>
+        <div class="launcher-group-title">SYSTEM</div>
         <div class="launcher-grid">
-            <a asp-page="/Shares" class="launcher-app"><span class="app-visual app-shares"><svg class="ui-icon"><use href="#i-globe"/></svg></span><span>File Sharing</span></a>
-            <a asp-page="/Features" asp-route-feature="firewall" class="launcher-app"><span class="app-visual app-firewall"><svg class="ui-icon"><use href="#i-shield"/></svg></span><span>Firewall<small>Planned</small></span></a>
-            <a asp-page="/Features" asp-route-feature="ddns" class="launcher-app"><span class="app-visual app-ddns"><svg class="ui-icon"><use href="#i-globe"/></svg></span><span>DDNS<small>Planned</small></span></a>
             <a asp-page="/Settings" class="launcher-app"><span class="app-visual app-settings"><svg class="ui-icon"><use href="#i-settings"/></svg></span><span>Settings</span></a>
         </div>
-        @{ var links = PanelSettings.Read().Shortcuts.Take(6).ToArray(); }
-        @if (links.Length > 0)
-        {
-            <div class="launcher-shortcuts-title">QUICK LINKS</div>
-            <div class="launcher-links">
-                @foreach (var link in links)
-                {
-                    <a class="launcher-link" href="@link.Url" target="_blank" rel="noopener noreferrer"><svg class="ui-icon"><use href="#i-arrow"/></svg><span>@link.Name</span></a>
-                }
-            </div>
-        }
     </nav>
 
     <div class="profile-menu" id="profile-menu" hidden>
@@ -138,7 +122,7 @@
     <main class="workspace-stage" id="workspace-stage">
         <section class="workspace-window" id="workspace-window" aria-label="Application window">
             <div class="window-titlebar">
-                <div class="window-title"><span class="window-title-dot"></span><span id="window-active-title">@(isDesktop ? "Application" : title)</span><span class="window-subtitle">YRM Panel</span></div>
+                <div class="window-title"><span class="window-title-dot"></span><span id="window-active-title">@(isDesktop ? "Application" : title)</span></div>
                 <div class="window-controls">
                     <button type="button" class="window-control" id="window-minimize" title="Minimize" aria-label="Minimize window"><svg class="ui-icon"><use href="#i-minus"/></svg></button>
                     <button type="button" class="window-control" id="window-maximize" title="Maximize" aria-label="Maximize window"><svg class="ui-icon"><use href="#i-max"/></svg></button>
@@ -179,17 +163,6 @@
     </aside>
 
 
-    <dialog id="folder-browser-dialog" class="panel-modal folder-browser-dialog" aria-labelledby="folder-browser-title">
-      <div class="panel-modal-head"><strong id="folder-browser-title">Choose shared folder</strong><button type="button" id="folder-browser-close" aria-label="Close">×</button></div>
-      <div class="folder-browser-body">
-        <div class="folder-browser-roots"><button type="button" data-folder-root="data" class="button button-secondary">/data</button><button type="button" data-folder-root="backup" class="button button-secondary">/backup</button></div>
-        <div id="folder-browser-path" class="folder-browser-path">/data</div>
-        <div id="folder-browser-items" class="folder-browser-items"></div>
-        <div id="folder-browser-error" class="folder-browser-error" role="status"></div>
-        <div class="folder-browser-create"><input id="folder-browser-new-name" type="text" maxlength="100" aria-label="New folder name" placeholder="New folder name"/><button id="folder-browser-create" type="button" class="button button-secondary">New folder</button></div>
-      </div>
-      <div class="panel-modal-actions"><button type="button" class="button button-primary" id="folder-browser-choose">Use this folder</button></div>
-    </dialog>
     <dialog id="docker-log-dialog" class="panel-modal" aria-labelledby="docker-log-title">
         <div class="panel-modal-head"><strong id="docker-log-title">Container logs</strong><button id="docker-log-close" type="button" aria-label="Close logs">×</button></div>
         <pre id="docker-log-output" class="docker-log-output">Loading…</pre>

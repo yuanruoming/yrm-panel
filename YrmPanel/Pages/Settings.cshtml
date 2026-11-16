@@ -1,37 +1,73 @@
 @page
 @model YrmPanel.Pages.SettingsModel
-@{ ViewData["Title"] = "Settings"; }
-<div class="page-heading"><div><p class="eyebrow">PERSONALIZE</p><h1>Settings<span class="accent-period">.</span></h1><p class="page-subtitle">Make your panel feel like your own.</p></div></div>
-@if (!string.IsNullOrWhiteSpace(Model.Notice)) { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || Model.Notice.Contains("denied", StringComparison.OrdinalIgnoreCase) ? "error" : "success")">@Model.Notice</div> }
-<div class="settings-grid">
-    <section class="surface-card"><div class="card-header"><div><p class="eyebrow">APPEARANCE</p><h3>Desktop wallpaper</h3></div><span class="header-icon">▧</span></div><p class="muted">JPEG, PNG or WebP · up to 8 MB.</p>
-        @if (Model.HasWallpaper) { <div class="wallpaper-preview" style="background-image: url('/wallpaper?v=@(DateTimeOffset.UtcNow.ToUnixTimeSeconds())')"></div> }
-        <form method="post" enctype="multipart/form-data" asp-page-handler="Wallpaper" class="form-stack"><label class="field-label" for="wallpaper">Choose an image</label><input id="wallpaper" type="file" name="wallpaper" accept="image/png,image/jpeg,image/webp" required /><button type="submit" class="button button-primary">Apply wallpaper</button></form>
-        @if (Model.HasWallpaper) { <form method="post" asp-page-handler="ClearWallpaper" class="inline-form"><button type="submit" class="button button-secondary">Restore default background</button></form> }
-    </section>
-    <section class="surface-card"><div class="card-header"><div><p class="eyebrow">APPLICATIONS</p><h3>Quick links</h3></div></div>
-        <form method="post" asp-page-handler="AddShortcut" class="form-stack"><label class="field-label" for="shortcut-name">Display name</label><input id="shortcut-name" type="text" name="name" maxlength="40" placeholder="Dockhand" required /><label class="field-label" for="shortcut-url">WebUI address</label><input id="shortcut-url" type="url" name="url" maxlength="2000" placeholder="http://192.168.0.200:3300" required /><button class="button button-primary" type="submit">+ Add shortcut</button></form>
-        <div class="shortcuts-settings">
-            @for (int i = 0; i < Model.Shortcuts.Count; i++)
-            {
-                <div class="shortcut-row"><div class="truncate"><strong>@Model.Shortcuts[i].Name</strong><small>@Model.Shortcuts[i].Url</small></div><form method="post" asp-page-handler="RemoveShortcut"><input type="hidden" name="index" value="@i"/><button type="submit" class="mini-button">Remove</button></form></div>
-            }
-        </div>
-    </section>
+@{ ViewData["Title"] = "Settings";
+   var sections = new[] { ("overview","Overview","i-server"), ("storage","Storage","i-harddrive"),
+       ("network","Network","i-globe"), ("accounts","Accounts","i-settings"),
+       ("appearance","Appearance","i-folder"), ("about","About","i-grid") };
+   var activeTab = sections.Any(s => s.Item1 == Model.Tab) ? Model.Tab : "overview";
+   var info = Model.Info; var snapshot = Model.Snapshot; }
+@if (!string.IsNullOrWhiteSpace(Model.Notice))
+{ <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
+<div class="server-settings-layout">
+  <nav class="server-settings-nav" aria-label="Settings sections">
+    <strong class="settings-navigation-title">System settings</strong>
+        @foreach (var tab in sections)
+        {
+            <a class="settings-nav-link @(activeTab == tab.Item1 ? "is-active" : "")"
+               asp-page="/Settings"
+               asp-route-tab="@tab.Item1">
+                <svg class="ui-icon">
+                    <use href="@("#" + tab.Item3)"></use>
+                </svg>
+                @tab.Item2
+            </a>
+        }
+  </nav>
+  <div class="server-settings-content">
+    @if (activeTab == "overview")
+    {
+      <h2>Overview</h2>
+      <div class="system-info-grid">
+        <section class="surface-card server-info-card"><p class="eyebrow">DEVICE</p><h3>@info.Hostname</h3><p class="muted">@info.OperatingSystem</p></section>
+        <section class="surface-card server-info-card"><p class="eyebrow">HARDWARE</p><h3>@info.CpuModel</h3><p class="muted">@info.Processors logical processors · @(info.MemoryBytes > 0 ? (info.MemoryBytes / 1073741824d).ToString("0.0") + " GiB RAM" : "Memory unavailable")</p></section>
+        <section class="surface-card server-info-card"><p class="eyebrow">STORAGE</p><h3>@snapshot.Disks.Count disks / filesystems</h3>
+        @foreach (var disk in snapshot.Disks) { <p class="muted">@disk.Name · @disk.Path · @((disk.UsedBytes / 1073741824d).ToString("0.0")) / @((disk.TotalBytes / 1073741824d).ToString("0.0")) GiB</p> }
+        </section>
+        <section class="surface-card server-info-card"><p class="eyebrow">NETWORK</p><h3>@(info.Adapters.FirstOrDefault(x => x.Ipv4.Length > 0)?.Ipv4.FirstOrDefault() ?? "Not connected")</h3><p class="muted">@info.Adapters.Count interfaces detected</p></section>
+      </div>
+    }
+    else if (activeTab == "storage")
+    {
+      <h2>Storage</h2><div class="system-info-grid">
+      @foreach (var disk in snapshot.Disks)
+      { <section class="surface-card server-info-card"><p class="eyebrow">@disk.Name</p><h3>@disk.Path</h3><p class="muted">@((disk.UsedBytes / 1073741824d).ToString("0.00")) GiB used of @((disk.TotalBytes / 1073741824d).ToString("0.00")) GiB</p><div class="meter-track"><div class="meter-fill cpu" style="width:@(disk.TotalBytes > 0 ? (100.0 * disk.UsedBytes / disk.TotalBytes).ToString("0.0",System.Globalization.CultureInfo.InvariantCulture) : "0")%"></div></div></section> }
+      </div>
+      <p class="muted">Mount and partition operations are not available in this version.</p>
+    }
+    else if (activeTab == "network")
+    {
+      <h2>Network</h2>
+      @foreach (var adapter in info.Adapters)
+      { <section class="surface-card server-info-card"><div class="card-header"><h3>@adapter.Name</h3><span class="tag">@adapter.State</span></div>
+          <p>IPv4: @(adapter.Ipv4.Length == 0 ? "—" : string.Join(", ",adapter.Ipv4))</p>
+          <p>IPv6: @(adapter.Ipv6.Length == 0 ? "—" : string.Join(", ",adapter.Ipv6))</p></section> }
+      @if (info.Adapters.Count == 0) { <p class="muted">No network interfaces found.</p> }
+    }
+    else if (activeTab == "accounts")
+    { <h2>Accounts</h2><section class="surface-card server-info-card"><p class="eyebrow">PANEL ACCOUNT</p><h3>@Model.AccountName</h3><p class="muted">Local administrator account</p><p class="muted">Account changes are currently performed through the host's --set-admin command.</p></section> }
+    else if (activeTab == "appearance")
+    {
+      <h2>Appearance</h2><section class="surface-card server-info-card">
+        <h3>Wallpaper</h3><div class="wallpaper-preview" style="background-image:url('@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))')"></div>
+        <form method="post" asp-page-handler="Wallpaper" asp-route-tab="appearance" enctype="multipart/form-data" id="wallpaper-upload-form" class="form-stack">
+          <label for="wallpaper-select">Choose wallpaper (JPEG, PNG or WebP; up to 8 MB)</label>
+          <input type="file" name="wallpaper" id="wallpaper-select" accept="image/jpeg,image/png,image/webp" required/>
+          <noscript><button class="button button-primary">Upload and apply</button></noscript>
+        </form>
+        @if (Model.HasWallpaper) { <form method="post" asp-page-handler="ClearWallpaper" asp-route-tab="appearance"><button type="submit" class="button button-secondary">Restore default wallpaper</button></form> }
+      </section>
+    }
+    else if (activeTab == "about")
+    { <h2>About</h2><section class="surface-card server-info-card"><p class="eyebrow">YRM PANEL</p><h3>@info.PanelVersion</h3><p class="muted">Linux server management · ASP.NET Core 10</p><p>Listening: <code>@info.Endpoint</code></p><p><a href="https://github.com/yuanruoming/yrm-panel" target="_blank" rel="noopener noreferrer">Source and releases ↗</a></p></section> }
+  </div>
 </div>
-
-<section class="surface-card"><div class="card-header"><div><p class="eyebrow">DESKTOP</p><h3>Pin to desktop</h3></div></div>
-
-<div class="pin-settings-grid">
-@foreach (var app in YrmPanel.Pages.SettingsModel.BuiltIn)
-{
-  var on = Model.Pins.Contains(app.Id);
-  <form method="post" asp-page-handler="Pin"><input type="hidden" name="id" value="@app.Id"/><input type="hidden" name="pinned" value="@(!on ? "true" : "false")"/><button class="button @(on ? "button-primary" : "button-secondary")" type="submit">@(on ? "✓ " : "+ ")@app.Label</button></form>
-}
-@for (var i = 0; i < Model.Shortcuts.Count; i++)
-{
-  var id = "link:" + i;
-  var on = Model.Pins.Contains(id);
-  <form method="post" asp-page-handler="Pin"><input type="hidden" name="id" value="@id"/><input type="hidden" name="pinned" value="@(!on ? "true" : "false")"/><button class="button @(on ? "button-primary" : "button-secondary")" type="submit">@(on ? "✓ " : "+ ")@Model.Shortcuts[i].Name</button></form>
-}
-</div></section>

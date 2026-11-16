@@ -65,7 +65,7 @@
     trigger.setAttribute("aria-expanded", String(!node.hidden));
   }
   launcherButton?.addEventListener("click", () => togglePopup(launcher, launcherButton, profile, profileButton));
-  profileButton?.addEventListener("click", () => togglePopup(profile, profileButton, launcher, launcherButton));
+  profileButton?.addEventListener("click", () => { setMonitorOpen(false); togglePopup(profile, profileButton, launcher, launcherButton); });
   document.addEventListener("pointerdown", (event) => {
     if (!launcher?.hidden && !launcher.contains(event.target) && !launcherButton?.contains(event.target)) closePopup(launcher, launcherButton);
     if (!profile?.hidden && !profile.contains(event.target) && !profileButton?.contains(event.target)) closePopup(profile, profileButton);
@@ -229,7 +229,7 @@
     close.addEventListener("click", () => item.remove());
     item.append(label, close);
     host.append(item);
-    if (type !== "error") setTimeout(() => item.remove(), 4200);
+    setTimeout(() => item.remove(), type === "error" ? 9500 : 4200);
   }
   function errorToast(message) { showToast(message, "error"); }
   function harvestNotices(container) {
@@ -246,76 +246,93 @@
     });
   }
   harvestDesktopNotices();
-  // Samba directory picker: all paths come from the restricted FileManagerService.
-  const folderDialog = $("folder-browser-dialog");
-  const folderState = {root:"data",path:"",absolute:"/data"};
-  async function browseFolder(root, relative) {
-    if (!folderDialog?.open) return;
-    folderState.root = root; folderState.path = relative || "";
-    const items = $("folder-browser-items"), error = $("folder-browser-error");
-    items.replaceChildren(); error.textContent = "";
-    $("folder-browser-path").textContent = "Loading…";
+  // App dialogs and file dialogs are delegated because Razor content is loaded via Fetch.
+  async function listFolders(path) {
+    const tree = document.querySelector("#new-folder-tree");
+    if (!tree) return;
+    tree.replaceChildren();
+    const folderPath = (path || "").replace(/^\/+|\/+$/g, "");
     try {
-      const address = `/Shares?handler=Folders&root=${encodeURIComponent(root)}&path=${encodeURIComponent(folderState.path)}`;
-      const response = await fetch(address, {credentials:"same-origin",cache:"no-store"});
+      const response = await fetch(`/Files?handler=Tree&path=${encodeURIComponent(folderPath)}`, {credentials:"same-origin", cache:"no-store"});
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "This folder is unavailable.");
-      folderState.absolute = data.absolute;
-      $("folder-browser-path").textContent = data.absolute;
-      const parent = document.createElement("button"); parent.type = "button";
-      parent.className = "folder-browser-item"; parent.textContent = "↰  Parent folder";
-      parent.disabled = !folderState.path;
-      parent.addEventListener("click", () => {
-        const path = folderState.path.split("/").filter(Boolean).slice(0,-1).join("/");
-        void browseFolder(root,path);
-      });
-      items.append(parent);
-      for (const name of data.folders || []) {
-        const button = document.createElement("button"); button.type = "button";
-        button.className = "folder-browser-item"; button.textContent = `📁  ${name}`;
-        button.addEventListener("click", () => void browseFolder(root, folderState.path ? folderState.path + "/" + name : name));
-        items.append(button);
-      }
-      $("folder-browser-choose").disabled = false;
-    } catch (ex) {
-      $("folder-browser-path").textContent = root === "backup" ? "/backup" : "/data";
-      error.textContent = ex.message;
-      $("folder-browser-choose").disabled = true;
-    }
+      if (!response.ok) throw new Error(data.error || "Cannot read this folder.");
+      const parentInput = document.querySelector("#new-folder-parent");
+      if (parentInput) parentInput.value = data.path;
+      const nameInput = document.querySelector("#new-folder-dialog input[name=name]");
+      const preview = document.querySelector("#new-folder-full-path");
+      const rights = document.querySelector("#new-folder-rights");
+      const submit = document.querySelector("#new-folder-dialog button[type=submit]");
+      if (preview) preview.textContent = data.absolute + (nameInput?.value ? (data.path ? "/" : "") + nameInput.value : "");
+      if (rights) rights.textContent = data.canManage || data.path === "" ? "" : "This folder is read-only. Enable its management in Files first.";
+      if (submit) submit.disabled = !(data.canManage || data.path === "");
+      const makeItem = (name, nextPath, icon) => {
+        const b = document.createElement("button"); b.type="button"; b.className="explorer-tree-item";
+        b.textContent = `${icon}  ${name}`;
+        b.addEventListener("click", () => void listFolders(nextPath));
+        return b;
+      };
+      if (data.path) tree.append(makeItem("..", data.path.split("/").slice(0,-1).join("/"), "↰"));
+      for (const name of data.folders || []) tree.append(makeItem(name, data.path ? `${data.path}/${name}` : name,"📁"));
+      if (!data.folders?.length) tree.append(document.createTextNode("No subfolders."));
+    } catch (error) { tree.textContent = error.message; }
   }
-  document.addEventListener("click", event => {
-    if (event.target.closest?.("[data-open-folder-browser]")) {
-      if (!folderDialog) return;
-      folderDialog.showModal(); void browseFolder("data", "");
+  function openDialog(id) { const node = $(id); if (node && !node.open) node.showModal(); }
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest?.("button");
+    if (!button) return;
+    if (button.dataset.closeDialog) { $(button.dataset.closeDialog)?.close(); return; }
+    if (button.hasAttribute("data-open-new-folder")) {
+      openDialog("new-folder-dialog");
+      const initial = document.querySelector("#new-folder-tree")?.dataset.initialFolder || "";
+      void listFolders(initial);
       return;
     }
-    const root = event.target.closest?.("[data-folder-root]")?.dataset.folderRoot;
-    if (root) void browseFolder(root, "");
+    if (button.dataset.renameItem || button.dataset.moveItem) {
+      const rename = button.hasAttribute("data-rename-item");
+      const form = $("file-action-form");
+      if (!form) return;
+      const item = rename ? button.dataset.renameItem : button.dataset.moveItem;
+      const path = new URLSearchParams(location.search).get("path") || "";
+      form.action = `/Files?handler=${rename ? "Rename" : "Move"}&path=${encodeURIComponent(path)}`;
+      $("file-action-name").value = item;
+      const input = $("file-action-value");
+      input.name = rename ? "newName" : "destination";
+      input.value = rename ? item : "";
+      $("file-action-title").textContent = rename ? `Rename ${item}` : `Move ${item}`;
+      $("file-action-label").textContent = rename ? "New name" : "Destination path (relative to /)";
+      openDialog("file-action-dialog");
+      return;
+    }
+    if (button.hasAttribute("data-share-folder")) {
+      const name = button.dataset.shareFolder;
+      $("share-folder-name").value = name;
+      $("share-folder-alias").value = name;
+      $("share-folder-target").textContent = `Folder: ${name}`;
+      openDialog("share-folder-dialog");
+      return;
+    }
+    if (button.hasAttribute("data-open-add-app") || button.hasAttribute("data-edit-app-index")) {
+      const editing = button.hasAttribute("data-edit-app-index");
+      $("application-editor-title").textContent = editing ? "Edit app" : "Add app";
+      $("application-editor-index").value = editing ? button.dataset.editAppIndex : "-1";
+      $("application-editor-name").value = editing ? button.dataset.editAppName : "";
+      $("application-editor-url").value = editing ? button.dataset.editAppUrl : "";
+      const deleteForm = $("application-delete-form");
+      if (deleteForm) deleteForm.hidden = !editing;
+      if (editing) $("application-delete-index").value = button.dataset.editAppIndex;
+      openDialog("application-editor-dialog");
+    }
   });
-  $("folder-browser-close")?.addEventListener("click", () => folderDialog?.close());
-  $("folder-browser-choose")?.addEventListener("click", () => {
-    const target = $("share-path");
-    if (!target || !folderState.absolute) return;
-    target.value = folderState.absolute;
-    target.dispatchEvent(new Event("input",{bubbles:true}));
-    folderDialog.close();
+  document.addEventListener("input", event => {
+    if (event.target.matches?.("#new-folder-dialog input[name=name]")) {
+      const path = $("new-folder-parent")?.value || "";
+      $("new-folder-full-path").textContent = `/${path ? path + "/" : ""}${event.target.value}`;
+    }
   });
-  $("folder-browser-create")?.addEventListener("click", async () => {
-    const input = $("folder-browser-new-name");
-    const name = input.value.trim();
-    const token = document.querySelector('#window-page input[name="__RequestVerificationToken"]')?.value;
-    if (!name || !token) { $("folder-browser-error").textContent = "Enter a folder name."; return; }
-    const body = new URLSearchParams({root:folderState.root,path:folderState.path,name,
-      __RequestVerificationToken:token});
-    try {
-      const result = await fetch("/Shares?handler=MakeFolder",{method:"POST",credentials:"same-origin",
-        headers:{"Content-Type":"application/x-www-form-urlencoded"},body});
-      const data = await result.json();
-      if (!result.ok || !data.ok) throw new Error(data.error || "Could not create folder.");
-      input.value = "";
-      await browseFolder(folderState.root,folderState.path);
-      showToast("Folder created.");
-    } catch (ex) { $("folder-browser-error").textContent = ex.message; }
+  document.addEventListener("change", event => {
+    if (event.target.matches?.("#wallpaper-select") && event.target.files?.length) {
+      event.target.closest("form")?.requestSubmit();
+    }
   });
   let lastLogsUrl = null;
   const logDialog = $("docker-log-dialog");
@@ -355,9 +372,9 @@
       const title = doc.body.dataset.initialTitle || "Application";
       if (activeUrl && activeUrl !== url) rememberActive();
       // File browsing changes query strings frequently; maintain one Files taskbar tab.
-      if (canonicalPath(url.split("?")[0]) === "/Files") {
+      if (["/Files","/Settings"].includes(canonicalPath(url.split("?")[0]))) {
         for (const key of tabs.keys()) {
-          if (canonicalPath(key.split("?")[0]) === "/Files" && key !== url) tabs.delete(key);
+          if (canonicalPath(key.split("?")[0]) === canonicalPath(url.split("?")[0]) && key !== url) tabs.delete(key);
         }
       }
       const fragment = document.createDocumentFragment();
@@ -391,7 +408,7 @@
     const push = options.push !== false;
     const refresh = Boolean(options.refresh);
     if (!refresh && url === activeUrl) return;
-    if (!refresh && tabs.get(url)?.fragment) {
+    if (!refresh && canonicalPath(url.split("?")[0]) !== "/Applications" && tabs.get(url)?.fragment) {
       ++navigationId;
       showTab(url, push);
     } else {
@@ -499,7 +516,7 @@
       for (const node of Array.from(remotePage.childNodes)) fragment.append(document.importNode(node, true));
       page.replaceChildren(fragment);
       harvestNotices(page);
-      if (canonicalPath(submittedUrl.split("?")[0]) === "/Settings") void refreshDesktop();
+      if (["/Settings","/Applications"].includes(canonicalPath(submittedUrl.split("?")[0]))) void refreshDesktop();
       windowScroll.scrollTop = 0;
       const title = doc.body.dataset.initialTitle || "Application";
       if (tabs.has(activeUrl)) { tabs.get(activeUrl).title = title; tabs.get(activeUrl).fragment = null; }

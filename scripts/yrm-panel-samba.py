@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Minimal privileged Samba adapter. Only permits shares in /data and /backup.
+"""Minimal privileged Samba adapter. Shares must live in user-approved data roots.
 
 Never pass arbitrary shell commands, write arbitrary files, or accept a path from
 outside the two configured roots. The config file belongs to Samba, not the Panel.
@@ -18,8 +18,18 @@ import tempfile
 MAIN = pathlib.Path('/etc/samba/smb.conf')
 MANAGED = pathlib.Path('/etc/samba/yrm-panel-shares.conf')
 ACCOUNT = pathlib.Path('/etc/yrm-panel/samba-user')
-NAME_PATTERN = re.compile(r'^[a-zA-Z][a-zA-Z0-9_-]{0,31}$')
-ROOTS = (pathlib.Path('/data'), pathlib.Path('/backup'))
+NAME_PATTERN = re.compile(r'^[\w-]{1,32}$', re.UNICODE)
+ROOTS = None  # Unit tests can substitute a tuple of temporary data roots.
+REGISTRY = pathlib.Path('/etc/yrm-panel/managed-roots.json')
+
+def allowed_roots():
+    if ROOTS is not None: return ROOTS
+    try:
+        data = json.loads(REGISTRY.read_text(encoding='utf-8'))
+        if not isinstance(data, list): return ()
+        return tuple(pathlib.Path(value) for value in data if isinstance(value, str) and value.startswith('/'))
+    except (FileNotFoundError, ValueError, OSError):
+        return ()
 
 
 def emit(ok, message, **kwargs):
@@ -99,10 +109,11 @@ def validate_path(raw):
     resolved = source.resolve(strict=True)
     if not resolved.is_dir():
         raise ValueError('Share path must refer to a directory.')
-    if not any(resolved == base or base in resolved.parents for base in ROOTS):
-        raise ValueError('Only /data and /backup directories can be shared.')
-    if (resolved == ROOTS[1] or ROOTS[1] in resolved.parents) and not is_mounted(ROOTS[1]):
-        raise ValueError('/backup is not mounted; refusing to share the system disk as backup.')
+    if not any(resolved == base or base in resolved.parents for base in allowed_roots()):
+        raise ValueError('Share this folder only after enabling its management in Files.')
+    backup = pathlib.Path('/backup') if ROOTS is None else ROOTS[-1]
+    if (resolved == backup or backup in resolved.parents) and not is_mounted(backup):
+        raise ValueError('Backup disk is not mounted; refusing to use the system disk as backup.')
     return str(resolved)
 
 
@@ -211,6 +222,8 @@ def set_password(value):
     user = account()
     # Password flows via stdin, never command args, environment, stdout or disk.
     run(['smbpasswd', '-s', '-a', user], input=value + '\n' + value + '\n')
+    if not password_state(user):
+        raise ValueError('The Samba account was not confirmed by the account database.')
 
 
 def main():
