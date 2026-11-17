@@ -1,0 +1,54 @@
+/* RC4: Shared login identity, stable windows and Files' side-by-side layout. */
+.login-rc4 .login-landscape { display:none; }
+body.login-rc4 {
+  background:#0d1521;
+  isolation:isolate;
+}
+.login-rc4-ambient {
+  position:fixed;
+  inset:0;
+  z-index:-1;
+  pointer-events:none;
+  background:
+    radial-gradient(ellipse 72% 76% at 12% 9%, rgba(40,75,111,.36),transparent 76%),
+    radial-gradient(ellipse 65% 70% at 95% 97%, rgba(46,70,94,.32),transparent 78%),
+    linear-gradient(155deg,#0b1623,#101c2b 48%,#0a111e);
+}
+.login-rc4 .login-stage {
+  align-items:center;
+  justify-content:center;
+  padding:90px 20px;
+}
+.login-rc4 .login-glass {
+  border-radius:20px;
+  padding:38px;
+  background:rgba(23,35,49,.86);
+  border:1px solid rgba(173,196,219,.18);
+  box-shadow:0 22px 90px rgba(0,0,0,.28);
+  backdrop-filter:blur(20px);
+}
+.login-rc4 .login-glass h1 { font-size:32px; }
+.login-rc4 .login-submit { background:#719bbf; color:#0b1c2c; }
+.workspace-window { width:min(1160px,100%); height:min(820px,calc(100dvh - 132px)); }
+.pinned-monitor { z-index:90; }
+.fm-explorer { min-height:500px; }
+.fm-columns { display:grid; grid-template-columns:176px minmax(0,1fr); gap:18px; min-height:420px; }
+.fm-content { min-width:0; }
+.fm-locations { display:flex; flex-direction:column; gap:5px; padding:10px 12px 12px 0; border-right:1px solid rgba(192,209,225,.15); }
+.fm-locations-heading { font-size:10px; font-weight:800; color:#91a6b9; letter-spacing:.13em; margin:6px 0 10px; }
+.fm-location-link { display:flex; gap:9px; align-items:center; padding:9px 10px; border-radius:8px; color:#d0dfef; text-decoration:none; font-size:12px; }
+.fm-location-link:hover,.fm-location-link:focus-visible { background:rgba(110,156,197,.17); color:#fff; }
+.fm-location-link.is-active { background:rgba(104,147,189,.20); color:#fff; }
+.fm-smb-first { display:grid; gap:7px; padding:12px; border:1px solid rgba(159,187,210,.19); border-radius:10px; margin:10px 0; }
+.fm-smb-first input { width:100%; }
+.admin-password-dialog { max-width:440px; width:calc(100% - 30px); }
+.admin-password-dialog p { color:#afbed1; font-size:13px; line-height:1.6; margin:12px 0 22px; }
+.admin-password-dialog label { display:grid; gap:7px; font-size:12px; color:#b1c4d6; }
+.admin-password-dialog input { width:100%; }
+@media(max-width:740px) {
+  .fm-columns { grid-template-columns:1fr; }
+  .fm-locations { flex-direction:row; flex-wrap:wrap; border-right:0; border-bottom:1px solid rgba(192,209,225,.15); padding:4px 0 12px; }
+  .fm-locations-heading { width:100%; }
+  .fm-location-link { padding:7px 9px; }
+  .workspace-window { width:100%; height:calc(100dvh - 88px); }
+}

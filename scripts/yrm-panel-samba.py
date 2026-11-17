@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Minimal privileged Samba adapter. Shares must live in user-approved data roots.
+"""YRM Panel native Samba adapter. The Linux account is the only SMB identity.
 
-Never pass arbitrary shell commands, write arbitrary files, or accept a path from
-outside the two configured roots. The config file belongs to Samba, not the Panel.
+Share metadata is stored in Samba's standard configuration, not Panel-private
+file storage. Root actions are fixed and input-validated. Unsharing never
+removes the underlying files.
 """
 import configparser
 import json
@@ -18,236 +19,240 @@ import tempfile
 MAIN = pathlib.Path('/etc/samba/smb.conf')
 MANAGED = pathlib.Path('/etc/samba/yrm-panel-shares.conf')
 ACCOUNT = pathlib.Path('/etc/yrm-panel/samba-user')
-NAME_PATTERN = re.compile(r'^[\w-]{1,32}$', re.UNICODE)
-ROOTS = None  # Unit tests can substitute a tuple of temporary data roots.
-REGISTRY = pathlib.Path('/etc/yrm-panel/managed-roots.json')
-
-def allowed_roots():
-    if ROOTS is not None: return ROOTS
-    try:
-        data = json.loads(REGISTRY.read_text(encoding='utf-8'))
-        if not isinstance(data, list): return ()
-        return tuple(pathlib.Path(value) for value in data if isinstance(value, str) and value.startswith('/'))
-    except (FileNotFoundError, ValueError, OSError):
-        return ()
+NAME = re.compile(r'^[\w-]{1,32}$', re.UNICODE)
+RESERVED = frozenset(('bin', 'boot', 'dev', 'etc', 'lib', 'lib64', 'proc', 'root',
+                      'run', 'sbin', 'sys', 'usr', 'var', 'opt', 'snap', '.'))
 
 
-def emit(ok, message, **kwargs):
-    print(json.dumps({'ok': ok, 'message': message, **kwargs}))
+def emit(ok, message, **values):
+    print(json.dumps({'ok': ok, 'message': message, **values}))
 
 
-def fail(reason):
-    emit(False, reason)
-    sys.exit(1)
+def fail(message):
+    emit(False, message)
+    raise SystemExit(1)
 
 
-def run(args, **kwargs):
-    result = subprocess.run(args, capture_output=True, text=True, timeout=12, **kwargs)
-    if result.returncode:
-        raise ValueError(f'{args[0]} operation failed; check system logs.')
-    return result.stdout
+def run(command, **kwargs):
+    completed = subprocess.run(command, capture_output=True, text=True, timeout=15, **kwargs)
+    if completed.returncode:
+        raise ValueError(f'{pathlib.Path(command[0]).name} operation failed. Check system logs.')
+    return completed.stdout
 
 
 def account():
     username = ACCOUNT.read_text(encoding='utf-8').strip()
-    user = pwd.getpwnam(username)
-    if user.pw_uid < 1000 or user.pw_name in ('root', 'yrm-panel'):
-        raise ValueError('Only a regular Ubuntu user can be an SMB account.')
+    info = pwd.getpwnam(username)
+    if info.pw_uid < 1000 or username in ('root', 'yrm-panel'):
+        raise ValueError('A regular Linux account is required.')
     return username
 
 
-def samba_exists():
-    if not MAIN.is_file():
-        raise ValueError('Samba is not installed.')
-
-
 def parse():
-    parser = configparser.ConfigParser(interpolation=None, strict=True)
-    parser.optionxform = str.lower
+    config = configparser.ConfigParser(interpolation=None, strict=True)
+    config.optionxform = str.lower
     if MANAGED.exists():
-        parser.read(MANAGED, encoding='utf-8')
-    return parser
-
-
-def save(parser):
-    # Render to a temporary file, validate the complete Samba config, then reload.
-    fd, path = tempfile.mkstemp(prefix='yrm-shares-', dir='/etc/samba', text=True)
-    old = MANAGED.read_bytes() if MANAGED.exists() else None
-    try:
-        with os.fdopen(fd, 'w', encoding='utf-8') as output:
-            parser.write(output)
-        os.chmod(path, 0o644)
-        os.replace(path, MANAGED)
-        run(['testparm', '-s', '/etc/samba/smb.conf'])
-        run(['systemctl', 'reload', 'smbd'])
-    except Exception:
-        if old is None:
-            MANAGED.unlink(missing_ok=True)
-        else:
-            MANAGED.write_bytes(old)
-            MANAGED.chmod(0o644)
-        raise
-    finally:
-        if os.path.exists(path): os.unlink(path)
-
-
-def is_mounted(path):
-    with open('/proc/self/mountinfo', encoding='utf-8') as file:
-        devices = {line.split()[4].replace('\\040', ' '): line.split()[2]
-                   for line in file if len(line.split()) > 4}
-    return str(path) in devices and '/' in devices and devices[str(path)] != devices['/']
-
-
-def validate_path(raw):
-    if not raw.startswith('/') or '\x00' in raw:
-        raise ValueError('The share path must be an absolute folder.')
-    # Do not allow symlink components, even if resolved path looks safe.
-    source = pathlib.Path(raw)
-    for component in (source, *source.parents):
-        if component.is_symlink():
-            raise ValueError('Symbolic links cannot be used in share paths.')
-    resolved = source.resolve(strict=True)
-    if not resolved.is_dir():
-        raise ValueError('Share path must refer to a directory.')
-    if not any(resolved == base or base in resolved.parents for base in allowed_roots()):
-        raise ValueError('Share this folder only after enabling its management in Files.')
-    backup = pathlib.Path('/backup') if ROOTS is None else ROOTS[-1]
-    if (resolved == backup or backup in resolved.parents) and not is_mounted(backup):
-        raise ValueError('Backup disk is not mounted; refusing to use the system disk as backup.')
-    return str(resolved)
+        config.read(MANAGED, encoding='utf-8')
+    return config
 
 
 def bootstrap():
-    samba_exists()
-    raw = MAIN.read_text(encoding='utf-8')
+    if not MAIN.is_file():
+        raise ValueError('Samba configuration is missing.')
+    source = MAIN.read_text(encoding='utf-8')
     include = 'include = /etc/samba/yrm-panel-shares.conf'
-    if include not in raw:
-        match = re.search(r'^\s*\[global\]\s*$', raw, flags=re.M | re.I)
-        if not match:
-            raise ValueError('Could not find the [global] Samba section.')
+    if include not in source:
+        match = re.search(r'^\s*\[global\]\s*$', source, re.M | re.I)
+        if match is None:
+            raise ValueError('The Samba global section could not be found.')
         shutil.copy2(MAIN, str(MAIN) + '.before-yrm-panel')
-        updated = raw[:match.end()] + '\n   ' + include + raw[match.end():]
-        MAIN.write_text(updated, encoding='utf-8')
+        MAIN.write_text(source[:match.end()] + '\n   ' + include + source[match.end():], encoding='utf-8')
     if not MANAGED.exists():
-        MANAGED.write_text('# YRM Panel managed shares; preserved after panel removal.\n', encoding='utf-8')
+        MANAGED.write_text('# YRM Panel managed Samba shares; preserved on uninstall.\n', encoding='utf-8')
         MANAGED.chmod(0o644)
     try:
         run(['testparm', '-s', str(MAIN)])
         run(['systemctl', 'reload', 'smbd'])
     except Exception:
-        if include not in raw:
-            MAIN.write_text(raw, encoding='utf-8')
+        if include not in source:
+            MAIN.write_text(source, encoding='utf-8')
         raise
+
+
+def save_config(config):
+    fd, temp = tempfile.mkstemp(prefix='yrm-smb-', dir='/etc/samba', text=True)
+    previous = MANAGED.read_bytes() if MANAGED.exists() else None
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as target:
+            config.write(target)
+        os.chmod(temp, 0o644)
+        os.replace(temp, MANAGED)
+        run(['testparm', '-s', str(MAIN)])
+        run(['systemctl', 'reload', 'smbd'])
+    except Exception:
+        if previous is None:
+            MANAGED.unlink(missing_ok=True)
+        else:
+            MANAGED.write_bytes(previous)
+            MANAGED.chmod(0o644)
+        raise
+    finally:
+        if os.path.exists(temp):
+            os.unlink(temp)
+
+
+def backup_mounted():
+    try:
+        devices = {}
+        for line in pathlib.Path('/proc/self/mountinfo').read_text().splitlines():
+            parts = line.split()
+            if len(parts) > 4:
+                devices[parts[4].replace('\\040', ' ')] = parts[2]
+        return '/backup' in devices and '/' in devices and devices['/backup'] != devices['/']
+    except OSError:
+        return False
+
+
+def validate_path(raw, readonly):
+    if not raw.startswith('/') or '\x00' in raw or '..' in pathlib.PurePath(raw).parts:
+        raise ValueError('A normal absolute path is required.')
+    source = pathlib.Path(raw)
+    for element in (source, *source.parents):
+        if element.is_symlink():
+            raise ValueError('Symlink paths cannot be shared.')
+    target = source.resolve(strict=True)
+    if not target.is_dir() or target == pathlib.Path('/'):
+        raise ValueError('Select a normal directory to share.')
+    components = target.parts
+    if len(components) < 2 or components[1] in RESERVED or components[1].startswith('.'):
+        raise ValueError('System folders cannot be shared.')
+    username = account()
+    if components[1] == 'home' and (len(components) < 3 or components[2] != username):
+        raise ValueError('Only your own Linux home folder may be shared.')
+    if target == pathlib.Path('/backup') or pathlib.Path('/backup') in target.parents:
+        if not backup_mounted():
+            raise ValueError('The backup disk is not mounted.')
+    # Root itself can read everything; verify the real Linux user's rights.
+    for mode in ('-r', '-x') + (() if readonly else ('-w',)):
+        result = subprocess.run(['runuser', '-u', username, '--', '/usr/bin/test', mode, str(target)],
+                                capture_output=True, timeout=10)
+        if result.returncode:
+            raise ValueError('The Linux user does not have the required file permissions.')
+    return str(target)
 
 
 def effective_names():
     output = run(['testparm', '-s', str(MAIN)])
-    return {match.group(1).lower() for match in re.finditer(r'^\[([^\]]+)\]', output, re.M)}
+    return {match.group(1).casefold() for match in re.finditer(r'^\[([^\]]+)\]', output, re.M)}
 
 
-def update_share(name, path, readonly):
-    if not NAME_PATTERN.fullmatch(name):
-        raise ValueError('Invalid share name. Use 1-32 letters, numbers, underscore or dash.')
-    if name.lower() in ('global', 'printers', 'print$', 'homes', 'ipc$'):
-        raise ValueError('Reserved share name.')
-    target = validate_path(path)
-    user = account()
-    parser = parse()
-    if not parser.has_section(name) and name.lower() in effective_names():
+def save_share(name, path, readonly):
+    if not NAME.fullmatch(name) or name.casefold() in ('global', 'printers', 'print$', 'homes', 'ipc$'):
+        raise ValueError('Invalid or reserved share name.')
+    target = validate_path(path, readonly)
+    config = parse()
+    for existing in config.sections():
+        if existing.casefold() == name.casefold() and existing != name:
+            raise ValueError('Another managed share has a similar name.')
+    if not config.has_section(name) and name.casefold() in effective_names():
         raise ValueError('A share with that name already exists outside YRM Panel.')
-    # Avoid case-insensitive duplicate sections: Samba share names are case insensitive.
-    for existing in parser.sections():
-        if existing.lower() == name.lower() and existing != name:
-            raise ValueError('A similarly named YRM share already exists.')
-    if not parser.has_section(name): parser.add_section(name)
-    for key, value in {
-        'comment': 'YRM Panel shared folder', 'path': target, 'browseable': 'yes',
-        'guest ok': 'no', 'valid users': user, 'read only': 'yes' if readonly else 'no',
-        'create mask': '0660', 'directory mask': '0770'
-    }.items():
-        parser.set(name, key, value)
-    save(parser)
+    if not config.has_section(name):
+        config.add_section(name)
+    values = {
+        'comment': 'YRM Panel shared folder',
+        'path': target,
+        'browseable': 'yes',
+        'guest ok': 'no',
+        'valid users': account(),
+        'read only': 'yes' if readonly else 'no',
+        'create mask': '0660',
+        'directory mask': '0770',
+    }
+    for key, value in values.items():
+        config.set(name, key, value)
+    save_config(config)
 
 
-def delete_share(name):
-    parser = parse()
-    if not parser.has_section(name):
-        raise ValueError('Only YRM-managed shares may be removed here.')
-    parser.remove_section(name)
-    save(parser)
+def remove_share(name):
+    config = parse()
+    if not config.has_section(name):
+        raise ValueError('Only shares created by YRM Panel may be removed.')
+    config.remove_section(name)
+    save_config(config)
 
 
 def list_shares():
-    """Use Samba's effective config to show both managed and existing shares.
-
-    Existing shares are read-only from the Panel's perspective; they cannot be
-    overwritten or removed by the YRM helper.
-    """
-    managed = parse()
-    result = [{'name': name, 'path': managed.get(name, 'path', fallback=''),
-               'readOnly': managed.getboolean(name, 'read only', fallback=False),
-               'managed': True} for name in managed.sections()]
-    seen = {x['name'].casefold() for x in result}
-    active = None
+    config = parse()
+    shares = [
+        {'name': name, 'path': config.get(name, 'path', fallback=''),
+         'readOnly': config.getboolean(name, 'read only', fallback=False), 'managed': True}
+        for name in config.sections()
+    ]
+    known = {s['name'].casefold() for s in shares}
+    current = None
     for line in run(['testparm', '-s', str(MAIN)]).splitlines():
-        section = re.match(r'^\s*\[([^\]]+)\]\s*$', line)
-        if section:
-            name = section.group(1)
-            active = None
-            if name.casefold() not in seen and name.casefold() not in ('global', 'printers', 'print$', 'homes', 'ipc$'):
-                active = {'name': name, 'path': '', 'readOnly': True, 'managed': False}
-                result.append(active)
-                seen.add(name.casefold())
+        heading = re.match(r'^\s*\[([^\]]+)\]\s*$', line)
+        if heading:
+            name = heading.group(1)
+            current = None
+            if name.casefold() not in known and name.casefold() not in ('global', 'printers', 'homes', 'ipc$', 'print$'):
+                current = {'name': name, 'path': '', 'readOnly': True, 'managed': False}
+                shares.append(current)
+                known.add(name.casefold())
             continue
-        if active is not None:
-            option = re.match(r'^\s*(path|read only)\s*=\s*(.*?)\s*$', line, re.I)
-            if option:
-                if option.group(1).lower() == 'path':
-                    active['path'] = option.group(2)
+        if current is not None:
+            value = re.match(r'^\s*(path|read only)\s*=\s*(.*?)\s*$', line, re.I)
+            if value:
+                if value.group(1).lower() == 'path':
+                    current['path'] = value.group(2)
                 else:
-                    active['readOnly'] = option.group(2).lower() in ('yes', 'true', '1')
-    return result
+                    current['readOnly'] = value.group(2).lower() in ('yes', 'true', '1')
+    return shares
 
 
-def password_state(user):
+def account_configured(username):
     try:
-        return any(line.split(':', 1)[0] == user for line in run(['pdbedit', '-L']).splitlines())
+        return any(line.split(':', 1)[0] == username for line in run(['pdbedit', '-L']).splitlines())
     except ValueError:
         return False
 
 
-def set_password(value):
-    if len(value) < 12 or len(value) > 256 or '\n' in value or '\r' in value:
-        raise ValueError('Password must be 12-256 characters and cannot contain newlines.')
-    user = account()
-    # Password flows via stdin, never command args, environment, stdout or disk.
-    run(['smbpasswd', '-s', '-a', user], input=value + '\n' + value + '\n')
-    if not password_state(user):
-        raise ValueError('The Samba account was not confirmed by the account database.')
+def set_password(password):
+    if not (12 <= len(password) <= 256) or '\r' in password or '\n' in password:
+        raise ValueError('SMB password must contain 12–256 characters.')
+    username = account()
+    run(['smbpasswd', '-s', '-a', username], input=password + '\n' + password + '\n')
+    if not account_configured(username):
+        raise ValueError('The SMB account was not created.')
 
 
 def main():
-    if os.geteuid() != 0: fail('Requires root via the restricted sudoers rule.')
-    if len(sys.argv) < 2: fail('Missing action.')
+    if os.geteuid() != 0:
+        fail('Restricted root helper is required.')
+    if len(sys.argv) < 2:
+        fail('Missing action.')
     action = sys.argv[1]
     try:
         if action == 'bootstrap' and len(sys.argv) == 2:
             bootstrap(); emit(True, 'Samba integration installed.')
         elif action == 'list' and len(sys.argv) == 2:
-            samba_exists(); user = account(); parser = parse()
-            shares = list_shares()
-            emit(True, 'OK', shares=shares, account=user, accountConfigured=password_state(user))
+            if not MAIN.is_file():
+                raise ValueError('Samba is unavailable.')
+            user = account()
+            emit(True, 'OK', account=user, accountConfigured=account_configured(user), shares=list_shares())
         elif action == 'save' and len(sys.argv) == 5:
-            update_share(sys.argv[2], sys.argv[3], sys.argv[4] == 'true')
-            emit(True, 'Share saved. Samba configuration reloaded.')
+            save_share(sys.argv[2], sys.argv[3], sys.argv[4] == 'true')
+            emit(True, 'SMB share saved.')
         elif action == 'delete' and len(sys.argv) == 3:
-            delete_share(sys.argv[2]); emit(True, 'Share removed. Files were not deleted.')
+            remove_share(sys.argv[2]); emit(True, 'SMB share removed. Files are preserved.')
         elif action == 'set-password' and len(sys.argv) == 2:
-            set_password(sys.stdin.read(512).rstrip('\n'))
-            emit(True, 'Samba password saved for the existing Ubuntu account.')
-        else: fail('Unsupported Samba helper action or arguments.')
-    except (OSError, ValueError, configparser.Error, subprocess.TimeoutExpired, KeyError) as error:
-        fail(str(error))
+            set_password(sys.stdin.readline(300).rstrip('\n'))
+            emit(True, 'SMB password configured for the Linux account.')
+        else:
+            fail('Unsupported Samba action.')
+    except (OSError, ValueError, configparser.Error, subprocess.TimeoutExpired, KeyError) as exc:
+        fail(str(exc))
 
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    main()

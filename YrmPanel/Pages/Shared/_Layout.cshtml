@@ -1,12 +1,9 @@
 @inject YrmPanel.Services.PanelSettingsStore PanelSettings
-@using System.Security.Claims
 @{
     var current = ViewContext.RouteData.Values["page"]?.ToString() ?? "";
     var isDesktop = current == "/Index";
     var wallpaperInfo = PanelSettings.GetWallpaper();
-    var wallpaper = wallpaperInfo is not null
-        ? Url.Content("~/wallpaper") + "?v=" + PanelSettings.WallpaperVersion
-        : "";
+    var wallpaper = wallpaperInfo is not null ? Url.Content("~/wallpaper") + "?v=" + PanelSettings.WallpaperVersion : "";
     var title = (string?)ViewData["Title"] ?? "Desktop";
     var userName = User.Identity?.Name ?? "Account";
     var firstLetter = userName.Length > 0 ? userName[..1].ToUpperInvariant() : "Y";
@@ -14,162 +11,127 @@
 <!doctype html>
 <html lang="en">
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <title>@title · YRM Panel</title>
-    <link rel="stylesheet" asp-append-version="true" href="~/css/panel.css" />
-    <link rel="stylesheet" asp-append-version="true" href="~/css/desktop.css" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>@title · YRM Panel</title>
+  <link rel="stylesheet" asp-append-version="true" href="~/css/panel.css" />
+  <link rel="stylesheet" asp-append-version="true" href="~/css/desktop.css" />
+  <link rel="stylesheet" asp-append-version="true" href="~/css/rc4.css" />
 </head>
 <body class="os-shell @(isDesktop ? "is-desktop" : "has-window")" data-wallpaper="@wallpaper" data-initial-page="@current" data-initial-title="@title">
-    <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-        <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></symbol>
-        <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-8h6v8"/></symbol>
-        <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 7 9 5 9-5M3 7v10l9 5 9-5V7M12 12v10"/></symbol>
-        <symbol id="i-docker-symbol" viewBox="0 0 64 64"><g fill="currentColor" stroke="none">
-          <rect x="7" y="24" width="9" height="8" rx="1"/><rect x="18" y="24" width="9" height="8" rx="1"/><rect x="29" y="24" width="9" height="8" rx="1"/>
-          <rect x="18" y="14" width="9" height="8" rx="1"/><rect x="29" y="14" width="9" height="8" rx="1"/>
-          <rect x="40" y="24" width="9" height="8" rx="1"/><path d="M5 35h45c-2 11-10 18-23 18C15 53 7 46 5 35Z"/>
-          <path d="M49 32c1-6 6-9 12-8-1 5-4 8-10 9Z"/>
-        </g></symbol>
-        <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
-        <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h7M11 17h7"/></symbol>
-        <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v6c0 6-4 9-9 10-5-1-9-4-9-10V6z"/><path d="m9 12 2 2 4-4"/></symbol>
-        <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></symbol>
-        <symbol id="i-harddrive" viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="m4 8 2-5h12l2 5M6 16h.01M10 16h.01"/></symbol>
-        <symbol id="i-settings" viewBox="0 0 24 24"><path d="m10 2-.5 2.2-2 .9-2-1-2 3.5 1.6 1.6-.2 2.3L3 13l1 4 2.3.1 1.4 1.6L7.6 21h4l.8-2 2.2-.5 2 .8 2.8-3-.9-2 1-2L22 11l-1-4-2.4-.2-1.4-1.5L17 3l-4-.7-1 2Z"/><circle cx="12" cy="12" r="3"/></symbol>
-        <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
-        <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
-        <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5 19 19M19 5 5 19"/></symbol>
-        <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
-        <symbol id="i-max" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></symbol>
-        <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
-        <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M14 16l4-4-4-4M8 12h10"/></symbol>
-        <symbol id="i-pin" viewBox="0 0 24 24"><path d="M16 9V4l1-1H7l1 1v5l-3 4v2h14v-2zM12 15v7"/></symbol>
-        <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7a8 8 0 0 0-14-1L4 8M4 3v5h5M4 17a8 8 0 0 0 14 1l2-2m0 5v-5h-5"/></symbol>
-        <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10M6.5 5.5a9 9 0 1 0 11 0"/></symbol>
-    </svg>
-
-
-    <div class="desktop-background" aria-hidden="true"></div>
-
-    <header class="os-topbar" aria-label="Panel taskbar">
-        <div class="os-top-left">
-            <button type="button" class="os-icon-button launcher-trigger" id="launcher-toggle" aria-label="Open applications" aria-expanded="false" aria-controls="app-launcher">
-                <svg class="ui-icon"><use href="#i-grid" /></svg>
-            </button>
-        </div>
-        <nav class="app-taskbar" id="app-taskbar" aria-label="Open applications">
-            <button type="button" id="taskbar-home" class="taskbar-home @(isDesktop ? "is-active" : "")" title="Desktop" aria-label="Show desktop">
-                <svg class="ui-icon"><use href="#i-home" /></svg>
-            </button>
-            <span class="taskbar-divider" aria-hidden="true"></span>
-            <div class="taskbar-tabs" id="taskbar-tabs" role="group" aria-label="Open application tabs"></div>
-        </nav>
-        <div class="os-top-right">
-            <button type="button" class="os-status-chip" data-open-monitor aria-label="Open system monitor" aria-expanded="false">
-                <span class="status-light"></span><span class="status-label">CPU</span><strong id="top-cpu">—</strong><span class="status-label ram-label">RAM</span><strong id="top-ram">—</strong>
-            </button>
-            <span class="os-clock" id="clock-text">--:--</span>
-            <button class="profile-trigger" id="profile-toggle" type="button" aria-expanded="false" aria-controls="profile-menu" aria-label="Account menu">
-                <span class="profile-avatar">@firstLetter</span><span class="profile-name">@userName</span>
-            </button>
-        </div>
-    </header>
-
-    <nav id="app-launcher" class="app-launcher" hidden aria-label="Application launcher">
-        <div class="launcher-title"><div><strong>Applications</strong></div></div>
-        <div class="launcher-group-title">WORKSPACE</div>
-        <div class="launcher-grid">
-            <a asp-page="/Applications" class="launcher-app"><span class="app-visual app-apps"><svg class="ui-icon"><use href="#i-grid"/></svg></span><span>Apps</span></a>
-            <a asp-page="/Docker" class="launcher-app"><span class="app-visual app-docker"><svg class="ui-icon"><use href="#i-docker-symbol"/></svg></span><span>Docker</span></a>
-            <a asp-page="/Services" class="launcher-app"><span class="app-visual app-services"><svg class="ui-icon"><use href="#i-server"/></svg></span><span>Services</span></a>
-            <a asp-page="/Files" class="launcher-app"><span class="app-visual app-files"><svg class="ui-icon"><use href="#i-folder"/></svg></span><span>Files</span></a>
-        </div>
-        <div class="launcher-group-title">SYSTEM</div>
-        <div class="launcher-grid">
-            <a asp-page="/Settings" class="launcher-app"><span class="app-visual app-settings"><svg class="ui-icon"><use href="#i-settings"/></svg></span><span>Settings</span></a>
-        </div>
+  <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-8h6v8"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 7 9 5 9-5M3 7v10l9 5 9-5V7M12 12v10"/></symbol>
+    <symbol id="i-docker-symbol" viewBox="0 0 64 64"><g fill="currentColor" stroke="none"><rect x="7" y="24" width="9" height="8" rx="1"/><rect x="18" y="24" width="9" height="8" rx="1"/><rect x="29" y="24" width="9" height="8" rx="1"/><rect x="18" y="14" width="9" height="8" rx="1"/><rect x="29" y="14" width="9" height="8" rx="1"/><rect x="40" y="24" width="9" height="8" rx="1"/><path d="M5 35h45c-2 11-10 18-23 18C15 53 7 46 5 35Z"/><path d="M49 32c1-6 6-9 12-8-1 5-4 8-10 9Z"/></g></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+    <symbol id="i-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h7M11 17h7"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="m12 2 9 4v6c0 6-4 9-9 10-5-1-9-4-9-10V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></symbol>
+    <symbol id="i-harddrive" viewBox="0 0 24 24"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="m4 8 2-5h12l2 5M6 16h.01M10 16h.01"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="m10 2-.5 2.2-2 .9-2-1-2 3.5 1.6 1.6-.2 2.3L3 13l1 4 2.3.1 1.4 1.6L7.6 21h4l.8-2 2.2-.5 2 .8 2.8-3-.9-2 1-2L22 11l-1-4-2.4-.2-1.4-1.5L17 3l-4-.7-1 2Z"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M5 5 19 19M19 5 5 19"/></symbol>
+    <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-max" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M14 16l4-4-4-4M8 12h10"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M16 9V4l1-1H7l1 1v5l-3 4v2h14v-2zM12 15v7"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7a8 8 0 0 0-14-1L4 8M4 3v5h5M4 17a8 8 0 0 0 14 1l2-2m0 5v-5h-5"/></symbol>
+    <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10M6.5 5.5a9 9 0 1 0 11 0"/></symbol>
+  </svg>
+  <div class="desktop-background" aria-hidden="true"></div>
+  <header class="os-topbar" aria-label="Panel taskbar">
+    <div class="os-top-left"><button type="button" class="os-icon-button launcher-trigger" id="launcher-toggle" aria-label="Open applications" aria-expanded="false" aria-controls="app-launcher"><svg class="ui-icon"><use href="#i-grid" /></svg></button></div>
+    <nav class="app-taskbar" id="app-taskbar" aria-label="Open applications">
+      <button type="button" id="taskbar-home" class="taskbar-home @(isDesktop ? "is-active" : "")" title="Desktop" aria-label="Show desktop"><svg class="ui-icon"><use href="#i-home" /></svg></button>
+      <span class="taskbar-divider" aria-hidden="true"></span><div class="taskbar-tabs" id="taskbar-tabs" role="group" aria-label="Open application tabs"></div>
     </nav>
-
-    <div class="profile-menu" id="profile-menu" hidden>
-        <div class="profile-menu-head"><span class="profile-avatar">@firstLetter</span><div><strong>@userName</strong><small>Signed in</small></div></div>
-        <a asp-page="/Settings" class="profile-menu-link"><svg class="ui-icon"><use href="#i-settings"/></svg> Settings</a>
-        @if (OperatingSystem.IsLinux())
-        {
-            <form method="post" asp-page="/Index" asp-page-handler="Reboot" data-confirm="Restart this server now? All connected services will briefly disconnect.">
-                <button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-refresh"/></svg> Restart server</button>
-            </form>
-            <form method="post" asp-page="/Index" asp-page-handler="Shutdown" data-confirm="Shut down this server now? You will need to power it on again to reconnect.">
-                <button class="profile-menu-link profile-danger" type="submit"><svg class="ui-icon"><use href="#i-power"/></svg> Shut down</button>
-            </form>
-        }
-        <form method="post" asp-page="/Account/Logout"><button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-logout"/></svg> Sign out</button></form>
+    <div class="os-top-right">
+      <button type="button" class="os-status-chip" data-open-monitor aria-label="Open system monitor" aria-expanded="false"><span class="status-light"></span><span class="status-label">CPU</span><strong id="top-cpu">—</strong><span class="status-label ram-label">RAM</span><strong id="top-ram">—</strong></button>
+      <span class="os-clock" id="clock-text">--:--</span>
+      <button class="profile-trigger" id="profile-toggle" type="button" aria-expanded="false" aria-controls="profile-menu" aria-label="Account menu"><span class="profile-avatar">@firstLetter</span><span class="profile-name">@userName</span></button>
     </div>
-
-    <main class="desktop-main" id="desktop-main" aria-label="Desktop">
-        @if (isDesktop)
-        {
-            @RenderBody()
-        }
-        else
-        {
-            <div class="desktop-safe-space" aria-label="Your desktop wallpaper"></div>
-
-        }
-    </main>
-
-    <main class="workspace-stage" id="workspace-stage">
-        <section class="workspace-window" id="workspace-window" aria-label="Application window">
-            <div class="window-titlebar">
-                <div class="window-title"><span class="window-title-dot"></span><span id="window-active-title">@(isDesktop ? "Application" : title)</span></div>
-                <div class="window-controls">
-                    <button type="button" class="window-control" id="window-minimize" title="Minimize" aria-label="Minimize window"><svg class="ui-icon"><use href="#i-minus"/></svg></button>
-                    <button type="button" class="window-control" id="window-maximize" title="Maximize" aria-label="Maximize window"><svg class="ui-icon"><use href="#i-max"/></svg></button>
-                    <button type="button" class="window-control window-close" id="window-close" title="Close" aria-label="Close window"><svg class="ui-icon"><use href="#i-x"/></svg></button>
-                </div>
-            </div>
-            <div class="window-scroll" id="window-scroll"><div class="window-page" id="window-page">
-                @if (!isDesktop)
-                {
-                    @RenderBody()
-                }
-            </div></div>
-        </section>
-    </main>
-
-    <aside class="pinned-monitor" id="pinned-monitor" aria-label="Pinned system monitor" hidden>
-        <div class="pinned-header"><span><span class="status-light"></span>System monitor</span><div class="pinned-actions"><button type="button" class="os-icon-button" data-open-monitor title="Detailed monitor" aria-label="Open detailed monitor"><svg class="ui-icon"><use href="#i-activity"/></svg></button><button type="button" class="os-icon-button" id="pinned-unpin" title="Unpin monitor" aria-label="Unpin monitor"><svg class="ui-icon"><use href="#i-x"/></svg></button></div></div>
-        <div class="pinned-stats"><div><span>CPU</span><strong id="pinned-cpu">—</strong></div><div><span>RAM</span><strong id="pinned-ram">—</strong></div></div>
-        <div class="pinned-meter"><span class="pinned-track"><span id="pinned-cpu-meter"></span></span><span class="pinned-track"><span id="pinned-ram-meter"></span></span></div>
-        <div class="pinned-footer"><span>↓ <strong id="pinned-download">—</strong></span><span>↑ <strong id="pinned-upload">—</strong></span></div>
-    </aside>
-
-    <aside class="monitor-drawer" id="monitor-drawer" aria-labelledby="monitor-title" aria-hidden="true" inert>
-        <div class="monitor-header"><div><p class="eyebrow">SYSTEM MONITOR</p><h2 id="monitor-title">Overview</h2></div><div class="monitor-header-actions"><button class="os-icon-button" type="button" id="monitor-pin" aria-label="Pin compact monitor to desktop" aria-pressed="false" title="Pin monitor to desktop"><svg class="ui-icon"><use href="#i-pin"/></svg></button><button class="os-icon-button" type="button" id="monitor-close" aria-label="Close monitor"><svg class="ui-icon"><use href="#i-x"/></svg></button></div></div>
-        <div class="monitor-scroll">
-            <div class="monitor-host"><span class="status-light"></span><div><strong id="monitor-hostname">Loading…</strong><small id="monitor-os">Loading system information</small></div></div>
-            <div class="monitor-metric-grid">
-                <div class="monitor-metric"><span>CPU</span><strong id="cpu-value">—%</strong><div class="meter-track"><div class="meter-fill cpu" id="cpu-meter"></div></div></div>
-                <div class="monitor-metric"><span>MEMORY</span><strong id="ram-value">—%</strong><div class="meter-track"><div class="meter-fill ram" id="ram-meter"></div></div></div>
-            </div>
-            <p class="monitor-caption" id="ram-description">Memory usage</p>
-            <div class="monitor-section-title">NETWORK</div>
-            <div class="monitor-network"><div><span>Download</span><strong id="net-down">—</strong></div><div><span>Upload</span><strong id="net-up">—</strong></div></div>
-            <div class="monitor-section-title">STORAGE</div>
-            <div id="storage-list" class="storage-list"><p class="muted">Loading volumes…</p></div>
-            <div class="monitor-bottom"><span id="uptime">Uptime —</span></div>
+  </header>
+  <nav id="app-launcher" class="app-launcher" hidden aria-label="Application launcher">
+    <div class="launcher-title"><div><strong>Applications</strong></div></div>
+    <div class="launcher-group-title">WORKSPACE</div>
+    <div class="launcher-grid">
+      <a asp-page="/Applications" class="launcher-app"><span class="app-visual app-apps"><svg class="ui-icon"><use href="#i-grid"/></svg></span><span>Apps</span></a>
+      <a asp-page="/Docker" class="launcher-app"><span class="app-visual app-docker"><svg class="ui-icon"><use href="#i-docker-symbol"/></svg></span><span>Docker</span></a>
+      <a asp-page="/Files" class="launcher-app"><span class="app-visual app-files"><svg class="ui-icon"><use href="#i-folder"/></svg></span><span>Files</span></a>
+    </div>
+    <div class="launcher-group-title">SYSTEM</div>
+    <div class="launcher-grid"><a asp-page="/Settings" class="launcher-app"><span class="app-visual app-settings"><svg class="ui-icon"><use href="#i-settings"/></svg></span><span>Settings</span></a></div>
+  </nav>
+  <div class="profile-menu" id="profile-menu" hidden>
+    <div class="profile-menu-head"><span class="profile-avatar">@firstLetter</span><div><strong>@userName</strong><small>Signed in</small></div></div>
+    <a asp-page="/Settings" class="profile-menu-link"><svg class="ui-icon"><use href="#i-settings"/></svg> Settings</a>
+    @if (OperatingSystem.IsLinux())
+    {
+      <form method="post" asp-page="/Index" asp-page-handler="Reboot" data-requires-admin="Reboot the Linux server" data-confirm="Restart this server now? All connected services will briefly disconnect."><button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-refresh"/></svg> Restart server</button></form>
+      <form method="post" asp-page="/Index" asp-page-handler="Shutdown" data-requires-admin="Shut down the Linux server" data-confirm="Shut down this server now? You will need to power it on again to reconnect."><button class="profile-menu-link profile-danger" type="submit"><svg class="ui-icon"><use href="#i-power"/></svg> Shut down</button></form>
+    }
+    <form method="post" asp-page="/Account/Logout"><button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-logout"/></svg> Sign out</button></form>
+  </div>
+  <main class="desktop-main" id="desktop-main" aria-label="Desktop">
+    @if (isDesktop) { @RenderBody() }
+    else { <div class="desktop-safe-space" aria-label="Your desktop wallpaper"></div> }
+  </main>
+  <main class="workspace-stage" id="workspace-stage">
+    <section class="workspace-window" id="workspace-window" aria-label="Application window">
+      <div class="window-titlebar"><div class="window-title"><span class="window-title-dot"></span><span id="window-active-title">@(isDesktop ? "Application" : title)</span></div>
+        <div class="window-controls">
+          <button type="button" class="window-control" id="window-minimize" title="Minimize" aria-label="Minimize window"><svg class="ui-icon"><use href="#i-minus"/></svg></button>
+          <button type="button" class="window-control" id="window-maximize" title="Maximize" aria-label="Maximize window"><svg class="ui-icon"><use href="#i-max"/></svg></button>
+          <button type="button" class="window-control window-close" id="window-close" title="Close" aria-label="Close window"><svg class="ui-icon"><use href="#i-x"/></svg></button>
         </div>
-    </aside>
-
-
-    <dialog id="docker-log-dialog" class="panel-modal" aria-labelledby="docker-log-title">
-        <div class="panel-modal-head"><strong id="docker-log-title">Container logs</strong><button id="docker-log-close" type="button" aria-label="Close logs">×</button></div>
-        <pre id="docker-log-output" class="docker-log-output">Loading…</pre>
-        <div class="panel-modal-actions"><button type="button" class="button button-secondary" id="docker-log-refresh">Refresh</button><button type="button" class="button button-secondary" id="docker-log-copy">Copy</button></div>
-    </dialog>
-    <div id="toast-host" class="toast-host" aria-live="polite" aria-atomic="true"></div>
-    <script asp-append-version="true" src="~/js/panel.js" defer></script>
-    @await RenderSectionAsync("Scripts", required: false)
+      </div>
+      <div class="window-scroll" id="window-scroll"><div class="window-page" id="window-page">
+        @if (!isDesktop) { @RenderBody() }
+      </div></div>
+    </section>
+  </main>
+  <aside class="pinned-monitor" id="pinned-monitor" aria-label="Pinned system monitor" hidden>
+    <div class="pinned-header"><span><span class="status-light"></span>System monitor</span><div class="pinned-actions">
+      <button type="button" class="os-icon-button" data-open-monitor title="Detailed monitor" aria-label="Open detailed monitor"><svg class="ui-icon"><use href="#i-activity"/></svg></button>
+      <button type="button" class="os-icon-button" id="pinned-unpin" title="Unpin monitor" aria-label="Unpin monitor"><svg class="ui-icon"><use href="#i-x"/></svg></button>
+    </div></div>
+    <div class="pinned-stats"><div><span>CPU</span><strong id="pinned-cpu">—</strong></div><div><span>RAM</span><strong id="pinned-ram">—</strong></div></div>
+    <div class="pinned-meter"><span class="pinned-track"><span id="pinned-cpu-meter"></span></span><span class="pinned-track"><span id="pinned-ram-meter"></span></span></div>
+    <div class="pinned-footer"><span>↓ <strong id="pinned-download">—</strong></span><span>↑ <strong id="pinned-upload">—</strong></span></div>
+  </aside>
+  <aside class="monitor-drawer" id="monitor-drawer" aria-labelledby="monitor-title" aria-hidden="true" inert>
+    <div class="monitor-header"><div><p class="eyebrow">SYSTEM MONITOR</p><h2 id="monitor-title">Overview</h2></div><div class="monitor-header-actions">
+      <button class="os-icon-button" type="button" id="monitor-pin" aria-label="Pin compact monitor to desktop" aria-pressed="false" title="Pin monitor"><svg class="ui-icon"><use href="#i-pin"/></svg></button>
+      <button class="os-icon-button" type="button" id="monitor-close" aria-label="Close monitor"><svg class="ui-icon"><use href="#i-x"/></svg></button>
+    </div></div>
+    <div class="monitor-scroll">
+      <div class="monitor-host"><span class="status-light"></span><div><strong id="monitor-hostname">Loading…</strong><small id="monitor-os">Loading system information</small></div></div>
+      <div class="monitor-metric-grid"><div class="monitor-metric"><span>CPU</span><strong id="cpu-value">—%</strong><div class="meter-track"><div class="meter-fill cpu" id="cpu-meter"></div></div></div><div class="monitor-metric"><span>MEMORY</span><strong id="ram-value">—%</strong><div class="meter-track"><div class="meter-fill ram" id="ram-meter"></div></div></div></div>
+      <p class="monitor-caption" id="ram-description">Memory usage</p>
+      <div class="monitor-section-title">NETWORK</div><div class="monitor-network"><div><span>Download</span><strong id="net-down">—</strong></div><div><span>Upload</span><strong id="net-up">—</strong></div></div>
+      <div class="monitor-section-title">STORAGE</div><div id="storage-list" class="storage-list"><p class="muted">Loading volumes…</p></div><div class="monitor-bottom"><span id="uptime">Uptime —</span></div>
+    </div>
+  </aside>
+  <dialog id="docker-log-dialog" class="panel-modal" aria-labelledby="docker-log-title">
+    <div class="panel-modal-head"><strong id="docker-log-title">Container logs</strong><button id="docker-log-close" type="button" aria-label="Close logs">×</button></div>
+    <pre id="docker-log-output" class="docker-log-output">Loading…</pre>
+    <div class="panel-modal-actions"><button type="button" class="button button-secondary" id="docker-log-refresh">Refresh</button><button type="button" class="button button-secondary" id="docker-log-copy">Copy</button></div>
+  </dialog>
+  <dialog id="admin-password-dialog" class="panel-modal admin-password-dialog" aria-labelledby="admin-password-title">
+    <div class="panel-modal-head"><strong id="admin-password-title">Administrator authorization</strong><button id="admin-password-cancel" type="button" aria-label="Close">×</button></div>
+    <p id="admin-password-description">Administrator permission is required.</p>
+    <form id="admin-password-form" method="dialog"><label>Linux password<input id="admin-password-input" type="password" autocomplete="current-password" required /></label>
+      <div class="panel-modal-actions"><button id="admin-password-cancel-bottom" type="button" class="button button-secondary">Cancel</button><button type="submit" class="button button-primary">Authorize</button></div>
+    </form>
+  </dialog>
+  <div id="toast-host" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+  <script asp-append-version="true" src="~/js/panel.js" defer></script>
+  <script asp-append-version="true" src="~/js/rc4-admin.js" defer></script>
+  <script asp-append-version="true" src="~/js/rc4-monitor.js" defer></script>
+  @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

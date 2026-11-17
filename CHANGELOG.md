@@ -1,24 +1,15 @@
 # Changelog
 
-## 1.0.0-rc.3 — Files and product structure
+## 1.0.0-rc.4 — Source candidate
 
-- Replace fixed `/data` and `/backup` assumptions with read-only `/` browsing and explicit opt-in data roots.
-- Remove installer-created `/data/docker`, `/data/downloads`, `/data/transfer`, `/backup`.
-- Add root-owned storage helper for safe top-level data-folder creation and non-recursive per-folder ACL grants.
-- Native Samba shares now recognize opted-in data roots, instead of hard-coding `/data` and `/backup`.
-- Move SMB sharing into the Files row action menu; default share name equals the chosen folder name.
-- Consolidate manual web shortcuts and detected Docker containers into Applications, with edit/remove and direct desktop Pin.
-- Replace former shortcut settings with structured Overview, Storage, Network, Accounts, Appearance and About screens.
-- Default wallpaper upload now applies immediately on selection when JavaScript is available.
-- Read actual mounted filesystems, and do not show fictional directories as storage volumes.
-- Preserve existing installer arguments, service, Docker API, login and deployment automation.
+- Switch to selected existing Linux user identity and Linux PAM authentication on Ubuntu/Debian; Windows local development auth preserved.
+- Ordinary Files operations use real Linux permissions; restricted sudo helpers for explicit administration only.
+- Native Samba one-time password prompt at first share, with system-authenticated share management.
+- Auto-generated, update-persistent Kestrel self-signed HTTPS listener on port 6081; legacy HTTP 6080 retained.
+- 1-second shared monitoring samples via SSE; pinned monitor stays visible over open apps.
+- Services relocated into Settings and graphical Update integrated into About.
+- Installer/update/uninstaller aligned to `--user` and persistent Linux configuration; Windows Visual Studio and Ubuntu VM acceptance still pending.
 
-## 1.0.0-rc.2
+## 1.0.0-rc.3
 
-- GUI directory picker, Docker toasts and logs dialog, reboot and shutdown helper.
-- Installation default changed to all IPv4 interfaces (configure firewall / HTTPS as appropriate).
-- Disk deduplication and monitor improvements.
-
-## 1.0.0-rc.1
-
-- Native Files and Samba integration, Docker controls, deployment and uninstall scripts.
+- Previous source candidate: file manager changes, Samba integration, desktop customization and Settings navigation.

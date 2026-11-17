@@ -1,113 +1,67 @@
-using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace YrmPanel.Services;
 
 public sealed record SambaShare(string Name, string Path, bool ReadOnly, bool Managed);
-public sealed record SambaOverview(bool Available, string Message, string Account, bool AccountConfigured, IReadOnlyList<SambaShare> Shares);
+public sealed record SambaOverview(bool Available, string Message, string Account,
+    bool AccountConfigured, IReadOnlyList<SambaShare> Shares);
 
-/// <summary>
-/// All privileged Samba operations go through a root-owned allowlisted helper.
-/// The web process itself never edits smb.conf or invokes a shell.
-/// </summary>
+/// <summary>Samba state lookup is read-only. All mutations require Linux sudo authentication.</summary>
 public sealed class SambaManagementService
 {
-    private readonly IConfiguration _config;
-    public SambaManagementService(IConfiguration config) => _config = config;
+    private readonly PrivilegedCommandService _commands;
+    public SambaManagementService(PrivilegedCommandService commands) => _commands = commands;
+
     public async Task<SambaOverview> ListAsync(CancellationToken ct)
     {
+        var result = await _commands.RunAsync("samba", "list", [], null, null, ct, readonlyOperation: true);
+        if (!result.Ok || string.IsNullOrEmpty(result.Json))
+            return new(false, result.Message, "", false, []);
         try
         {
-            using var result = await CallAsync("list", [], null, ct);
-            var root = result.RootElement;
-            if (!root.GetProperty("ok").GetBoolean())
-                return new SambaOverview(false, root.GetProperty("message").GetString() ?? "Unavailable", "", false, []);
-            return new SambaOverview(true, "Managed Samba shares", root.GetProperty("account").GetString() ?? "",
-                root.GetProperty("accountConfigured").GetBoolean(),
-                root.GetProperty("shares").EnumerateArray().Select(x => new SambaShare(
-                    x.GetProperty("name").GetString() ?? "",
-                    x.GetProperty("path").GetString() ?? "",
-                    x.GetProperty("readOnly").GetBoolean(),
-                    x.TryGetProperty("managed", out var m) ? m.GetBoolean() : true)).ToArray());
+            using var doc = JsonDocument.Parse(result.Json);
+            var body = doc.RootElement;
+            return new(true, "Samba available", body.GetProperty("account").GetString() ?? "",
+                body.GetProperty("accountConfigured").GetBoolean(),
+                body.GetProperty("shares").EnumerateArray().Select(entry => new SambaShare(
+                    entry.GetProperty("name").GetString() ?? "",
+                    entry.GetProperty("path").GetString() ?? "",
+                    entry.GetProperty("readOnly").GetBoolean(),
+                    entry.TryGetProperty("managed", out var managed) && managed.GetBoolean())).ToArray());
         }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or JsonException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException)
         {
-            return new SambaOverview(false, ex.Message, "", false, []);
+            return new(false, "Unable to parse Samba state.", "", false, []);
         }
     }
 
-    public async Task<string> SaveAsync(string? name, string? path, bool readOnly, CancellationToken ct)
+    public async Task<string> SaveAsync(string? name, string? path, bool readOnly,
+        string? adminPassword, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(path)) return "Error: Enter a share name and folder path.";
-        if (!System.Text.RegularExpressions.Regex.IsMatch(name, @"^[\p{L}\p{N}_-]{1,32}$"))
-            return "Error: Invalid Samba share name.";
-        return await ActionAsync("save", [name, path, readOnly ? "true" : "false"], null, ct);
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(path)
+            || !Regex.IsMatch(name, @"^[\p{L}\p{N}_-]{1,32}$"))
+            return "Error: Enter a valid SMB share name and folder.";
+        var r = await _commands.RunAsync("samba", "save", [name, path, readOnly ? "true" : "false"],
+            adminPassword, null, ct);
+        return r.Ok ? r.Message : "Error: " + r.Message;
     }
 
-    public async Task<string> DeleteAsync(string? name, CancellationToken ct)
-        => string.IsNullOrWhiteSpace(name) ||
-           !System.Text.RegularExpressions.Regex.IsMatch(name, @"^[\p{L}\p{N}_-]{1,32}$")
-           ? "Error: Invalid share name." : await ActionAsync("delete", [name], null, ct);
-
-    public async Task<string> SetPasswordAsync(string? password, CancellationToken ct)
+    public async Task<string> DeleteAsync(string? name, string? adminPassword, CancellationToken ct)
     {
-        if (password is null) return "Error: Enter a password.";
-        if (password.Length < 12 || password.Length > 256 || password.Contains('\n') || password.Contains('\r'))
-            return "Error: Password must be 12–256 characters and cannot contain newlines.";
-        return await ActionAsync("set-password", [], password, ct);
+        if (string.IsNullOrWhiteSpace(name) || !Regex.IsMatch(name, @"^[\p{L}\p{N}_-]{1,32}$"))
+            return "Error: Invalid SMB share name.";
+        var r = await _commands.RunAsync("samba", "delete", [name], adminPassword, null, ct);
+        return r.Ok ? r.Message : "Error: " + r.Message;
     }
 
-    private async Task<string> ActionAsync(string action, string[] args, string? input, CancellationToken ct)
+    public async Task<string> SetPasswordAsync(string? password, string? adminPassword, CancellationToken ct)
     {
-        try
-        {
-            using var result = await CallAsync(action, args, input, ct);
-            var message = result.RootElement.TryGetProperty("message", out var value)
-                ? value.GetString() ?? "Completed." : "Completed.";
-            return result.RootElement.TryGetProperty("ok", out var ok) && ok.GetBoolean()
-                ? message : "Error: " + message;
-        }
-        catch (Exception ex) when (ex is IOException or InvalidOperationException or JsonException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
-        { return "Error: " + ex.Message; }
-    }
-
-    private async Task<JsonDocument> CallAsync(string action, string[] args, string? input, CancellationToken ct)
-    {
-        if (!OperatingSystem.IsLinux()) throw new IOException("Samba integration is available on Ubuntu only.");
-        var helper = _config["Samba:HelperPath"] ?? "/usr/local/libexec/yrm-panel-samba";
-        // Fixed helper path, no user-supplied executables or arbitrary commands.
-        if (helper != "/usr/local/libexec/yrm-panel-samba") throw new IOException("Invalid Samba helper path.");
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        var start = new ProcessStartInfo("sudo")
-        {
-            RedirectStandardOutput = true, RedirectStandardError = true,
-            RedirectStandardInput = true, UseShellExecute = false
-        };
-        start.ArgumentList.Add("-n"); start.ArgumentList.Add(helper); start.ArgumentList.Add(action);
-        foreach (var arg in args) start.ArgumentList.Add(arg);
-        using var process = new Process { StartInfo = start };
-        try
-        {
-            if (!process.Start()) throw new IOException("Unable to start Samba helper.");
-            if (input is not null) await process.StandardInput.WriteAsync(input);
-            process.StandardInput.Close();
-            var output = process.StandardOutput.ReadToEndAsync(timeout.Token);
-            var error = process.StandardError.ReadToEndAsync(timeout.Token);
-            await process.WaitForExitAsync(timeout.Token);
-            var body = await output;
-            if (!process.ExitCode.Equals(0))
-            {
-                using var failure = JsonDocument.Parse(body);
-                throw new IOException(failure.RootElement.GetProperty("message").GetString() ?? "Samba operation failed.");
-            }
-            _ = await error;
-            return JsonDocument.Parse(body);
-        }
-        catch (OperationCanceledException)
-        {
-            if (!process.HasExited) process.Kill(entireProcessTree: true);
-            throw new IOException("Samba operation timed out.");
-        }
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 12 || password.Length > 256
+            || password.Contains('\n') || password.Contains('\r'))
+            return "Error: SMB password must be 12–256 characters and cannot contain newlines.";
+        var r = await _commands.RunAsync("samba", "set-password", [], adminPassword,
+            password + "\n", ct);
+        return r.Ok ? r.Message : "Error: " + r.Message;
     }
 }

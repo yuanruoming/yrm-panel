@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Removes only YRM Panel. NEVER uninstall Docker, Samba, shares or user data.
+# Remove only YRM Panel. User accounts, Docker and all Samba shares survive.
 set -Eeuo pipefail
-[[ $EUID == 0 ]] || { echo 'Run with sudo.' >&2; exit 1; }
+[[ "$EUID" -eq 0 ]] || { echo 'Use sudo yrm-panel-uninstall' >&2; exit 1; }
 PURGE=0
 if (($#)); then
-  [[ "$#" == 1 && "$1" == "--purge" ]] || { echo 'Usage: yrm-panel-uninstall [--purge]' >&2; exit 2; }
+  [[ "$#" == 1 && "$1" == '--purge' ]] || { echo 'Usage: yrm-panel-uninstall [--purge]' >&2; exit 2; }
   PURGE=1
 fi
 systemctl disable --now yrm-panel.service 2>/dev/null || true
@@ -12,39 +12,38 @@ rm -f /etc/systemd/system/yrm-panel.service
 systemctl daemon-reload
 rm -rf /opt/yrm-panel /opt/yrm-panel.previous
 rm -f /usr/local/sbin/yrm-panel-update /usr/local/sbin/yrm-panel-uninstall
-rm -f /etc/sudoers.d/yrm-panel-samba /etc/sudoers.d/yrm-panel-power /etc/sudoers.d/yrm-panel-storage
-rm -f /usr/local/libexec/yrm-panel-power /usr/local/libexec/yrm-panel-samba /usr/local/libexec/yrm-panel-storage
-# Revoke only the explicit Panel ACL grants. Existing data and SMB user ACLs remain.
+rm -f /usr/local/libexec/yrm-panel-samba /usr/local/libexec/yrm-panel-storage \
+  /usr/local/libexec/yrm-panel-power /usr/local/libexec/yrm-panel-update-trigger
+rm -f /etc/sudoers.d/yrm-panel /etc/sudoers.d/yrm-panel-samba \
+  /etc/sudoers.d/yrm-panel-storage /etc/sudoers.d/yrm-panel-power
+rm -f /etc/pam.d/yrm-panel
+if [[ -s /etc/yrm-panel/docker-group-added ]] && command -v gpasswd >/dev/null 2>&1; then
+  user=$(cat /etc/yrm-panel/docker-group-added)
+  if id "$user" >/dev/null 2>&1 && getent group docker >/dev/null 2>&1; then
+    gpasswd -d "$user" docker >/dev/null 2>&1 || true
+  fi
+  rm -f /etc/yrm-panel/docker-group-added
+fi
+# RC3 had a dedicated yrm-panel account with ACL grants. Clear only those
+# legacy ACL entries, never current Linux-user ACLs or existing data.
 if [[ -r /etc/yrm-panel/managed-roots.json ]] && command -v setfacl >/dev/null 2>&1; then
-  python3 - <<'PYROOTS'
+  python3 - <<'PYREMOVE'
 import json, os, subprocess
 try:
-    for folder in json.load(open('/etc/yrm-panel/managed-roots.json')):
-        if isinstance(folder,str) and folder.startswith('/') and os.path.isdir(folder):
-            subprocess.run(['setfacl','-x','u:yrm-panel','-x','d:u:yrm-panel',folder],check=False,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-except (OSError,ValueError,TypeError): pass
-PYROOTS
+    for path in json.load(open('/etc/yrm-panel/managed-roots.json')):
+        if isinstance(path, str) and path.startswith('/') and os.path.isdir(path):
+            subprocess.run(['setfacl', '-x', 'u:yrm-panel', '-x', 'd:u:yrm-panel', path],
+                check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+except (OSError, ValueError, TypeError):
+    pass
+PYREMOVE
 fi
-# Revoke the Panel's root-equivalent Docker socket access; do not touch Docker itself.
-if command -v gpasswd >/dev/null 2>&1 && getent group docker >/dev/null 2>&1; then
-  gpasswd -d yrm-panel docker >/dev/null 2>&1 || true
-fi
-# Revoke any file-user group membership that the installer added for /data access.
-if [[ -r /etc/yrm-panel/samba-user ]] && command -v gpasswd >/dev/null 2>&1; then
-  file_user=$(cat /etc/yrm-panel/samba-user)
-  if id "$file_user" >/dev/null 2>&1; then
-    group_name=$(id -gn "$file_user")
-    if [[ "$group_name" == "$file_user" ]]; then
-      gpasswd -d yrm-panel "$group_name" >/dev/null 2>&1 || true
-    fi
-  fi
-fi
-# Intentionally leave /etc/samba/yrm-panel-shares.conf and its include in smb.conf.
-# Otherwise the user's live Samba shares would disappear on uninstall.
+# Do not remove /etc/samba/yrm-panel-shares.conf or its include in smb.conf:
+# user-created native Samba shares must remain functional after uninstall.
 if ((PURGE)); then
   rm -rf /var/lib/yrm-panel /etc/yrm-panel
-  echo 'Panel-only configuration and wallpapers removed.'
+  echo 'YRM Panel settings and custom wallpaper removed.'
 else
-  echo 'Panel settings and wallpapers preserved in /var/lib/yrm-panel and /etc/yrm-panel.'
+  echo 'Panel settings, generated TLS certificate and wallpaper preserved.'
 fi
-echo 'YRM Panel uninstalled. Docker, Samba and all existing data and shares are untouched.'
+echo 'Uninstalled YRM Panel. Linux accounts, files, Docker, and Samba shares remain.'

@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# Root-owned, fixed-command privileged adapter. No user-supplied command or path.
 set -Eeuo pipefail
-[[ $EUID -eq 0 && $# -eq 1 ]] || exit 2
+if [[ $EUID -ne 0 || $# -ne 1 || ( "$1" != reboot && "$1" != shutdown ) ]]; then
+  printf '{"ok":false,"message":"Unsupported power operation."}\n'; exit 1
+fi
 case "$1" in
-  reboot) action=reboot;;
-  shutdown) action=poweroff;;
-  *) exit 2;;
+  reboot) operation=reboot;;
+  shutdown) operation=poweroff;;
 esac
-# Allow HTTP response to finish before systemd starts the requested operation.
-exec /usr/bin/systemd-run --quiet --collect --unit="yrm-panel-power-${action}" \
-  --on-active=3s /usr/bin/systemctl "$action"
+if systemctl --no-block "$operation"; then
+  printf '{"ok":true,"message":"System power operation requested."}\n'
+else
+  printf '{"ok":false,"message":"Unable to request system power operation."}\n'
+  exit 1
+fi

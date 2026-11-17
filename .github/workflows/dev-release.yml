@@ -10,8 +10,6 @@ concurrency:
   cancel-in-progress: false
 jobs:
   publish:
-    # Only the repository's selected default branch may replace the rolling dev release.
-    # This prevents old main/master branches from overwriting each other's builds.
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     steps:
@@ -24,16 +22,17 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          for pair in 'linux-x64' 'linux-arm64'; do
+          for pair in linux-x64 linux-arm64; do
             dotnet publish YrmPanel/YrmPanel.csproj \
               -c Release -r "$pair" --self-contained true \
               -p:PublishSingleFile=true -p:PublishTrimmed=false \
               -o "publish/$pair"
             mkdir -p "publish/$pair/deployment"
             cp packaging/yrm-panel.service "publish/$pair/deployment/"
-            cp scripts/yrm-panel-samba.py scripts/yrm-panel-storage.py scripts/yrm-panel-power.sh "publish/$pair/deployment/"
-            cp scripts/update.sh "publish/$pair/deployment/"
-            cp scripts/uninstall.sh "publish/$pair/deployment/"
+            cp scripts/yrm-panel-samba.py scripts/yrm-panel-storage.py \
+              scripts/yrm-panel-power.sh scripts/yrm-panel-update-trigger.sh \
+              "publish/$pair/deployment/"
+            cp scripts/update.sh scripts/uninstall.sh "publish/$pair/deployment/"
             (cd "publish/$pair" && tar -czf "../../artifacts/yrm-panel-$pair.tar.gz" .)
             (cd artifacts && sha256sum "yrm-panel-$pair.tar.gz" > "yrm-panel-$pair.tar.gz.sha256")
           done

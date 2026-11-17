@@ -14,28 +14,37 @@ namespace YrmPanel.Pages.Account;
 public sealed class LoginModel : PageModel
 {
     private readonly AdminCredentialStore _credentials;
-    public LoginModel(AdminCredentialStore credentials) => _credentials = credentials;
+    private readonly LinuxPamAuthenticator _linux;
+
+    public LoginModel(AdminCredentialStore credentials, LinuxPamAuthenticator linux)
+    { _credentials = credentials; _linux = linux; }
 
     [BindProperty] public string Username { get; set; } = "";
     [BindProperty] public string Password { get; set; } = "";
     public string? Error { get; private set; }
+    public string AccountDescription => OperatingSystem.IsLinux() ? "Linux account" : "Development account";
 
     public IActionResult OnGet() => User.Identity?.IsAuthenticated == true ? RedirectToPage("/Index") : Page();
 
     public async Task<IActionResult> OnPostAsync()
     {
-        if (string.IsNullOrWhiteSpace(Username) || !_credentials.Verify(Username.Trim(), Password ?? ""))
+        var username = Username.Trim();
+        var verified = OperatingSystem.IsLinux()
+            ? await _linux.VerifyAsync(username, Password, HttpContext.RequestAborted)
+            : _credentials.Verify(username, Password);
+        if (!verified)
         {
-            Error = "Invalid username or password.";
+            Error = "Invalid Linux username or password.";
             return Page();
         }
+
         var claims = new[]
         {
-            new Claim(ClaimTypes.Name, _credentials.Username),
-            new Claim("yrm:credential-stamp", _credentials.SessionStamp)
+            new Claim(ClaimTypes.Name, username),
+            new Claim("yrm:credential-stamp", OperatingSystem.IsLinux() ? "linux-pam-v1" : _credentials.SessionStamp)
         };
-        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+        await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
+            new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)));
         return RedirectToPage("/Index");
     }
 }

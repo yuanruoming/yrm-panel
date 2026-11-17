@@ -1,231 +1,259 @@
 #!/usr/bin/env bash
-# YRM Panel: unattended installation of missing Docker + Compose Plugin and Samba.
-# Existing Docker/Samba data is NEVER deleted or replaced by this installer.
+# YRM Panel RC4: choose an EXISTING Linux user; preserve host services and data.
 set -Eeuo pipefail
 umask 027
-REPO=""; CHANNEL="dev"; BRANCH="master"; PORT="6080"; BIND="0.0.0.0"; FILE_USER=""; NONINTERACTIVE=0
+REPO=''; CHANNEL='dev'; BRANCH='master'; PORT='6080'; HTTPS_PORT='6081'; BIND='0.0.0.0'; PANEL_USER=''; NONINTERACTIVE=0
 while (($#)); do
   case "$1" in
     --repo) REPO="${2:?}"; shift 2;;
     --channel) CHANNEL="${2:?}"; shift 2;;
     --branch) BRANCH="${2:?}"; shift 2;;
     --port) PORT="${2:?}"; shift 2;;
+    --https-port) HTTPS_PORT="${2:?}"; shift 2;;
     --bind) BIND="${2:?}"; shift 2;;
-    --file-user) FILE_USER="${2:?}"; shift 2;;
+    --user|--file-user) PANEL_USER="${2:?}"; shift 2;;
     --noninteractive) NONINTERACTIVE=1; shift;;
-    *) echo "Unknown argument: $1" >&2; exit 2;;
+    *) echo "Unknown option: $1" >&2; exit 2;;
   esac
 done
-[[ $EUID == 0 ]] || { echo 'Run with sudo.' >&2; exit 1; }
-[[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo 'Use --repo OWNER/yrm-panel' >&2; exit 2; }
-[[ "$CHANNEL" == dev || "$CHANNEL" == stable ]] || exit 2
+[[ $EUID -eq 0 ]] || { echo 'Please use sudo to install YRM Panel.' >&2; exit 1; }
+[[ "$REPO" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || { echo 'Use --repo OWNER/REPO.' >&2; exit 2; }
+[[ "$CHANNEL" == 'dev' || "$CHANNEL" == 'stable' ]] || exit 2
 [[ "$BRANCH" =~ ^[A-Za-z0-9._/-]+$ ]] || exit 2
-[[ "$PORT" =~ ^[0-9]+$ ]] && ((10#$PORT >= 1024 && 10#$PORT <= 65535)) || { echo 'Invalid port.' >&2; exit 2; }
-[[ "$BIND" == 127.0.0.1 || "$BIND" == 0.0.0.0 ]] || { echo 'Bind must be 127.0.0.1 or 0.0.0.0' >&2; exit 2; }
+valid_port() { [[ "$1" =~ ^[0-9]{4,5}$ ]] && ((10#$1>=1024 && 10#$1<=65535)); }
+valid_port "$PORT" && valid_port "$HTTPS_PORT" && [[ "$PORT" != "$HTTPS_PORT" ]] || {
+  echo 'Invalid HTTP/HTTPS ports.' >&2; exit 2;
+}
+[[ "$BIND" == '0.0.0.0' || "$BIND" == '127.0.0.1' ]] || { echo 'Invalid bind address.' >&2; exit 2; }
 . /etc/os-release
-[[ "$ID" == ubuntu || "$ID" == debian ]] || { echo 'Supported OS: Ubuntu/Debian with systemd.' >&2; exit 1; }
-[[ -d /run/systemd/system ]] || { echo 'systemd is required.' >&2; exit 1; }
-for cmd in apt-get dpkg systemctl id sha256sum; do command -v "$cmd" >/dev/null || exit 1; done
+[[ "$ID" == ubuntu || "$ID" == debian ]] && [[ -d /run/systemd/system ]] || {
+  echo 'Ubuntu/Debian with systemd is required.' >&2; exit 1;
+}
 arch=$(dpkg --print-architecture)
 case "$arch" in amd64) platform=linux-x64;; arm64) platform=linux-arm64;; *) echo "Unsupported architecture: $arch" >&2; exit 1;; esac
 
-if [[ -z "$FILE_USER" ]]; then
-  FILE_USER="${SUDO_USER:-}"
-  if [[ -z "$FILE_USER" || "$FILE_USER" == root ]]; then
-    FILE_USER=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 60000 && $1 != "nobody" {print $1; exit}')
-  fi
+# The updater passes --user. For an interactive install, choose the invoking
+# Linux user if the option is omitted. Never silently select root.
+if [[ -z "$PANEL_USER" ]]; then
+  PANEL_USER="${SUDO_USER:-}"
+  [[ "$PANEL_USER" != root ]] || PANEL_USER=''
 fi
-[[ "$FILE_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] && id "$FILE_USER" >/dev/null 2>&1 || { echo 'Supply --file-user EXISTING_LINUX_USERNAME' >&2; exit 2; }
-(( $(id -u "$FILE_USER") >= 1000 )) || { echo 'File user must be a regular Ubuntu user.' >&2; exit 2; }
-echo "File / Samba user: $FILE_USER"
+if [[ -z "$PANEL_USER" && "$NONINTERACTIVE" == 1 ]]; then
+  echo 'A noninteractive installation requires --user EXISTING_LINUX_USER.' >&2; exit 2
+fi
+if [[ -z "$PANEL_USER" ]]; then
+  PANEL_USER=$(getent passwd | awk -F: '$3>=1000 && $3<60000 && $1!="nobody" {print $1;exit}')
+fi
+[[ "$PANEL_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] && id "$PANEL_USER" >/dev/null 2>&1 || {
+  echo 'Specify an existing Linux account with --user.' >&2; exit 2;
+}
+(( $(id -u "$PANEL_USER") >= 1000 )) || { echo 'The selected user must be a regular Linux user.' >&2; exit 2; }
+PANEL_GROUP=$(id -gn "$PANEL_USER")
+[[ "$PANEL_GROUP" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo 'Unsupported Linux group name.' >&2; exit 2; }
+echo "Selected Linux user: $PANEL_USER (group: $PANEL_GROUP)"
 
-# Install missing prerequisites once; keep existing Docker package choices untouched.
-apt_update_done=0
-apt_once() { if ((apt_update_done == 0)); then apt-get update; apt_update_done=1; fi; }
+apt_updated=0
+apt_once() { if ((apt_updated==0)); then apt-get update; apt_updated=1; fi; }
 apt_install() { apt_once; DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"; }
-for item in curl ca-certificates python3 sudo tar; do
-  if ! command -v "$item" >/dev/null 2>&1; then apt_install "$item"; fi
+for program in curl ca-certificates python3 sudo tar openssl pamtester setfacl; do
+  if ! command -v "$program" >/dev/null 2>&1; then
+    case "$program" in setfacl) apt_install acl;; *) apt_install "$program";; esac
+  fi
 done
 if ! command -v docker >/dev/null 2>&1; then
-  echo 'Docker Engine missing: adding official Docker APT repository.'
+  echo 'Docker missing. Installing official Docker Engine and Compose Plugin.'
   apt_install ca-certificates curl
-  install -m 0755 -d /etc/apt/keyrings
+  install -d -m 0755 /etc/apt/keyrings
   curl -fsSL "https://download.docker.com/linux/${ID}/gpg" -o /etc/apt/keyrings/docker.asc
   chmod a+r /etc/apt/keyrings/docker.asc
-  codename="${VERSION_CODENAME:?}"
-  printf 'Types: deb\nURIs: https://download.docker.com/linux/%s\nSuites: %s\nComponents: stable\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/docker.asc\n' "$ID" "$codename" "$arch" >/etc/apt/sources.list.d/docker.sources
-  apt_update_done=0
+  printf 'Types: deb\nURIs: https://download.docker.com/linux/%s\nSuites: %s\nComponents: stable\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/docker.asc\n' \
+     "$ID" "${VERSION_CODENAME:?}" "$arch" >/etc/apt/sources.list.d/docker.sources
+  apt_updated=0
   apt_install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-else
-  echo "Docker detected: $(docker --version). Keeping the installed Engine."
-  if ! docker compose version >/dev/null 2>&1; then
-    echo 'Compose Plugin not found. Attempting installation without replacing Docker Engine.'
-    apt_once
-    if apt-cache show docker-compose-plugin >/dev/null 2>&1; then
-      apt_install docker-compose-plugin
-    elif apt-cache show docker-compose-v2 >/dev/null 2>&1; then
-      apt_install docker-compose-v2
-    else
-      echo 'WARNING: Docker Compose plugin missing, and no compatible package found. Install it manually.' >&2
-    fi
-  fi
+elif ! docker compose version >/dev/null 2>&1; then
+  apt_once
+  if apt-cache show docker-compose-plugin >/dev/null 2>&1; then apt_install docker-compose-plugin
+  elif apt-cache show docker-compose-v2 >/dev/null 2>&1; then apt_install docker-compose-v2
+  else echo 'WARNING: Docker Compose plugin not available; Docker Engine was preserved.' >&2; fi
 fi
 systemctl enable --now docker
-if ! command -v smbd >/dev/null 2>&1; then
-  echo 'Samba missing: installing from the OS repository.'
-  apt_install samba
-else
-  echo 'Samba detected; existing shares and configuration will be kept.'
-fi
+if ! command -v smbd >/dev/null 2>&1; then apt_install samba; fi
 systemctl enable --now smbd
 
-# The installer does not create user data folders. The Files UI can explicitly
-# create a top-level folder or enable management of an existing data directory.
-if ! id yrm-panel >/dev/null 2>&1; then
-  useradd --system --home-dir /var/lib/yrm-panel --shell /usr/sbin/nologin --user-group yrm-panel
+# No /data, /backup, mount points or user-data folders are ever created here.
+[[ ! -L /var/lib/yrm-panel && ! -L /opt/yrm-panel && ! -L /etc/yrm-panel ]] || {
+  echo 'YRM installation directories must not be symlinks.' >&2; exit 1;
+}
+install -d -m 0700 /var/lib/yrm-panel
+install -d -m 0700 /var/lib/yrm-panel/keys
+install -d -m 0700 /var/lib/yrm-panel/tls
+chown -R "$PANEL_USER:$PANEL_GROUP" /var/lib/yrm-panel
+install -d -o root -g root -m 0755 /etc/yrm-panel
+install -d -o root -g root -m 0755 /usr/local/libexec
+
+# Generated once. Reinstall and updater preserve the same TLS identity.
+cert=/var/lib/yrm-panel/tls/server.crt
+key=/var/lib/yrm-panel/tls/server.key
+host=$(hostname -s | tr -cd 'a-zA-Z0-9.-')
+[[ -n "$host" ]] || host='yrm-panel'
+if [[ ! -s "$cert" || ! -s "$key" ]]; then
+  san="DNS:$host,DNS:localhost,IP:127.0.0.1"
+  for address in $(hostname -I 2>/dev/null || true); do
+    if [[ "$address" =~ ^[0-9]+(\.[0-9]+){3}$ ]]; then san+=",IP:$address"; fi
+  done
+  openssl req -x509 -nodes -newkey rsa:3072 -sha256 -days 825 \
+    -keyout "$key" -out "$cert" -subj "/CN=$host" -addext "subjectAltName=$san" >/dev/null 2>&1
+  chown "$PANEL_USER:$PANEL_GROUP" "$key" "$cert"
+  chmod 0600 "$key"
+  chmod 0644 "$cert"
 fi
-# Files are accessed through explicit per-directory ACL grants, never broad groups.
-# setfacl is needed by the narrowly scoped storage helper.
-if ! command -v setfacl >/dev/null 2>&1; then apt_install acl; fi
-install -d -o yrm-panel -g yrm-panel -m 0700 /var/lib/yrm-panel
-install -d -o yrm-panel -g yrm-panel -m 0700 /var/lib/yrm-panel/keys
-install -d -o root -g yrm-panel -m 0750 /etc/yrm-panel
-if [[ ! -f /etc/yrm-panel/panel.env ]]; then
-  cat >/etc/yrm-panel/panel.env <<ENV
+
+cat >/etc/pam.d/yrm-panel <<'PAM'
+#%PAM-1.0
+auth       include      common-auth
+account    include      common-account
+PAM
+chmod 0644 /etc/pam.d/yrm-panel
+
+cat >/etc/yrm-panel/panel.env <<ENV
 YRM_PANEL_DATA_DIR=/var/lib/yrm-panel
-Panel__Url=http://${BIND}:${PORT}
+YRM_PANEL_USER=$PANEL_USER
+Panel__Bind=$BIND
+Panel__HttpPort=$PORT
+Panel__HttpsPort=$HTTPS_PORT
+Panel__Url=https://$host:$HTTPS_PORT
 Docker__Enabled=true
 Docker__EnableControls=true
 ENV
-  chown root:yrm-panel /etc/yrm-panel/panel.env
-  chmod 0640 /etc/yrm-panel/panel.env
-fi
-if [[ ! -f /etc/yrm-panel/source.env ]]; then
-  printf 'REPO=%s\nCHANNEL=%s\nBRANCH=%s\n' "$REPO" "$CHANNEL" "$BRANCH" >/etc/yrm-panel/source.env
-  chmod 0600 /etc/yrm-panel/source.env
-fi
-if [[ ! -f /etc/yrm-panel/samba-user ]]; then
-  printf '%s\n' "$FILE_USER" >/etc/yrm-panel/samba-user
-  chmod 0600 /etc/yrm-panel/samba-user
-fi
-if getent group docker >/dev/null; then
-  echo 'NOTICE: Docker socket access grants the Panel user root-equivalent host control.'
-  echo 'Panel access is limited by your firewall; do not forward the HTTP management port to the public Internet.'
-  usermod -aG docker yrm-panel
+chown root:"$PANEL_GROUP" /etc/yrm-panel/panel.env
+chmod 0640 /etc/yrm-panel/panel.env
+printf '%s\n' "$PANEL_USER" >/etc/yrm-panel/samba-user
+chmod 0600 /etc/yrm-panel/samba-user
+cat >/etc/yrm-panel/source.env <<ENV
+REPO=$REPO
+CHANNEL=$CHANNEL
+BRANCH=$BRANCH
+PANEL_USER=$PANEL_USER
+PORT=$PORT
+HTTPS_PORT=$HTTPS_PORT
+BIND=$BIND
+ENV
+chmod 0600 /etc/yrm-panel/source.env
+
+# Docker socket has root-equivalent access; keep it explicit and track membership
+# so uninstall never removes a membership that existed before RC4 installation.
+if getent group docker >/dev/null 2>&1; then
+  if ! id -nG "$PANEL_USER" | tr ' ' '\n' | grep -qx docker; then
+    usermod -aG docker "$PANEL_USER"
+    printf '%s\n' "$PANEL_USER" >/etc/yrm-panel/docker-group-added
+    echo 'NOTICE: Docker group membership is root-equivalent on this host.'
+  fi
 fi
 
-new_admin=0
-[[ -e /var/lib/yrm-panel/admin.json ]] || new_admin=1
-if ((new_admin)) && [[ ! -r /dev/tty ]]; then echo 'First installation needs a terminal to set credentials.' >&2; exit 1; fi
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
-release="$CHANNEL"
-asset="yrm-panel-${platform}.tar.gz"
-base="https://github.com/${REPO}/releases/download/${release}"
-echo "Downloading YRM Panel (${CHANNEL}, ${platform})..."
+asset="yrm-panel-$platform.tar.gz"
+base="https://github.com/$REPO/releases/download/$CHANNEL"
+echo "Downloading and verifying YRM Panel $CHANNEL ($platform)..."
 curl -fLSs --retry 3 "$base/$asset" -o "$workdir/$asset"
 curl -fLSs --retry 3 "$base/$asset.sha256" -o "$workdir/$asset.sha256"
 (cd "$workdir" && sha256sum -c "$asset.sha256")
-install -d "$workdir/publish"
+mkdir -p "$workdir/publish"
 tar -xzf "$workdir/$asset" -C "$workdir/publish"
-[[ -f "$workdir/publish/YrmPanel" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-samba.py" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-storage.py" ]] && [[ -f "$workdir/publish/deployment/yrm-panel-power.sh" ]] || { echo 'Invalid release package.' >&2; exit 1; }
-[[ ! -L /opt/yrm-panel ]] || { echo '/opt/yrm-panel must not be a symlink.' >&2; exit 1; }
+for path in YrmPanel deployment/yrm-panel.service deployment/yrm-panel-samba.py \
+ deployment/yrm-panel-storage.py deployment/yrm-panel-power.sh deployment/yrm-panel-update-trigger.sh \
+ deployment/update.sh deployment/uninstall.sh; do
+  [[ -f "$workdir/publish/$path" ]] || { echo "Missing release asset: $path" >&2; exit 1; }
+done
 
-# Configure the root-owned narrowly scoped Samba integration; preserve its share file upon uninstall.
-install -d -o root -g root -m 0755 /usr/local/libexec
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-samba.py" /usr/local/libexec/yrm-panel-samba
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-storage.py" /usr/local/libexec/yrm-panel-storage
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-power.sh" /usr/local/libexec/yrm-panel-power
-cat >/etc/sudoers.d/yrm-panel-samba <<'SUDO'
-yrm-panel ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba *
-SUDO
-chmod 0440 /etc/sudoers.d/yrm-panel-samba
-cat >/etc/sudoers.d/yrm-panel-storage <<'SUDO'
-yrm-panel ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-storage create-root *, /usr/local/libexec/yrm-panel-storage grant *, /usr/local/libexec/yrm-panel-storage list
-SUDO
-chmod 0440 /etc/sudoers.d/yrm-panel-storage
-cat >/etc/sudoers.d/yrm-panel-power <<'SUDO'
-yrm-panel ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-power reboot, /usr/local/libexec/yrm-panel-power shutdown
-SUDO
-chmod 0440 /etc/sudoers.d/yrm-panel-power
-visudo -cf /etc/sudoers.d/yrm-panel-power >/dev/null
-visudo -cf /etc/sudoers.d/yrm-panel-samba >/dev/null
-visudo -cf /etc/sudoers.d/yrm-panel-storage >/dev/null
-/usr/local/libexec/yrm-panel-samba bootstrap
-# Restore scoped permissions on directories the owner had previously enabled.
-if [[ -s /etc/yrm-panel/managed-roots.json ]]; then
-  python3 - <<'PYRESTORE'
-import json, pathlib, subprocess
-try:
-    for folder in json.load(open('/etc/yrm-panel/managed-roots.json')):
-        if isinstance(folder,str) and pathlib.Path(folder).is_dir():
-            subprocess.run(['/usr/local/libexec/yrm-panel-storage','grant',folder],check=False,
-                           stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-except (OSError,ValueError,TypeError): pass
-PYRESTORE
-fi
+install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-update-trigger.sh" /usr/local/libexec/yrm-panel-update-trigger
 
-systemctl stop yrm-panel.service 2>/dev/null || true
+# Mutations require the selected account's Linux password. Only an exact Samba
+# status action is available without a password; all inputs are validated by helper.
+cat >/etc/sudoers.d/yrm-panel <<SUDO
+$PANEL_USER ALL=(root) PASSWD: /usr/local/libexec/yrm-panel-storage *, /usr/local/libexec/yrm-panel-samba *, /usr/local/libexec/yrm-panel-power *, /usr/local/libexec/yrm-panel-update-trigger start
+$PANEL_USER ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba list
+SUDO
+chmod 0440 /etc/sudoers.d/yrm-panel
+visudo -cf /etc/sudoers.d/yrm-panel >/dev/null
+rm -f /etc/sudoers.d/yrm-panel-samba /etc/sudoers.d/yrm-panel-storage /etc/sudoers.d/yrm-panel-power
+/usr/local/libexec/yrm-panel-samba bootstrap
+
+# Replace binaries transactionally; keep a backup for failure rollback.
 if [[ -d /opt/yrm-panel ]]; then
+  systemctl stop yrm-panel.service 2>/dev/null || true
   rm -rf /opt/yrm-panel.previous
   mv /opt/yrm-panel /opt/yrm-panel.previous
 fi
-install -d -m 0755 /opt/yrm-panel
+install -d -o root -g root -m 0755 /opt/yrm-panel
 cp -a "$workdir/publish/." /opt/yrm-panel/
 chown -R root:root /opt/yrm-panel
 chmod -R go-w /opt/yrm-panel
 chmod +x /opt/yrm-panel/YrmPanel
-
-if ((new_admin)); then
-  runuser -u yrm-panel -- env YRM_PANEL_DATA_DIR=/var/lib/yrm-panel \
-    /opt/yrm-panel/YrmPanel --set-admin </dev/tty || { echo 'Admin setup failed.' >&2; exit 1; }
+if [[ -f /etc/systemd/system/yrm-panel.service ]]; then
+  cp /etc/systemd/system/yrm-panel.service "$workdir/previous.service"
 fi
-install -o root -g root -m 0644 "$workdir/publish/deployment/yrm-panel.service" /etc/systemd/system/yrm-panel.service
+sed -e "s/@PANEL_USER@/$PANEL_USER/g" -e "s/@PANEL_GROUP@/$PANEL_GROUP/g" \
+  "$workdir/publish/deployment/yrm-panel.service" >/etc/systemd/system/yrm-panel.service
+chmod 0644 /etc/systemd/system/yrm-panel.service
 install -o root -g root -m 0750 "$workdir/publish/deployment/update.sh" /usr/local/sbin/yrm-panel-update
 install -o root -g root -m 0750 "$workdir/publish/deployment/uninstall.sh" /usr/local/sbin/yrm-panel-uninstall
 systemctl daemon-reload
-systemctl enable yrm-panel >/dev/null
-if ! systemctl restart yrm-panel.service || ! (sleep 2; systemctl is-active --quiet yrm-panel); then
-  echo 'Panel failed to start. Run journalctl -u yrm-panel -n 80.' >&2
+systemctl enable yrm-panel.service >/dev/null
+if ! systemctl restart yrm-panel.service || ! (sleep 2; systemctl is-active --quiet yrm-panel.service); then
+  echo 'YRM Panel failed to start: journalctl -u yrm-panel -n 80' >&2
+  systemctl stop yrm-panel.service 2>/dev/null || true
   if [[ -d /opt/yrm-panel.previous ]]; then
-    systemctl stop yrm-panel.service 2>/dev/null || true
     rm -rf /opt/yrm-panel
     mv /opt/yrm-panel.previous /opt/yrm-panel
+    if [[ -f "$workdir/previous.service" ]]; then
+      cp "$workdir/previous.service" /etc/systemd/system/yrm-panel.service
+    fi
+    systemctl daemon-reload
     systemctl restart yrm-panel.service || true
   fi
   exit 1
 fi
-printf '\nYRM Panel installed successfully.\n'
+awk '{print $1}' "$workdir/$asset.sha256" > /var/lib/yrm-panel/installed.sha256
+chown "$PANEL_USER:$PANEL_GROUP" /var/lib/yrm-panel/installed.sha256
+chmod 0644 /var/lib/yrm-panel/installed.sha256
+printf '\nYRM Panel installed for Linux user: %s\n' "$PANEL_USER"
 if [[ "$BIND" == 127.0.0.1 ]]; then
-  echo "Access via SSH tunnel: ssh -L ${PORT}:127.0.0.1:${PORT} ${FILE_USER}@YOUR_SERVER_IP"
+  echo "HTTPS: https://127.0.0.1:$HTTPS_PORT (localhost only)"
 else
-  echo "Panel is listening on all IPv4 interfaces, port ${PORT}."
-  echo 'Open http://SERVER_LAN_IP:'"${PORT}"' from your trusted LAN or VPN.'
-  if command -v ufw >/dev/null 2>&1 && ufw status | grep -q 'Status: active'; then
-    echo 'UFW is active. Configuring access from detected private LAN subnets.'
-    if command -v ip >/dev/null 2>&1; then
-      while IFS= read -r subnet; do
-        [[ -n "$subnet" ]] || continue
-        ufw allow from "$subnet" to any port "$PORT" proto tcp comment 'YRM Panel private LAN' >/dev/null
-        echo "  Allow ${subnet} -> TCP ${PORT}"
-      done < <(python3 - <<'PYNET'
+  echo "HTTPS: https://SERVER_LAN_IP:$HTTPS_PORT"
+  echo "HTTP:  http://SERVER_LAN_IP:$PORT (login opens HTTPS)"
+fi
+echo 'First HTTPS access: a self-signed certificate warning is expected.'
+# Match RC3 LAN behavior without opening the management interface publicly.
+if [[ "$BIND" == '0.0.0.0' ]] && command -v ufw >/dev/null 2>&1 \
+    && ufw status | grep -q 'Status: active'; then
+  if command -v ip >/dev/null 2>&1; then
+    while IFS= read -r subnet; do
+      [[ -n "$subnet" ]] || continue
+      ufw allow from "$subnet" to any port "$PORT" proto tcp comment 'YRM Panel HTTP LAN' >/dev/null
+      ufw allow from "$subnet" to any port "$HTTPS_PORT" proto tcp comment 'YRM Panel HTTPS LAN' >/dev/null
+    done < <(python3 - <<'PYNET'
 import ipaddress, json, subprocess
 try:
-    interfaces = json.loads(subprocess.check_output(['ip','-j','-4','address','show','scope','global'],timeout=5))
+    interfaces = json.loads(subprocess.check_output(['ip', '-j', '-4', 'address', 'show', 'scope', 'global'], timeout=5))
     networks = set()
-    for iface in interfaces:
-        name = iface.get('ifname', '')
-        if name.startswith(('docker','veth','br-','virbr')): continue
-        for info in iface.get('addr_info', []):
-            addr = ipaddress.ip_interface(f"{info['local']}/{info['prefixlen']}")
-            if addr.ip.is_private and not addr.ip.is_loopback and not addr.ip.is_link_local:
-                networks.add(str(addr.network))
+    for interface in interfaces:
+        name = interface.get('ifname', '')
+        if name.startswith(('docker', 'veth', 'br-', 'virbr')):
+            continue
+        for address in interface.get('addr_info', []):
+            value = ipaddress.ip_interface(f"{address['local']}/{address['prefixlen']}")
+            if value.ip.is_private and not value.ip.is_loopback and not value.ip.is_link_local:
+                networks.add(str(value.network))
     print('\n'.join(sorted(networks)))
-except (OSError, ValueError, KeyError, subprocess.SubprocessError):
+except (OSError, KeyError, ValueError, subprocess.SubprocessError):
     pass
 PYNET
-      )
-    fi
+    )
   fi
 fi
-echo 'Docker, Samba, shared files and Compose projects are independent of YRM Panel.'
+echo 'No user-data directories, Docker volumes or Samba shares were deleted.'

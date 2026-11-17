@@ -5,7 +5,6 @@ using YrmPanel.Services;
 
 namespace YrmPanel.Pages;
 
-/// <summary>The desktop only needs a host label; Docker is loaded on demand in its own page.</summary>
 public sealed class IndexModel : PageModel
 {
     private readonly ISystemMetricsService _metrics;
@@ -13,17 +12,20 @@ public sealed class IndexModel : PageModel
     public IndexModel(ISystemMetricsService metrics, SystemPowerService power)
     { _metrics = metrics; _power = power; }
     public SystemSnapshot Snapshot { get; private set; } = default!;
-    public async Task<IActionResult> OnPostRebootAsync()
+
+    public async Task<IActionResult> OnPostRebootAsync(string? adminPassword)
     {
-        var (ok, message) = await _power.RequestAsync("reboot", HttpContext.RequestAborted);
-        TempData["PowerMessage"] = message;
+        var (ok, message) = await _power.RequestAsync("reboot", adminPassword, HttpContext.RequestAborted);
+        TempData["PowerMessage"] = ok ? message : "Error: " + message;
         return RedirectToPage();
     }
-    public async Task<IActionResult> OnPostShutdownAsync()
+
+    public async Task<IActionResult> OnPostShutdownAsync(string? adminPassword)
     {
-        var (ok, message) = await _power.RequestAsync("shutdown", HttpContext.RequestAborted);
-        TempData["PowerMessage"] = message;
+        var (ok, message) = await _power.RequestAsync("shutdown", adminPassword, HttpContext.RequestAborted);
+        TempData["PowerMessage"] = ok ? message : "Error: " + message;
         return RedirectToPage();
     }
+
     public void OnGet() => Snapshot = _metrics.GetSnapshot();
 }

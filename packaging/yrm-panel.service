@@ -5,28 +5,25 @@ Wants=network.target
 
 [Service]
 Type=simple
-User=yrm-panel
-Group=yrm-panel
+User=@PANEL_USER@
+Group=@PANEL_GROUP@
 WorkingDirectory=/opt/yrm-panel
 EnvironmentFile=/etc/yrm-panel/panel.env
 ExecStart=/opt/yrm-panel/YrmPanel
 Restart=on-failure
 RestartSec=5
 UMask=0007
-# Root-owned allowlisted helpers use sudo; the web application itself remains unprivileged.
+# The host's ordinary Linux user runs the web application; it never runs as root.
+# The sudoers file only grants specific root-owned helpers after password entry.
 NoNewPrivileges=false
 PrivateTmp=true
-# /usr, /boot and /etc are read-only except native Samba and Panel helper config.
-# An explicit ACL grant, not a hard-coded folder list or chmod 777, permits files.
 ProtectSystem=full
-ReadWritePaths=/etc/samba /var/lib/samba /etc/yrm-panel /var/lib/yrm-panel
-ProtectHome=read-only
+ProtectHome=false
+ReadWritePaths=/var/lib/yrm-panel
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-# Helper may create a chosen root-level folder and grant ACLs; no mount or raw disk capability.
-CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE CAP_FOWNER CAP_FSETID CAP_SETUID CAP_SETGID
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 
 [Install]
 WantedBy=multi-user.target

@@ -2,99 +2,133 @@
 @model YrmPanel.Pages.FilesModel
 @using YrmPanel.Services
 @inject YrmPanel.Services.FileManagerService FileAccess
-@{ ViewData["Title"] = "Files"; var shared = Model.Samba.Shares;
-   var managedByPath = shared.Where(s => s.Managed).ToDictionary(s => s.Path, s => s, StringComparer.Ordinal); }
+@{
+    ViewData["Title"] = "Files";
+    var shared = Model.Samba.Shares;
+}
 <div class="page-heading"><div><p class="eyebrow">FILE MANAGER</p><h1>Files<span class="accent-period">.</span></h1></div></div>
 @if (!string.IsNullOrWhiteSpace(Model.Notice))
 { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
 <section class="surface-card fm-explorer">
-  <div class="explorer-path-row">
-    <a class="mini-button" asp-page="/Files" asp-route-path="@Model.Parent" title="Parent folder" aria-label="Parent folder">←</a>
-    <a class="mini-button" asp-page="/Files" asp-route-path="" title="Filesystem root" aria-label="Filesystem root">⌂</a>
-    <div class="explorer-address"><strong>/</strong>@Model.Path</div>
-    <a class="mini-button" asp-page="/Files" asp-route-path="@Model.Path">↻</a>
-  </div>
-  <div class="explorer-toolbar">
-    <button type="button" class="button button-secondary" data-open-new-folder>＋ New folder</button>
-    @if (Model.View.CanWrite)
-    {
-      <form method="post" asp-page-handler="Upload" asp-route-path="@Model.Path" enctype="multipart/form-data" class="explorer-upload">
-        <input name="upload" type="file" required aria-label="Choose a file" />
-        <button class="button button-secondary" type="submit">Upload</button>
-      </form>
-    }
-    @if (Model.View.CanEnable && !Model.View.CanWrite)
-    { <form method="post" asp-page-handler="Enable" asp-route-path="@Model.Path"><button class="button button-primary" type="submit">Enable management here</button></form> }
-    <span class="explorer-mode">@(Model.View.CanWrite ? "Editable" : "Browse only")</span>
-  </div>
-  @if (!Model.View.Available)
-  { <div class="empty-hint">@Model.View.Error</div> }
-  else
-  {
-    <div class="responsive-table">
-    <table class="data-table explorer-table"><thead><tr><th>File name</th><th>Modified</th><th>Type</th><th>Size</th><th aria-label="Actions"></th></tr></thead><tbody>
-    @foreach (var item in Model.View.Items)
-    {
-      var child = string.IsNullOrEmpty(Model.Path) ? item.Name : Model.Path.Trim('/') + "/" + item.Name;
-      var absolute = FileManagerService.Absolute(child);
-      var matching = shared.FirstOrDefault(x => string.Equals(x.Path, absolute, StringComparison.Ordinal));
-      var canShare = item.IsDirectory && FileAccess.IsManaged(absolute);
-      var canEnable = item.IsDirectory && FileAccess.CanEnable(absolute) && !canShare;
-      <tr>
-        <td class="explorer-name">
-          @if (item.IsDirectory)
-          { <a asp-page="/Files" asp-route-path="@child"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
-          else { <span class="explorer-file-icon">▤</span> <span>@item.Name</span> }
-          @if (matching is not null) { <small class="explorer-share-mark" title="Shared via SMB">SMB</small> }
-        </td>
-        <td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
-        <td class="muted">@(item.IsDirectory ? "Folder" : "File")</td>
-        <td class="muted">@(item.IsDirectory ? "—" : $"{item.Size:N0} B")</td>
-        <td class="explorer-menu-cell">
-          <details class="explorer-item-menu"><summary aria-label="File actions" title="Actions">⋯</summary>
-            <div class="explorer-actions-popover">
-              @if (!item.IsDirectory && Model.View.CanWrite)
-              { <a asp-page="/Files" asp-page-handler="Download" asp-route-path="@Model.Path" asp-route-name="@item.Name" data-native-download>Download</a> }
-              @if (Model.View.CanWrite)
-              {
-                <button type="button" data-rename-item="@item.Name">Rename</button>
-                <button type="button" data-move-item="@item.Name">Move</button>
+  <div class="fm-columns">
+    <aside class="fm-locations" aria-label="File locations">
+      <div class="fm-locations-heading">LOCATIONS</div>
+      <a class="fm-location-link @(Model.Path == "" ? "is-active" : "")" asp-page="/Files" asp-route-path="">⌂ Root /</a>
+      @if (OperatingSystem.IsLinux() && !string.IsNullOrWhiteSpace(Model.HomePath))
+      { <a class="fm-location-link @(Model.Path == Model.HomePath ? "is-active" : "")" asp-page="/Files" asp-route-path="@Model.HomePath">⌂ Home</a> }
+      @if (System.IO.Directory.Exists("/data")) { <a class="fm-location-link" asp-page="/Files" asp-route-path="data">▤ Data</a> }
+      @if (System.IO.Directory.Exists("/backup")) { <a class="fm-location-link" asp-page="/Files" asp-route-path="backup">▤ Backup</a> }
+      @if (System.IO.Directory.Exists("/mnt")) { <a class="fm-location-link" asp-page="/Files" asp-route-path="mnt">▤ Mounts</a> }
+    </aside>
+    <div class="fm-content">
+      <div class="explorer-path-row">
+        <a class="mini-button" asp-page="/Files" asp-route-path="@Model.Parent" aria-label="Parent folder">←</a>
+        <a class="mini-button" asp-page="/Files" asp-route-path="" title="Filesystem root" aria-label="Filesystem root">⌂</a>
+        <div class="explorer-address"><strong>/</strong>@Model.Path</div>
+        <a class="mini-button" asp-page="/Files" asp-route-path="@Model.Path" aria-label="Refresh">↻</a>
+      </div>
+      <div class="explorer-toolbar">
+        <button type="button" class="button button-secondary" data-open-new-folder>＋ New folder</button>
+        @if (Model.View.CanWrite)
+        {
+          <form method="post" asp-page-handler="Upload" asp-route-path="@Model.Path" enctype="multipart/form-data" class="explorer-upload">
+            <input name="upload" type="file" required aria-label="Choose a file" />
+            <button class="button button-secondary" type="submit">Upload</button>
+          </form>
+        }
+        @if (Model.View.CanEnable && !Model.View.CanWrite)
+        {
+          <form method="post" asp-page-handler="Enable" asp-route-path="@Model.Path" data-requires-admin="Grant folder permissions">
+            <button class="button button-secondary" type="submit">Request management</button>
+          </form>
+        }
+        <span class="explorer-mode">@(Model.View.CanWrite ? "Editable" : "Browse only")</span>
+      </div>
+      @if (!Model.View.Available) { <div class="empty-hint">@Model.View.Error</div> }
+      else
+      {
+        <div class="responsive-table"><table class="data-table explorer-table">
+          <thead><tr><th>File name</th><th>Modified</th><th>Type</th><th>Size</th><th aria-label="Actions"></th></tr></thead>
+          <tbody>
+          @foreach (var item in Model.View.Items)
+          {
+            var child = string.IsNullOrEmpty(Model.Path) ? item.Name : Model.Path.Trim('/') + "/" + item.Name;
+            var absolute = FileManagerService.Absolute(child);
+            var matching = shared.FirstOrDefault(x => string.Equals(x.Path, absolute, StringComparison.Ordinal));
+            var canShare = item.IsDirectory && FileAccess.IsManaged(absolute);
+            var canEnable = item.IsDirectory && FileAccess.CanEnable(absolute) && !canShare;
+            <tr>
+              <td class="explorer-name">
                 @if (item.IsDirectory)
-                {
-                  @if (matching is not null && matching.Managed)
-                  { <form method="post" asp-page-handler="Unshare" asp-route-path="@Model.Path" data-confirm="Stop sharing @item.Name? Files are preserved."><input type="hidden" name="name" value="@matching.Name"/><button type="submit">Stop sharing</button></form> }
-                  else if (matching is null && canShare)
-                  { <button type="button" data-share-folder="@item.Name">Share via SMB</button> }
-                }
-                <form method="post" asp-page-handler="Delete" asp-route-path="@Model.Path" data-confirm="Remove @item.Name? Non-empty folders cannot be deleted."><input type="hidden" name="name" value="@item.Name"/><button type="submit" class="danger">Delete</button></form>
-              }
-              @if (canEnable)
+                { <a asp-page="/Files" asp-route-path="@child"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
+                else { <span class="explorer-file-icon">▤</span> <span>@item.Name</span> }
+                @if (matching is not null) { <small class="explorer-share-mark" title="Shared via SMB">SMB</small> }
+              </td>
+              <td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+              <td class="muted">@(item.IsDirectory ? "Folder" : "File")</td>
+              <td class="muted">@(item.IsDirectory ? "—" : $"{item.Size:N0} B")</td>
+              <td class="explorer-menu-cell">
+                <details class="explorer-item-menu"><summary aria-label="File actions" title="Actions">⋯</summary>
+                  <div class="explorer-actions-popover">
+                    @if (!item.IsDirectory)
+                    { <a asp-page="/Files" asp-page-handler="Download" asp-route-path="@Model.Path" asp-route-name="@item.Name" data-native-download>Download</a> }
+                    @if (Model.View.CanWrite)
+                    {
+                      <button type="button" data-rename-item="@item.Name">Rename</button>
+                      <button type="button" data-move-item="@item.Name">Move</button>
+                      <form method="post" asp-page-handler="Delete" asp-route-path="@Model.Path" data-confirm="Remove @item.Name? Non-empty folders cannot be deleted.">
+                        <input type="hidden" name="name" value="@item.Name"/><button type="submit" class="danger">Delete</button>
+                      </form>
+                    }
+                    @if (item.IsDirectory)
+                    {
+                      @if (matching is not null && matching.Managed)
+                      {
+                        <form method="post" asp-page-handler="Unshare" asp-route-path="@Model.Path" data-requires-admin="Remove SMB share" data-confirm="Stop sharing @item.Name? Files are preserved.">
+                          <input type="hidden" name="name" value="@matching.Name"/><button type="submit">Stop sharing</button>
+                        </form>
+                      }
+                      else if (matching is null && canShare)
+                      { <button type="button" data-share-folder="@item.Name">Share via SMB</button> }
+                      @if (canEnable)
+                      {
+                        <form method="post" asp-page-handler="EnableFolder" asp-route-path="@Model.Path" data-requires-admin="Grant folder permissions">
+                          <input type="hidden" name="name" value="@item.Name"/><button type="submit">Request management</button>
+                        </form>
+                      }
+                    }
+                  </div>
+                </details>
+              </td>
+            </tr>
+          }
+          </tbody>
+        </table></div>
+        @if (Model.View.Items.Count == 0) { <div class="empty-hint compact-empty">This folder is empty.</div> }
+      }
+      <details class="explorer-share-section" id="shared-folders">
+        <summary>Shared folders (@shared.Count)</summary>
+        @if (Model.Samba.Available)
+        {
+          @foreach (var entry in shared)
+          {
+            <div class="explorer-share-row"><strong>@entry.Name</strong><small>@entry.Path</small><span>@(entry.ReadOnly ? "Read only" : "Read / write")</span>
+              @if (entry.Managed)
               {
-                <form method="post" asp-page-handler="EnableFolder" asp-route-path="@Model.Path"><input type="hidden" name="name" value="@item.Name"/><button type="submit">Enable folder management</button></form>
+                <form method="post" asp-page-handler="Unshare" asp-route-path="@Model.Path" data-requires-admin="Remove SMB share" data-confirm="Stop sharing @entry.Name? Files are preserved.">
+                  <input type="hidden" name="name" value="@entry.Name"/><button class="mini-button danger" type="submit">Remove</button>
+                </form>
               }
-              @if (canShare && !Model.View.CanWrite && matching is null)
-              { <button type="button" data-share-folder="@item.Name">Share via SMB</button> }
             </div>
-          </details>
-        </td>
-      </tr>
-    }
-    </tbody></table></div>
-    @if (Model.View.Items.Count == 0) { <div class="empty-hint compact-empty">This folder is empty.</div> }
-  }
-  <details class="explorer-share-section" id="shared-folders"><summary>Shared folders (@shared.Count)</summary>
-    @if (Model.Samba.Available)
-    {
-      @foreach (var entry in shared)
-      { <div class="explorer-share-row"><strong>@entry.Name</strong><small>@entry.Path</small><span>@(entry.ReadOnly ? "Read only" : "Read / write")</span>
-          @if (entry.Managed) { <form method="post" asp-page-handler="Unshare" asp-route-path="@Model.Path" data-confirm="Stop sharing @entry.Name?"><input type="hidden" name="name" value="@entry.Name"/><button class="mini-button danger">Remove</button></form> }
-        </div> }
-      @if (shared.Count == 0) { <p class="muted">No shared folders.</p> }
-      <div class="explorer-smb-account"><span>SMB account: <strong>@Model.Samba.Account</strong></span></div>
-      <form method="post" asp-page-handler="Password" asp-route-path="@Model.Path" class="fm-inline-form"><input name="password" type="password" minlength="12" maxlength="256" required placeholder="Set SMB password" autocomplete="new-password"/><button type="submit" class="button button-secondary">Set password</button></form>
-    }
-    else { <p class="muted">Samba unavailable: @Model.Samba.Message</p> }
-  </details>
+          }
+          @if (shared.Count == 0) { <p class="muted">No shared folders.</p> }
+          <div class="explorer-smb-account">SMB account: <strong>@Model.Samba.Account</strong></div>
+          @if (!Model.Samba.AccountConfigured) { <p class="muted">An SMB password will be requested when you first share a folder.</p> }
+        }
+        else { <p class="muted">Samba unavailable: @Model.Samba.Message</p> }
+      </details>
+    </div>
+  </div>
 </section>
 <dialog id="new-folder-dialog" class="panel-modal explorer-dialog" aria-labelledby="new-folder-title">
   <div class="panel-modal-head"><strong id="new-folder-title">New folder</strong><button type="button" data-close-dialog="new-folder-dialog" aria-label="Close">×</button></div>
@@ -103,8 +137,7 @@
       <div class="explorer-folder-chooser"><strong>Location</strong><div id="new-folder-tree" class="explorer-tree" data-initial-folder="@Model.Path"></div></div>
       <div class="explorer-folder-fields"><label>Folder name<input name="name" required maxlength="64" autocomplete="off" placeholder="New folder"/></label>
         <label>Parent path<input name="parent" id="new-folder-parent" value="@Model.Path" readonly/></label>
-        <small id="new-folder-full-path">@Model.Absolute</small>
-        <p class="muted" id="new-folder-rights"></p>
+        <small id="new-folder-full-path">@Model.Absolute</small><p class="muted" id="new-folder-rights"></p>
       </div>
     </div>
     <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-close-dialog="new-folder-dialog">Cancel</button><button type="submit" class="button button-primary">Create folder</button></div>
@@ -121,10 +154,15 @@
 </dialog>
 <dialog id="share-folder-dialog" class="panel-modal" aria-labelledby="share-folder-title">
   <div class="panel-modal-head"><strong id="share-folder-title">Share folder</strong><button type="button" data-close-dialog="share-folder-dialog">×</button></div>
-  <form method="post" asp-page-handler="Share" asp-route-path="@Model.Path" class="form-stack">
-    <input type="hidden" name="folder" id="share-folder-name"/>
-    <div class="explorer-sharing-target" id="share-folder-target"></div>
+  <form method="post" asp-page-handler="Share" asp-route-path="@Model.Path" data-requires-admin="Configure Samba sharing" class="form-stack">
+    <input type="hidden" name="folder" id="share-folder-name"/><div class="explorer-sharing-target" id="share-folder-target"></div>
     <label><input name="readOnly" type="checkbox" value="true"/> Read-only</label>
+    @if (!Model.Samba.AccountConfigured)
+    {
+      <div class="fm-smb-first"><strong>First-time SMB setup</strong><p class="muted">Set a separate SMB password for @Model.Samba.Account.</p>
+        <label>SMB password<input name="smbPassword" type="password" minlength="12" maxlength="256" required autocomplete="new-password"/></label>
+      </div>
+    }
     <details><summary>Advanced options</summary><label>SMB share name<input name="shareName" id="share-folder-alias" maxlength="32"/></label></details>
     <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-close-dialog="share-folder-dialog">Cancel</button><button type="submit" class="button button-primary">Share</button></div>
   </form>

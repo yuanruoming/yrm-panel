@@ -10,22 +10,21 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Sign in · YRM Panel</title>
+    <title>Sign in · YRM PANEL</title>
     <link rel="stylesheet" asp-append-version="true" href="~/css/panel.css" />
     <link rel="stylesheet" asp-append-version="true" href="~/css/desktop.css" />
+    <link rel="stylesheet" asp-append-version="true" href="~/css/rc4.css" />
 </head>
-<body class="login-body-v2">
-    <div class="login-landscape" aria-hidden="true"></div>
+<body class="login-body-v2 login-rc4">
+    <div class="login-rc4-ambient" aria-hidden="true"></div>
     <div class="login-topbrand"><span class="os-brand-symbol">Y</span><strong>YRM <span>Panel</span></strong></div>
     <main class="login-stage">
         <section class="login-glass" aria-labelledby="sign-in-heading">
-            <div class="login-smalltitle">YOUR SERVER, YOUR SPACE</div>
+            <div class="login-smalltitle">YOUR SERVER · YOUR CONTROL</div>
             <h1 id="sign-in-heading">Welcome back.</h1>
-            <p>Sign in to manage your Linux server.</p>
+            <p>Sign in using your @Model.AccountDescription.</p>
             @if (!string.IsNullOrEmpty(Model.Error))
-            {
-                <div class="notice error" role="alert">@Model.Error</div>
-            }
+            { <div class="notice error" role="alert">@Model.Error</div> }
             <form method="post" class="login-form-v2">
                 <label for="username">Username</label>
                 <input id="username" name="Username" value="@Model.Username" autocomplete="username" maxlength="32" required autofocus />
@@ -33,9 +32,9 @@
                 <input id="password" name="Password" type="password" autocomplete="current-password" required />
                 <button type="submit" class="button button-primary login-submit">Sign in <span aria-hidden="true">→</span></button>
             </form>
-            <div class="login-glass-foot"><span class="status-light"></span><span>Private server management</span></div>
+            <div class="login-glass-foot"><span class="status-light"></span><span>Private system management</span></div>
         </section>
     </main>
-    <div class="login-bottombrand">YRM Panel <span>·</span> Self-hosted</div>
+    <div class="login-bottombrand">YRM PANEL <span>·</span> Linux System Management</div>
 </body>
 </html>
