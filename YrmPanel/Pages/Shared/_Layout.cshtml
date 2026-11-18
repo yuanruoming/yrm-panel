@@ -18,6 +18,7 @@
   <link rel="stylesheet" asp-append-version="true" href="~/css/panel.css" />
   <link rel="stylesheet" asp-append-version="true" href="~/css/desktop.css" />
   <link rel="stylesheet" asp-append-version="true" href="~/css/rc4.css" />
+    <link rel="stylesheet" asp-append-version="true" href="~/css/rc41.css" />
 </head>
 <body class="os-shell @(isDesktop ? "is-desktop" : "has-window")" data-wallpaper="@wallpaper" data-initial-page="@current" data-initial-title="@title">
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -129,6 +130,7 @@
     </form>
   </dialog>
   <div id="toast-host" class="toast-host" aria-live="polite" aria-atomic="true"></div>
+  <script asp-append-version="true" src="~/js/rc41-ui.js" defer></script>
   <script asp-append-version="true" src="~/js/panel.js" defer></script>
   <script asp-append-version="true" src="~/js/rc4-admin.js" defer></script>
   <script asp-append-version="true" src="~/js/rc4-monitor.js" defer></script>

@@ -6,6 +6,7 @@
         ("overview", "Overview", "i-server"),
         ("storage", "Storage", "i-harddrive"),
         ("network", "Network", "i-globe"),
+        ("sharing", "File Sharing", "i-folder"),
         ("services", "Services", "i-server"),
         ("accounts", "Accounts", "i-settings"),
         ("appearance", "Appearance", "i-folder"),
@@ -17,9 +18,9 @@
 }
 @if (!string.IsNullOrWhiteSpace(Model.Notice))
 { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
-<div class="server-settings-layout">
+<div class="server-settings-layout settings-rc41">
   <nav class="server-settings-nav" aria-label="Settings sections">
-    <strong class="settings-navigation-title">System settings</strong>
+    <strong class="settings-navigation-title">Settings</strong>
     @foreach (var tab in sections)
     {
       <a class="settings-nav-link @(activeTab == tab.Item1 ? "is-active" : "")"
@@ -32,90 +33,152 @@
   <div class="server-settings-content">
     @if (activeTab == "overview")
     {
-      <h2>Overview</h2>
-      <div class="system-info-grid">
-        <section class="surface-card server-info-card"><p class="eyebrow">DEVICE</p><h3>@info.Hostname</h3><p class="muted">@info.OperatingSystem</p></section>
-        <section class="surface-card server-info-card"><p class="eyebrow">HARDWARE</p><h3>@info.CpuModel</h3><p class="muted">@info.Processors logical processors · @(info.MemoryBytes > 0 ? (info.MemoryBytes / 1073741824d).ToString("0.0") + " GiB RAM" : "Memory unavailable")</p></section>
-        <section class="surface-card server-info-card"><p class="eyebrow">STORAGE</p><h3>@snapshot.Disks.Count disks / filesystems</h3>
-          @foreach (var disk in snapshot.Disks)
-          { <p class="muted">@disk.Name · @disk.Path · @((disk.UsedBytes / 1073741824d).ToString("0.0")) / @((disk.TotalBytes / 1073741824d).ToString("0.0")) GiB</p> }
-        </section>
-        <section class="surface-card server-info-card"><p class="eyebrow">NETWORK</p><h3>@(info.Adapters.FirstOrDefault(x => x.Ipv4.Length > 0)?.Ipv4.FirstOrDefault() ?? "Not connected")</h3><p class="muted">@info.Adapters.Count interfaces detected</p></section>
+      <div class="settings-section-heading"><h2>Overview</h2><p>Your Linux server at a glance.</p></div>
+      <section class="surface-card settings-device-card">
+        <div class="settings-device-avatar"><svg class="ui-icon"><use href="#i-server"/></svg></div>
+        <div><p class="eyebrow">DEVICE</p><h3>@info.Hostname</h3><p class="muted">@info.OperatingSystem</p></div>
+      </section>
+      <div class="settings-summary-grid">
+        <section class="surface-card"><p class="eyebrow">CPU</p><h3>@info.Processors cores</h3><p class="muted settings-clip">@info.CpuModel</p></section>
+        <section class="surface-card"><p class="eyebrow">MEMORY</p><h3>@(info.MemoryBytes > 0 ? (info.MemoryBytes / 1073741824d).ToString("0.0") + " GiB" : "Unavailable")</h3><p class="muted">Installed RAM</p></section>
+        <section class="surface-card"><p class="eyebrow">STORAGE</p><h3>@snapshot.Disks.Count</h3><p class="muted">Detected filesystems</p></section>
+        <section class="surface-card"><p class="eyebrow">NETWORK</p><h3 class="settings-clip">@(info.Adapters.FirstOrDefault(x => x.Ipv4.Length > 0 && !Model.IsVirtualAdapter(x.Name))?.Ipv4.FirstOrDefault() ?? "Unavailable")</h3><p class="muted">Primary IPv4</p></section>
       </div>
     }
     else if (activeTab == "storage")
     {
-      <h2>Storage</h2>
-      <div class="system-info-grid">
+      <div class="settings-section-heading"><h2>Storage</h2><p>Mounted filesystems and available capacity.</p></div>
+      <div class="settings-stack">
         @foreach (var disk in snapshot.Disks)
-        { <section class="surface-card server-info-card"><p class="eyebrow">@disk.Name</p><h3>@disk.Path</h3><p class="muted">@((disk.UsedBytes / 1073741824d).ToString("0.00")) GiB used of @((disk.TotalBytes / 1073741824d).ToString("0.00")) GiB</p><div class="meter-track"><div class="meter-fill cpu" style="width:@(disk.TotalBytes > 0 ? (100.0 * disk.UsedBytes / disk.TotalBytes).ToString("0.0",System.Globalization.CultureInfo.InvariantCulture) : "0")%"></div></div></section> }
+        {
+          <section class="surface-card settings-storage-card">
+            <div class="settings-row-top"><div><p class="eyebrow">@disk.Name</p><h3>@disk.Path</h3></div><span class="muted">@((disk.TotalBytes > 0 ? 100d * disk.UsedBytes / disk.TotalBytes : 0).ToString("0"))% used</span></div>
+            <div class="meter-track"><div class="meter-fill cpu" style="width:@(disk.TotalBytes > 0 ? (100.0 * disk.UsedBytes / disk.TotalBytes).ToString("0.0",System.Globalization.CultureInfo.InvariantCulture) : "0")%"></div></div>
+            <p class="muted">@((disk.UsedBytes / 1073741824d).ToString("0.0")) GiB used of @((disk.TotalBytes / 1073741824d).ToString("0.0")) GiB</p>
+          </section>
+        }
+        @if (snapshot.Disks.Count == 0) { <div class="empty-hint">No storage volumes detected.</div> }
       </div>
-      <p class="muted">Mount and partition operations are not included in RC4.</p>
     }
     else if (activeTab == "network")
     {
-      <h2>Network</h2>
-      @foreach (var adapter in info.Adapters)
-      { <section class="surface-card server-info-card"><div class="card-header"><h3>@adapter.Name</h3><span class="tag">@adapter.State</span></div>
-          <p>IPv4: @(adapter.Ipv4.Length == 0 ? "—" : string.Join(", ", adapter.Ipv4))</p>
-          <p>IPv6: @(adapter.Ipv6.Length == 0 ? "—" : string.Join(", ", adapter.Ipv6))</p></section> }
-      @if (info.Adapters.Count == 0) { <p class="muted">No network interfaces found.</p> }
+      <div class="settings-section-heading"><h2>Network</h2><p>Read-only addresses from your Linux network interfaces.</p></div>
+      <div class="settings-stack">
+        @foreach (var adapter in info.Adapters.Where(x => !Model.IsVirtualAdapter(x.Name)))
+        {
+          <section class="surface-card settings-network-card">
+            <div class="settings-row-top"><div><h3>@adapter.Name</h3><small class="muted">Network interface</small></div><span class="tag">@adapter.State</span></div>
+            @foreach (var ipv4 in adapter.Ipv4)
+            {
+              <div class="settings-address-row"><span>IPv4</span><code>@ipv4</code><button class="mini-button" type="button" data-copy-address="@ipv4" title="Copy IPv4" aria-label="Copy IPv4">⧉</button></div>
+            }
+            @foreach (var ipv6 in adapter.Ipv6.Where(x => !Model.IsLinkLocalIpv6(x)))
+            {
+              <div class="settings-address-row"><span>Global IPv6</span><code>@ipv6</code><button class="mini-button" type="button" data-copy-address="@ipv6" title="Copy IPv6" aria-label="Copy IPv6">⧉</button></div>
+            }
+            @if (adapter.Ipv4.Length == 0 && adapter.Ipv6.Length == 0) { <p class="muted">No assigned addresses.</p> }
+            @if (adapter.Ipv6.Any(Model.IsLinkLocalIpv6))
+            {
+              <details class="settings-secondary-addresses"><summary>Link-local addresses</summary>
+                @foreach (var ip in adapter.Ipv6.Where(Model.IsLinkLocalIpv6))
+                { <div class="settings-address-row"><span>IPv6</span><code>@ip</code><button class="mini-button" type="button" data-copy-address="@ip" title="Copy address">⧉</button></div> }
+              </details>
+            }
+          </section>
+        }
+        @if (info.Adapters.Any(x => Model.IsVirtualAdapter(x.Name)))
+        {
+          <details class="settings-network-secondary"><summary>Virtual &amp; secondary interfaces (@info.Adapters.Count(x => Model.IsVirtualAdapter(x.Name)))</summary>
+            @foreach (var adapter in info.Adapters.Where(x => Model.IsVirtualAdapter(x.Name)))
+            {
+              <div class="settings-virtual-row"><div><strong>@adapter.Name</strong><small>@adapter.State</small></div>
+                <div class="settings-virtual-addresses">
+                  @foreach (var ip in adapter.Ipv4.Concat(adapter.Ipv6.Where(x => !Model.IsLinkLocalIpv6(x))))
+                  { <code>@ip</code> }
+                  @if (adapter.Ipv4.Length == 0 && !adapter.Ipv6.Any(x => !Model.IsLinkLocalIpv6(x))) { <small class="muted">No assigned addresses</small> }
+                </div>
+              </div>
+            }
+          </details>
+        }
+        @if (info.Adapters.Count == 0) { <p class="muted">No network interfaces detected.</p> }
+      </div>
+    }
+    else if (activeTab == "sharing")
+    {
+      <div class="settings-section-heading"><h2>File Sharing</h2><p>SMB shares configured on this server.</p></div>
+      <section class="surface-card settings-simple-card">
+        @if (Model.Sharing.Available)
+        {
+          <div class="settings-row-top"><div><p class="eyebrow">SMB ACCOUNT</p><h3>@Model.Sharing.Account</h3></div><span class="tag">@(Model.Sharing.AccountConfigured ? "Ready" : "Not configured")</span></div>
+          <p class="muted">@(Model.Sharing.AccountConfigured ? "SMB authentication is configured." : "Your SMB password will be requested the first time you share a folder.")</p>
+          <div class="settings-share-list">
+          @foreach (var share in Model.Sharing.Shares)
+          { <div class="settings-share-row"><div><strong>@share.Name</strong><small>@share.Path</small></div><span>@(share.ReadOnly ? "Read only" : "Read / write")</span></div> }
+          @if (Model.Sharing.Shares.Count == 0) { <p class="muted">No folders are currently shared.</p> }
+          </div>
+          <a class="button button-secondary" asp-page="/Files" asp-route-path="@("@folders")">Open Files</a>
+        }
+        else { <p class="muted">@Model.Sharing.Message</p> }
+      </section>
     }
     else if (activeTab == "services")
     {
-      <h2>System Services</h2>
-      <p class="muted">Essential Linux service state (read only).</p>
-      <section class="surface-card">
-      @foreach (var service in Model.Services)
-      {
-        <div class="service-row"><span class="status-circle @(service.State == "active" ? "on" : "off")"></span>
-          <div class="service-name"><strong>@service.Name</strong><small>@service.Detail</small></div>
-          <span class="status-pill @(service.State == "active" ? "is-running" : "is-stopped")">@service.State</span></div>
-      }
+      <div class="settings-section-heading"><h2>System Services</h2><p>Basic Linux service status, read-only.</p></div>
+      <section class="surface-card settings-simple-card">
+        @foreach (var service in Model.Services)
+        {
+          <div class="service-row"><span class="status-circle @(service.State == "active" ? "on" : "off")"></span>
+            <div class="service-name"><strong>@service.Name</strong><small>@service.Detail</small></div>
+            <span class="status-pill @(service.State == "active" ? "is-running" : "is-stopped")">@service.State</span></div>
+        }
       </section>
     }
     else if (activeTab == "accounts")
     {
-      <h2>Accounts</h2>
-      <section class="surface-card server-info-card">
-        <p class="eyebrow">LINUX USER</p><h3>@Model.AccountName</h3>
-        <p class="muted">YRM PANEL runs as this existing Linux account. Account passwords are handled by Linux PAM; no separate Panel password is stored on Linux.</p>
-        <p class="muted">Multi-user management is planned for a future version.</p>
+      <div class="settings-section-heading"><h2>Accounts</h2><p>Linux identity used by YRM PANEL.</p></div>
+      <section class="surface-card settings-simple-card">
+        <p class="eyebrow">CURRENT LINUX USER</p><h3>@Model.AccountName</h3>
+        <p class="muted">Linux PAM handles login. YRM PANEL runs with the permissions of this account, and asks for sudo authorization only for administrative operations.</p>
       </section>
     }
     else if (activeTab == "appearance")
     {
-      <h2>Appearance</h2>
-      <section class="surface-card server-info-card">
-        <h3>Desktop wallpaper</h3>
-        <div class="wallpaper-preview" style="background-image:url('@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))')"></div>
-        <form method="post" asp-page-handler="Wallpaper" asp-route-tab="appearance" enctype="multipart/form-data" id="wallpaper-upload-form" class="form-stack">
-          <label for="wallpaper-select">Choose wallpaper (JPEG, PNG or WebP; up to 8 MB)</label>
-          <input type="file" name="wallpaper" id="wallpaper-select" accept="image/jpeg,image/png,image/webp" required/>
-          <noscript><button class="button button-primary">Upload and apply</button></noscript>
-        </form>
-        @if (Model.HasWallpaper) { <form method="post" asp-page-handler="ClearWallpaper" asp-route-tab="appearance"><button type="submit" class="button button-secondary">Restore default wallpaper</button></form> }
-        <p class="muted">The login background is a system-wide built-in design and does not reveal a user's personal desktop wallpaper.</p>
+      <div class="settings-section-heading"><h2>Appearance</h2><p>Customize your desktop without changing the shared login screen.</p></div>
+      <section class="surface-card settings-simple-card settings-wallpaper-card">
+        <div class="settings-row-top"><h3>Desktop Wallpaper</h3><span class="muted">Personal desktop</span></div>
+        <div class="wallpaper-preview" id="wallpaper-preview" style="background-image:url('@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))')"></div>
+        <div class="wallpaper-actions">
+          <form method="post" asp-page-handler="Wallpaper" asp-route-tab="appearance" enctype="multipart/form-data" id="wallpaper-upload-form" class="wallpaper-upload-actions">
+            <input type="file" name="wallpaper" id="wallpaper-select" class="fm-visually-hidden" accept="image/jpeg,image/png,image/webp" required/>
+            <button type="button" class="button button-secondary wallpaper-choose" data-file-picker="wallpaper-select">Choose Image</button>
+            <button id="wallpaper-apply" type="submit" class="button button-primary" disabled>Apply</button>
+          </form>
+          <form method="post" asp-page-handler="ClearWallpaper" asp-route-tab="appearance" class="wallpaper-reset-form">
+            <button type="submit" class="button button-secondary">Restore Default</button>
+          </form>
+        </div>
+        <p id="wallpaper-selection-name" class="muted wallpaper-helper">JPEG, PNG or WebP · Up to 8 MB</p>
+        <p class="muted wallpaper-helper">The login background stays system-wide and does not expose your desktop wallpaper.</p>
       </section>
     }
     else if (activeTab == "about")
     {
-      <h2>About &amp; Updates</h2>
-      <section class="surface-card server-info-card">
-        <p class="eyebrow">YRM PANEL</p><h3>@info.PanelVersion</h3>
+      <div class="settings-section-heading"><h2>About &amp; Updates</h2><p>Version information and system updates.</p></div>
+      <section class="surface-card settings-simple-card">
+        <p class="eyebrow">YRM PANEL</p><h3>@info.PanelVersion.Split('+')[0]</h3>
         <p class="muted">Linux server management · ASP.NET Core 10</p>
-        <p>Listening: <code>@info.Endpoint</code></p>
-        <p><a href="https://github.com/yuanruoming/yrm-panel" target="_blank" rel="noopener noreferrer">Source and releases ↗</a></p>
+        <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel" target="_blank" rel="noopener noreferrer">Source and releases ↗</a>
       </section>
-      <section class="surface-card server-info-card">
-        <div class="card-header"><h3>System Update</h3><span class="tag">Dev channel</span></div>
-        <p class="muted">Status: <strong>@Model.UpdateStatus.State</strong> — @Model.UpdateStatus.Message</p>
-        <div class="panel-modal-actions">
-          <form method="post" asp-page-handler="CheckUpdate" asp-route-tab="about"><button class="button button-secondary" type="submit">Check updates</button></form>
+      <section class="surface-card settings-simple-card settings-update-card">
+        <div class="settings-row-top"><h3>System Update</h3><span class="tag">Dev channel</span></div>
+        <p class="muted">@Model.UpdateStatus.State — @Model.UpdateStatus.Message</p>
+        <div class="settings-button-row">
+          <form method="post" asp-page-handler="CheckUpdate" asp-route-tab="about"><button class="button button-secondary" type="submit">Check Updates</button></form>
           @if (OperatingSystem.IsLinux())
-          { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" type="submit">Update now</button></form> }
+          { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" type="submit">Update Now</button></form> }
         </div>
-        <p class="muted">Only YRM Panel files are updated; Docker, Samba and user data are preserved.</p>
+        <p class="muted">Updates preserve user files, Docker data, Samba shares and your selected Linux account.</p>
       </section>
     }
   </div>

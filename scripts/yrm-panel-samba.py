@@ -80,7 +80,7 @@ def bootstrap():
 
 
 def save_config(config):
-    fd, temp = tempfile.mkstemp(prefix='yrm-smb-', dir='/etc/samba', text=True)
+    fd, temp = tempfile.mkstemp(prefix='yrm-smb-', dir=str(MANAGED.parent), text=True)
     previous = MANAGED.read_bytes() if MANAGED.exists() else None
     try:
         with os.fdopen(fd, 'w', encoding='utf-8') as target:

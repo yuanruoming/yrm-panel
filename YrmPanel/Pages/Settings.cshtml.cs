@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using YrmPanel.Services;
 using YrmPanel.Models;
+using YrmPanel.Services;
 
 namespace YrmPanel.Pages;
 
@@ -12,17 +12,24 @@ public sealed class SettingsModel : PageModel
     private readonly ISystemMetricsService _metrics;
     private readonly ServerInfoService _server;
     private readonly SystemdStatusService _services;
+    private readonly SambaManagementService _samba;
     private readonly UpdateService _updates;
 
-    public SettingsModel(PanelSettingsStore settings, AdminCredentialStore accounts,
-        ISystemMetricsService metrics, ServerInfoService server,
-        SystemdStatusService services, UpdateService updates)
+    public SettingsModel(
+        PanelSettingsStore settings,
+        AdminCredentialStore accounts,
+        ISystemMetricsService metrics,
+        ServerInfoService server,
+        SystemdStatusService services,
+        SambaManagementService samba,
+        UpdateService updates)
     {
         _settings = settings;
         _accounts = accounts;
         _metrics = metrics;
         _server = server;
         _services = services;
+        _samba = samba;
         _updates = updates;
     }
 
@@ -35,12 +42,40 @@ public sealed class SettingsModel : PageModel
     public bool HasWallpaper => _settings.GetWallpaper() is not null;
     public long WallpaperVersion => _settings.WallpaperVersion;
     public IReadOnlyList<SystemdServiceState> Services { get; private set; } = [];
+    public SambaOverview Sharing { get; private set; } = new(false, "Samba is unavailable.", "", false, []);
     public UpdateProgress UpdateStatus => _updates.Progress;
     [TempData] public string? Notice { get; set; }
 
+    public bool IsVirtualAdapter(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        return name.Equals("docker0", StringComparison.OrdinalIgnoreCase)
+            || name.Equals("lo", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("br-", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("veth", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("virbr", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("vnet", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("tun", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("tap", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("tailscale", StringComparison.OrdinalIgnoreCase)
+            || name.StartsWith("wg", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public bool IsLinkLocalIpv6(string address) =>
+        !string.IsNullOrWhiteSpace(address) &&
+        address.StartsWith("fe80:", StringComparison.OrdinalIgnoreCase);
+
     public async Task OnGetAsync()
     {
-        if (Tab == "services") Services = await _services.ListAsync();
+        switch (Tab)
+        {
+            case "services":
+                Services = await _services.ListAsync();
+                break;
+            case "sharing":
+                Sharing = await _samba.ListAsync(HttpContext.RequestAborted);
+                break;
+        }
     }
 
     public async Task<IActionResult> OnPostCheckUpdateAsync()
@@ -59,21 +94,39 @@ public sealed class SettingsModel : PageModel
 
     public async Task<IActionResult> OnPostWallpaperAsync(IFormFile? wallpaper)
     {
-        if (wallpaper is null) { Notice = "Error: Select an image."; return RedirectToPage(new { tab = "appearance" }); }
+        if (wallpaper is null)
+        {
+            Notice = "Error: Select an image first.";
+            return RedirectToPage(new { tab = "appearance" });
+        }
         try
         {
             await using var input = wallpaper.OpenReadStream();
             await _settings.SetWallpaperAsync(input, wallpaper.Length);
-            Notice = "Wallpaper updated.";
+            Notice = "Desktop wallpaper updated.";
         }
-        catch (InvalidOperationException ex) { Notice = "Error: " + ex.Message; }
+        catch (InvalidOperationException ex)
+        {
+            Notice = "Error: " + ex.Message;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Notice = "Error: Cannot save the wallpaper in the Panel data directory.";
+        }
         return RedirectToPage(new { tab = "appearance" });
     }
 
     public async Task<IActionResult> OnPostClearWallpaperAsync()
     {
-        await _settings.ClearWallpaperAsync();
-        Notice = "Default background restored.";
+        try
+        {
+            await _settings.ClearWallpaperAsync();
+            Notice = "Default wallpaper restored.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            Notice = "Error: Cannot restore the default wallpaper.";
+        }
         return RedirectToPage(new { tab = "appearance" });
     }
 }

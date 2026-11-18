@@ -26,7 +26,7 @@ public sealed class FileManagerService
         return string.Join('/', parts.Take(Math.Max(0, parts.Length - 1)));
     }
 
-    public FileView Browse(string root, string? relative)
+    public FileView Browse(string root, string? relative, bool showHidden = false)
     {
         try
         {
@@ -35,6 +35,7 @@ public sealed class FileManagerService
             var items = new List<FileItem>();
             foreach (var path in Directory.EnumerateFileSystemEntries(directory).Take(3000))
             {
+                if (!showHidden && Path.GetFileName(path).StartsWith('.')) continue;
                 try
                 {
                     var attrs = File.GetAttributes(path);
@@ -55,17 +56,6 @@ public sealed class FileManagerService
         {
             return new FileView(root, relative ?? "", false, SafeError(ex), []);
         }
-    }
-
-    public IReadOnlyList<string> ManagedRoots()
-    {
-        try
-        {
-            return System.Text.Json.JsonSerializer.Deserialize<List<string>>(
-                File.ReadAllText("/etc/yrm-panel/managed-roots.json")) ?? [];
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
-        { return []; }
     }
 
     public bool IsManaged(string absolute)

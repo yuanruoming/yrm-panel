@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0-rc.4.1 — Stabilization pass
+
+- Fixed Samba config writes blocked by the web service's read-only `/etc` namespace while retaining systemd sandboxing; added controlled Samba transaction regression tests.
+- Files defaults to a deliberate My Folders list, keeps System Files/Root available, and defaults to hiding Linux dotfiles.
+- Redesigned compact Files and Settings surfaces, including network grouping and a readable IPv6 presentation.
+- Rebuilt wallpaper selection with preview and explicit Apply; verified no button overlap across four test widths in Chromium UI smoke tests.
+- Enabled Pinned Monitor by default for first-time visitors, preserving subsequent unpin choices.
+- Simplified sharing labels to Share and removed About source hash and endpoint display.
+
 ## 1.0.0-rc.4 — Source candidate
 
 - Switch to selected existing Linux user identity and Linux PAM authentication on Ubuntu/Debian; Windows local development auth preserved.

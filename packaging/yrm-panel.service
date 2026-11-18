@@ -19,7 +19,9 @@ NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=false
-ReadWritePaths=/var/lib/yrm-panel
+# Password-verified Samba helpers inherit this service mount namespace.
+# Permit only Samba configuration writes, not a writable /etc.
+ReadWritePaths=/var/lib/yrm-panel /etc/samba
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
