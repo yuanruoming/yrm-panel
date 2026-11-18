@@ -28,7 +28,7 @@
           <svg class="ui-icon"><use href="#i-folder"/></svg><span>@displayName</span>
         </a>
       }
-      <details class="fm-system-nav" open="@(!Model.IsMyFolders)">
+      <details class="fm-system-nav" data-persist-disclosure="yrm-panel:system-files-open">
         <summary><svg class="ui-icon"><use href="#i-harddrive"/></svg> System Files</summary>
         <a class="fm-location-link @(!Model.IsMyFolders && Model.Path == "" ? "is-active" : "")"
            asp-page="/Files" asp-route-path="/">Root /</a>
@@ -215,6 +215,19 @@
     <div class="explorer-dialog-grid">
       <div class="explorer-folder-chooser"><strong>Location</strong><div id="new-folder-tree" class="explorer-tree" data-initial-folder="@Model.DefaultCreateParent"></div></div>
       <div class="explorer-folder-fields">
+        <label>Storage location
+          <select id="yrm-folder-volume" aria-label="Select mounted storage for new folder">
+            <option value="@Model.DefaultCreateParent">Current location</option>
+            <option value="@Model.HomePath">Linux Home</option>
+            <option value="">Root / (requires administrator authorization)</option>
+            @foreach (var volume in Model.MountedVolumes)
+            {
+              <option value="@volume.MountPoint.TrimStart('/')">@volume.MountPoint · @volume.Name (@volume.FileSystem)</option>
+            }
+          </select>
+          <small>Choose an existing mounted filesystem, or select a subfolder on the left.</small>
+          <a asp-page="/Settings" asp-route-tab="storage" class="yrm-location-link">Manage disks &amp; mounts</a>
+        </label>
         <label>Folder name<input name="name" required maxlength="64" autocomplete="off" placeholder="New Folder"/></label>
         <label>Parent path<input name="parent" id="new-folder-parent" value="@Model.DefaultCreateParent" readonly/></label>
         <small id="new-folder-full-path">@Model.DefaultCreateParent</small><p class="muted" id="new-folder-rights"></p>

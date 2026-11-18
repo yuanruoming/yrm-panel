@@ -5,7 +5,7 @@ namespace YrmPanel.Services;
 
 public sealed record StorageDevice(string Path, string Name, string Type, string FileSystem,
     string Uuid, string Label, string Size, string MountPoint, bool ReadOnly, bool Removable,
-    bool CanMount, bool ManagedMount);
+    bool CanMount, bool ManagedMount, string ParentPath = "");
 
 /// <summary>Read-only lsblk discovery. Mount mutations are delegated to the fixed root helper.</summary>
 public sealed class StorageDeviceService
@@ -64,7 +64,7 @@ public sealed class StorageDeviceService
         return value.ValueKind == JsonValueKind.String ? value.GetString() ?? "" : value.ToString();
     }
     private static bool Flag(JsonElement element, string property) => Field(element, property) is "1" or "true" or "True";
-    private static void Collect(JsonElement item, List<StorageDevice> devices)
+    private static void Collect(JsonElement item, List<StorageDevice> devices, string parentPath = "")
     {
         var type = Field(item, "type");
         var mount = "";
@@ -78,9 +78,9 @@ public sealed class StorageDeviceService
                        allowed.Contains(fs, StringComparer.OrdinalIgnoreCase) && !Flag(item, "ro");
         devices.Add(new StorageDevice(Field(item, "name"), Field(item, "name").Split('/').Last(),
             type, fs, uuid, Field(item, "label"), Field(item, "size"), mount,
-            Flag(item, "ro"), Flag(item, "rm"), canMount, false));
+            Flag(item, "ro"), Flag(item, "rm"), canMount, false, parentPath));
         if (item.TryGetProperty("children", out var children) && children.ValueKind == JsonValueKind.Array)
-            foreach (var child in children.EnumerateArray()) Collect(child, devices);
+            foreach (var child in children.EnumerateArray()) Collect(child, devices, Field(item, "name"));
     }
 
     public Task<PrivilegedResult> MountAsync(string uuid, string mountPath, bool automatic,

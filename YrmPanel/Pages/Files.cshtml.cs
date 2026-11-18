@@ -11,14 +11,16 @@ public sealed class FilesModel : PageModel
     private readonly StorageManagementService _storage;
     private readonly SambaManagementService _samba;
     private readonly MyFoldersStore _folders;
+    private readonly StorageDeviceService _devices;
 
     public FilesModel(FileManagerService files, StorageManagementService storage,
-        SambaManagementService samba, MyFoldersStore folders)
+        SambaManagementService samba, MyFoldersStore folders, StorageDeviceService devices)
     {
         _files = files;
         _storage = storage;
         _samba = samba;
         _folders = folders;
+        _devices = devices;
     }
 
     [BindProperty(SupportsGet = true)] public string Path { get; set; } = "";
@@ -27,6 +29,7 @@ public sealed class FilesModel : PageModel
     private string CurrentRelative => Path == "/" ? "" : Path;
     public FileView View { get; private set; } = new("system", "", false, "Not loaded", []);
     public IReadOnlyList<string> MyFolders { get; private set; } = [];
+    public IReadOnlyList<StorageDevice> MountedVolumes { get; private set; } = [];
     public SambaOverview Samba { get; private set; } = new(false, "Samba unavailable", "", false, []);
     [TempData] public string? Notice { get; set; }
     public string Parent => string.IsNullOrEmpty(Path) ? FolderHome : FileManagerService.ParentOf(Path);
@@ -39,6 +42,12 @@ public sealed class FilesModel : PageModel
         if (!Request.Query.ContainsKey("path")) Path = FolderHome;
         if (Path == "/") Path = "";
         MyFolders = _folders.List();
+        MountedVolumes = (await _devices.ListAsync(HttpContext.RequestAborted))
+            .Where(device => device.MountPoint.Length > 0 && device.FileSystem.Length > 0 &&
+                device.MountPoint != "/" && !device.MountPoint.StartsWith("/var/", StringComparison.Ordinal))
+            .GroupBy(device => device.MountPoint, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
         if (IsMyFolders)
         {
             View = new FileView("system", "", true, null, []);

@@ -21,6 +21,7 @@ public sealed class LoginModel : PageModel
 
     [BindProperty] public string Username { get; set; } = "";
     [BindProperty] public string Password { get; set; } = "";
+    [BindProperty] public bool RememberMe { get; set; } = true;
     public string? Error { get; private set; }
     public string AccountDescription => OperatingSystem.IsLinux() ? "Linux account" : "Development account";
 
@@ -44,7 +45,12 @@ public sealed class LoginModel : PageModel
             new Claim("yrm:credential-stamp", OperatingSystem.IsLinux() ? "linux-pam-v1" : _credentials.SessionStamp)
         };
         await HttpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
-            new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)));
+            new ClaimsPrincipal(new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme)),
+            new AuthenticationProperties
+            {
+                IsPersistent = RememberMe,
+                ExpiresUtc = RememberMe ? DateTimeOffset.UtcNow.AddDays(30) : null
+            });
         return RedirectToPage("/Index");
     }
 }

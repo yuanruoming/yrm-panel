@@ -1,0 +1,50 @@
+/* 1.0 stabilization: scoped additions rather than another general override layer. */
+.yrm-brand-icon{display:block;object-fit:contain;flex:none;filter:drop-shadow(0 2px 7px rgba(15,192,195,.2))}
+.yrm-remember{display:flex!important;align-items:center;gap:9px;color:#c7d7e4;font-size:12px!important;cursor:pointer;margin:16px 0 0!important}
+.yrm-remember input{height:16px!important;width:16px!important;accent-color:#72b7df;flex:none;margin:0}
+.login-form-v2 .login-submit{margin-top:10px}
+.yrm-about-identity{display:flex;align-items:center;gap:13px;margin-bottom:7px}
+.yrm-about-identity img{object-fit:contain;flex:none}
+.yrm-about-identity h3{margin:0!important}
+.yrm-subtabs{display:flex;gap:18px;align-items:center;border-bottom:1px solid rgba(170,190,214,.18);margin:-2px 0 17px}
+.yrm-subtab{display:inline-flex;align-items:center;padding:10px 4px 12px;border-bottom:2px solid transparent;color:#a5b8ce;text-decoration:none;font-size:12px;font-weight:600}
+.yrm-subtab:hover{color:#e8f2ff}
+.yrm-subtab.is-active{color:#eef6fd;border-bottom-color:#65adf0}
+.yrm-certificate-card{max-width:100%}
+.yrm-cert-details{display:grid;gap:0;margin:13px 0 20px}
+.yrm-cert-details>div{display:grid;grid-template-columns:minmax(95px,30%) minmax(0,1fr);align-items:start;gap:12px;padding:10px 0;border-bottom:1px solid rgba(170,190,214,.1)}
+.yrm-cert-details dt{color:#9cafc2;font-size:12px}
+.yrm-cert-details dd{margin:0;color:#e6eef5;font-size:12px;overflow-wrap:anywhere}
+.yrm-cert-details code{white-space:normal;overflow-wrap:anywhere;font-size:11px}
+.yrm-certificate-import,.v1-new-provider{margin:12px 0}
+.yrm-certificate-import>summary,.v1-new-provider>summary{display:inline-flex!important;list-style:none;cursor:pointer;max-width:max-content}
+.yrm-certificate-import>summary::-webkit-details-marker,.v1-new-provider>summary::-webkit-details-marker{display:none}
+.yrm-certificate-import[open]>summary,.v1-new-provider[open]>summary{margin-bottom:17px}
+.yrm-certificate-import form{padding:17px;border:1px solid rgba(168,196,221,.16);border-radius:10px;background:rgba(8,16,26,.18)}
+.yrm-certificate-import input[type=file]{font-size:11px;max-width:100%}
+.yrm-certificate-card>form{margin-top:9px}
+.yrm-update-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;margin-top:13px}
+.yrm-update-overview>div{display:grid;gap:6px;border:1px solid rgba(170,191,211,.12);padding:13px;border-radius:10px;min-width:0}
+.yrm-update-overview small{color:#9baec0;font-size:11px}
+.yrm-update-overview strong{font-size:19px;color:#f2f7fe;overflow-wrap:anywhere}
+.yrm-storage-section{margin-top:15px}
+.yrm-storage-section .yrm-disk-card{border:1px solid rgba(153,182,210,.19);border-radius:12px;padding:14px 16px;margin:14px 0;background:rgba(8,16,28,.25)}
+.yrm-disk-title{display:flex;align-items:center;gap:11px;min-width:0}
+.yrm-disk-title>div{display:grid;gap:5px;min-width:0;flex:1}
+.yrm-disk-title .ui-icon{width:26px;height:26px;color:#79add0;flex:none}
+.yrm-disk-title strong{font-size:14px;color:#e9f4ff}
+.yrm-disk-title small{font-size:11px;color:#96a9be;overflow-wrap:anywhere}
+.yrm-partition-card{padding:13px 11px;margin-top:13px;border-radius:9px;background:rgba(42,55,70,.42);border:1px solid rgba(174,197,215,.09)}
+.yrm-partition-card>.yrm-disk-title strong{font-size:12px}
+.yrm-mount-form{margin-top:14px}
+.yrm-mount-form label{max-width:100%}
+.yrm-mount-form .button{align-self:flex-start}
+.yrm-storage-section .yrm-storage-warning{color:#d4bc93}
+.yrm-storage-note{margin-top:13px}
+#new-folder-dialog .explorer-folder-fields #yrm-folder-volume{width:100%;max-width:100%;background:#141f2d;border:1px solid #43536a;color:#e4f1fb;border-radius:8px;min-height:37px;padding:6px 10px;font:inherit;font-size:12px}
+#new-folder-dialog .explorer-folder-fields label small{display:block;color:#99aabb;font-size:11px;line-height:1.4;margin:5px 0}
+.yrm-location-link{display:block;font-size:11px;color:#9ccdf0;margin-top:7px;text-decoration:none}
+.yrm-location-link:hover{text-decoration:underline}
+@media(max-width:620px){.yrm-cert-details>div{grid-template-columns:1fr;gap:4px}.yrm-update-overview{grid-template-columns:1fr}}
+
+.yrm-topmark{display:block;width:27px;height:27px;object-fit:contain;margin-right:8px;flex:none}

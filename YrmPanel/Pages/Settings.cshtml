@@ -61,37 +61,49 @@
         }
         @if (snapshot.Disks.Count == 0) { <div class="empty-hint">No storage volumes detected.</div> }
       </div>
-      <section class="v1-settings-panel">
-        <h3>Disks &amp; Mount Management</h3>
-        <p>Existing filesystems only. Choose any empty directory, including a folder under your Linux Home. Formatting and partitioning are not performed.</p>
-        @foreach (var disk in Model.StorageDevices.Where(x => x.Type is "disk" or "part"))
+      <section class="v1-settings-panel yrm-storage-section">
+        <div class="settings-row-top"><div><h3>Disks &amp; Mounts</h3><p class="muted">Physical devices, partitions and actual mount locations.</p></div></div>
+        @foreach (var disk in Model.StorageDevices.Where(x => x.Type == "disk"))
         {
-          <div class="v1-device-row">
-            <div class="v1-device-meta">
-              <strong>@disk.Name · @(disk.Label.Length > 0 ? disk.Label : disk.Type)</strong>
-              <small>@disk.Path · @disk.Size · @(disk.FileSystem.Length > 0 ? disk.FileSystem : "No filesystem") · @(disk.MountPoint.Length > 0 ? disk.MountPoint : "Not mounted")</small>
-              @if (disk.Uuid.Length > 0) { <small>UUID: @disk.Uuid</small> }
-            </div>
-            @if (disk.CanMount && disk.MountPoint.Length == 0)
+          <article class="yrm-disk-card">
+            <div class="yrm-disk-title"><svg class="ui-icon"><use href="#i-harddrive"/></svg><div><strong>@disk.Name</strong><small>@disk.Path · @disk.Size @(disk.Removable ? "· Removable" : "")</small></div><span class="tag">@(disk.MountPoint.Length > 0 ? "Mounted" : "Detected")</span></div>
+            @foreach (var partition in Model.StorageDevices.Where(x => x.ParentPath == disk.Path).Prepend(disk).Where(x => (x.Type == "part" || x.Type == "disk") && (x != disk || x.FileSystem.Length > 0)))
             {
-              <form method="post" asp-page-handler="Mount" asp-route-tab="storage" data-requires-admin="Mount existing Linux filesystem">
-                <input type="hidden" name="uuid" value="@disk.Uuid" />
-                <label>Mount location <input name="mountPath" required value="@(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Disk-" + disk.Name))" /></label>
-                <label class="v1-check"><input type="checkbox" name="automatic" value="true" checked /> Mount on startup</label>
-                <button class="button button-primary" type="submit">Mount</button>
-              </form>
+              <div class="yrm-partition-card">
+                <div class="yrm-disk-title"><div><strong>@partition.Name · @(partition.Label.Length > 0 ? partition.Label : (partition.FileSystem.Length > 0 ? partition.FileSystem : "No filesystem"))</strong>
+                  <small>@partition.Size · @(partition.MountPoint.Length > 0 ? "Mounted at " + partition.MountPoint : "Not mounted")</small>
+                  @if (partition.Uuid.Length > 0) { <small>UUID: @partition.Uuid</small> }
+                </div></div>
+                @if (partition.CanMount && partition.MountPoint.Length == 0)
+                {
+                  <form method="post" asp-page-handler="Mount" asp-route-tab="storage" data-requires-admin="Mount existing Linux filesystem" class="yrm-mount-form">
+                    <input type="hidden" name="uuid" value="@partition.Uuid" />
+                    <label>Mount location <input name="mountPath" required value="@(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Disk-" + partition.Name))" /></label>
+                    <label class="v1-check"><input type="checkbox" name="automatic" value="true" checked /> Mount on startup</label>
+                    <button class="button button-primary" type="submit">Mount</button>
+                  </form>
+                }
+                else if (partition.ManagedMount && partition.MountPoint.Length > 0)
+                {
+                  <div class="v1-row"><a class="button button-secondary" asp-page="/Files" asp-route-path="@partition.MountPoint.TrimStart('/')">Open Files</a>
+                    <form method="post" asp-page-handler="Unmount" asp-route-tab="storage" data-requires-admin="Unmount disk" data-confirm="Unmount this disk? Make sure no files are in use.">
+                      <input type="hidden" name="mountPath" value="@partition.MountPoint" /><button class="button button-secondary" type="submit">Unmount</button>
+                    </form></div>
+                }
+                else if (partition.MountPoint.Length > 0)
+                { <span class="muted">System / external mount · managed outside YRM PANEL</span> }
+                else if (partition.FileSystem.Length == 0)
+                { <p class="muted yrm-storage-warning">No filesystem detected; mounting is not possible until the disk is initialized. YRM PANEL does not format disks.</p> }
+                else
+                { <p class="muted">This filesystem is not eligible for automated mounting.</p> }
+              </div>
             }
-            else if (disk.ManagedMount && disk.MountPoint.Length > 0)
-            {
-              <form method="post" asp-page-handler="Unmount" asp-route-tab="storage" data-requires-admin="Unmount disk" data-confirm="Unmount this disk? Make sure no files are in use.">
-                <input type="hidden" name="mountPath" value="@disk.MountPoint" />
-                <button class="button button-secondary" type="submit">Unmount</button>
-              </form>
-            }
-          </div>
+            @if (!Model.StorageDevices.Any(x => x.ParentPath == disk.Path) && disk.FileSystem.Length == 0)
+            { <p class="muted yrm-storage-warning">This disk has no identified partitions or filesystem. It cannot be mounted yet.</p> }
+          </article>
         }
-        @if (Model.StorageDevices.Count == 0) { <p class="muted">No physical disks reported by lsblk (Windows preview is read-only).</p> }
-        <p class="muted">The destination must be empty; existing files must not be hidden by a mount. The mounted filesystem retains its own Linux ownership and permissions.</p>
+        @if (!Model.StorageDevices.Any(x => x.Type == "disk")) { <p class="muted">No physical disks reported by lsblk.</p> }
+        <p class="muted yrm-storage-note">Mount requires an existing filesystem and an empty destination folder. Nothing here formats, partitions or hides existing files.</p>
       </section>
     }
     else if (activeTab == "network")
@@ -160,6 +172,7 @@
         @if (Model.DdnsProfiles.Count == 0) { <p>No DDNS profiles yet.</p> }
       </section>
       <section class="v1-settings-panel">
+        <details class="v1-new-provider"><summary class="button button-secondary">+ New Provider</summary>
         <h3>Add Custom DDNS Provider</h3>
         <form method="post" asp-page-handler="DdnsAdd" asp-route-tab="ddns">
           <div class="v1-grid"><label>Profile name<input name="name" required maxlength="50" placeholder="Cloudflare A Record" /></label>
@@ -175,6 +188,7 @@
           <p>Variables: {ip}, {ipv4}, {ipv6}, {hostname}. Only public HTTPS endpoints are allowed. Templates should follow the provider's published API documentation.</p>
           <div class="v1-row"><button class="button button-primary" type="submit">Save Profile</button></div>
         </form>
+        </details>
       </section>
     }
     else if (activeTab == "sharing")
@@ -217,7 +231,13 @@
     }
     else if (activeTab == "security")
     {
-      <div class="settings-section-heading"><h2>Security</h2><p>Firewall draft rules and HTTPS certificate.</p></div>
+      <div class="settings-section-heading"><h2>Security</h2><p>Firewall rules and the Panel HTTPS identity.</p></div>
+      <nav class="yrm-subtabs" aria-label="Security sections">
+        <a class="yrm-subtab @(Model.SecuritySection == "firewall" ? "is-active" : "")" asp-page="/Settings" asp-route-tab="security" asp-route-section="firewall">Firewall</a>
+        <a class="yrm-subtab @(Model.SecuritySection == "certificates" ? "is-active" : "")" asp-page="/Settings" asp-route-tab="security" asp-route-section="certificates">Certificates</a>
+      </nav>
+      @if (Model.SecuritySection == "firewall")
+      {
       <section class="v1-settings-panel">
         <div class="settings-row-top"><h3>Firewall</h3><span class="tag">@(Model.Firewall.Available ? "Detected" : "Unavailable")</span></div>
         <p>Edit freely. Only Save &amp; Apply requests the Linux administrator password.</p>
@@ -231,25 +251,36 @@
         </form>
         <p>Existing rules not created by YRM PANEL are preserved. UFW must already be enabled for host rules to filter traffic; no global policy reset is performed.</p>
       </section>
-      <section class="v1-settings-panel">
-        <h3>HTTPS Certificate</h3>
+      }
+      else
+      {
+      <section class="v1-settings-panel yrm-certificate-card">
+        <div class="settings-row-top"><h3>HTTPS Certificate</h3><span class="tag">@(Model.Certificate.IsCustom ? "Imported" : "System default")</span></div>
         @if (Model.Certificate.Available)
         {
           <p><strong>@(Model.Certificate.IsCustom ? "Imported PEM certificate" : "Default self-signed certificate")</strong></p>
-          <p>Subject: @Model.Certificate.Subject</p>
-          <p>Issuer: @Model.Certificate.Issuer</p>
-          <p>Valid until: @Model.Certificate.NotAfter.ToString("yyyy-MM-dd")</p>
-          <p>Fingerprint: @Model.Certificate.Thumbprint</p>
+          <dl class="yrm-cert-details">
+             <div><dt>Issued to</dt><dd>@Model.Certificate.Subject</dd></div>
+             <div><dt>Issuer</dt><dd>@Model.Certificate.Issuer</dd></div>
+             <div><dt>Expires</dt><dd>@Model.Certificate.NotAfter.ToString("yyyy-MM-dd")</dd></div>
+             <div><dt>Fingerprint</dt><dd><code>@Model.Certificate.Thumbprint</code></dd></div>
+           </dl>
         }
         else { <p>Certificate information is available on Linux installations.</p> }
-        <form method="post" asp-page-handler="Certificate" asp-route-tab="security" enctype="multipart/form-data">
+        <details class="yrm-certificate-import"><summary class="button button-secondary">+ Import Certificate</summary>
+        <form method="post" asp-page-handler="Certificate" asp-route-tab="security" asp-route-section="certificates" enctype="multipart/form-data">
           <div class="v1-grid"><label>Certificate (PEM)<input name="certificate" type="file" accept=".crt,.pem" required /></label>
             <label>Private key (PEM)<input name="privateKey" type="file" accept=".key,.pem" required /></label></div>
           <div class="v1-row"><button class="button button-primary" type="submit">Import &amp; Activate</button></div>
         </form>
-        <form method="post" asp-page-handler="RestoreCertificate" asp-route-tab="security" data-confirm="Restore the original self-signed certificate?"><button class="button button-secondary">Restore Default Certificate</button></form>
-        <p>Let's Encrypt automation is not included. An imported PEM key is stored in the Panel's private Linux data directory. Existing connections are unaffected until a new TLS handshake.</p>
+        </details>
+        @if (Model.Certificate.IsCustom)
+        {
+          <form method="post" asp-page-handler="RestoreCertificate" asp-route-tab="security" asp-route-section="certificates" data-confirm="Restore the original self-signed certificate?"><button class="button button-secondary">Restore Default Certificate</button></form>
+        }
+        <p class="muted">Let's Encrypt automation is not included. Imported private keys remain in the Panel's private Linux data directory.</p>
       </section>
+      }
     }
     else if (activeTab == "appearance")
     {
@@ -276,14 +307,26 @@
     {
       <div class="settings-section-heading"><h2>About &amp; Updates</h2><p>Version information and system updates.</p></div>
       <section class="surface-card settings-simple-card">
-        <p class="eyebrow">YRM PANEL</p><h3>@info.PanelVersion.Split('+')[0]</h3>
+        <div class="yrm-about-identity"><img src="~/images/yrm-panel-mark.png" alt="YRM PANEL icon" width="54" height="54" /><div><p class="eyebrow">YRM PANEL</p><h3>@info.PanelVersion.Split('+')[0]</h3></div></div>
         <p class="muted">Linux server management · ASP.NET Core 10</p>
         <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel" target="_blank" rel="noopener noreferrer">Source and releases ↗</a>
       </section>
       <section class="surface-card settings-simple-card settings-update-card">
         <div class="settings-row-top"><h3>System Update</h3><span class="tag">@Model.UpdateChannel channel</span></div>
-        <p class="muted">@(Model.LastUpdateCheck?.Message ?? "Not checked for updates yet.")</p>
-        <div class="v1-update-status" id="v1-update-progress">@Model.UpdateStatus.State — @Model.UpdateStatus.Message</div>
+        <div class="yrm-update-overview">
+          <div><small>Installed version</small><strong>@info.PanelVersion.Split('+')[0]</strong></div>
+          <div><small>Latest release</small><strong>@(Model.LastUpdateCheck?.Tag ?? "Not checked")</strong></div>
+        </div>
+        <div class="v1-update-status" id="v1-update-progress" role="status">@Model.UpdateStatus.State — @Model.UpdateStatus.Message</div>
+        @if (Model.LastUpdateCheck is { } releaseCheck)
+        {
+          <p class="muted">@releaseCheck.Message</p>
+        }
+        else if (Model.UpdateStatus.State != "completed")
+        {
+          <p class="muted">Check updates to compare your installed build with the release channel.</p>
+        }
+        <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel/releases" target="_blank" rel="noopener noreferrer">View release notes ↗</a>
         @if (!string.IsNullOrWhiteSpace(Model.Notice)) { <p class="muted">@Model.Notice</p> }
         <div class="settings-button-row">
           <form method="post" asp-page-handler="CheckUpdate" asp-route-tab="about"><button class="button button-secondary" type="submit">Check Updates</button></form>

@@ -218,7 +218,12 @@ app.MapGet("/api/metrics/stream", async (HttpContext context, MetricsPublisher m
 
 app.MapGet("/wallpaper", (HttpContext context, PanelSettingsStore settings) =>
 {
-    context.Response.Headers["Cache-Control"] = "private, no-store";
+    // Wallpaper URLs carry a file-timestamp version: cache each immutable version
+    // privately to avoid re-downloading large wallpapers on every sign-in.
+    var version = settings.WallpaperVersion.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    context.Response.Headers["Cache-Control"] =
+        context.Request.Query["v"].ToString() == version && version != "0"
+            ? "private, max-age=31536000, immutable" : "private, no-cache";
     var wallpaper = settings.GetWallpaper();
     return wallpaper is null ? Results.NotFound()
         : Results.File(wallpaper.Value.path, wallpaper.Value.mime, enableRangeProcessing: true);

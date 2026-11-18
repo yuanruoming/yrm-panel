@@ -46,6 +46,8 @@ public sealed class SettingsModel : PageModel
     }
 
     [BindProperty(SupportsGet = true)] public string Tab { get; set; } = "overview";
+    [BindProperty(SupportsGet = true)] public string Section { get; set; } = "firewall";
+    public string SecuritySection => Section == "certificates" ? "certificates" : "firewall";
     public ServerOverview Info => _server.Get();
     public SystemSnapshot Snapshot => _metrics.GetSnapshot();
     public string AccountName => OperatingSystem.IsLinux()
@@ -94,7 +96,8 @@ public sealed class SettingsModel : PageModel
                 StorageDevices = await _devices.ListAsync(HttpContext.RequestAborted);
                 break;
             case "security":
-                Firewall = await _firewall.GetAsync(HttpContext.RequestAborted);
+                if (SecuritySection == "firewall")
+                    Firewall = await _firewall.GetAsync(HttpContext.RequestAborted);
                 break;
             case "ddns":
                 DdnsProfiles = await _ddns.ListAsync(HttpContext.RequestAborted);
@@ -138,7 +141,7 @@ public sealed class SettingsModel : PageModel
     {
         var result = await _firewall.ApplyAsync(rulesJson,adminPassword,HttpContext.RequestAborted);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
-        return RedirectToPage(new { tab = "security" });
+        return RedirectToPage(new { tab = "security", section = "firewall" });
     }
 
     public async Task<IActionResult> OnPostDdnsAddAsync(string name,string hostname,string recordType,
@@ -165,13 +168,13 @@ public sealed class SettingsModel : PageModel
     public async Task<IActionResult> OnPostCertificateAsync(IFormFile? certificate,IFormFile? privateKey)
     {
         Notice = await _certificates.ImportAsync(certificate,privateKey,HttpContext.RequestAborted);
-        return RedirectToPage(new { tab = "security" });
+        return RedirectToPage(new { tab = "security", section = "certificates" });
     }
 
     public IActionResult OnPostRestoreCertificate()
     {
         Notice = _certificates.RestoreDefault();
-        return RedirectToPage(new { tab = "security" });
+        return RedirectToPage(new { tab = "security", section = "certificates" });
     }
 
     public async Task<IActionResult> OnPostWallpaperAsync(IFormFile? wallpaper)
