@@ -292,14 +292,18 @@ def identify_recoverable_partition(partition):
     if size < 64*1024*1024 or part_size < size * 0.90:
         raise ValueError('Partition does not occupy the expected data disk.')
     for device in (diskpath, partition):
-        probe = subprocess.run([shutil.which('wipefs') or '/usr/sbin/wipefs', '-n', '-o', 'TYPE', device],
+        probe = subprocess.run([shutil.which('wipefs') or '/usr/sbin/wipefs', '--no-act', '--noheadings', '--output', 'TYPE', device],
                                capture_output=True, text=True, timeout=12)
         # The parent disk has a GPT signature: the partition must be empty.
         if probe.returncode != 0 or (device == partition and probe.stdout.strip()):
             raise ValueError('Partition contains a signature or cannot be safely inspected.')
-    raw = subprocess.run([shutil.which('blkid') or '/usr/sbin/blkid', '-p', partition],
-                         capture_output=True, timeout=12)
-    if raw.returncode != 2: raise ValueError('Partition might contain data. Refusing recovery.')
+    # `blkid -p` can return 0 for GPT PART_ENTRY_* metadata on a blank
+    # partition. Only filesystem TYPE identifies formatted contents here.
+    raw = subprocess.run([shutil.which('blkid') or '/usr/sbin/blkid',
+                          '-p', '-s', 'TYPE', '-o', 'value', partition],
+                         capture_output=True, text=True, timeout=12)
+    if raw.returncode not in (0, 2) or raw.stdout.strip():
+        raise ValueError('Partition contains a filesystem or could not be safely inspected.')
     return diskpath
 
 

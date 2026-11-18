@@ -113,7 +113,7 @@ class FirewallPortSpec(TestCase):
 
 class UiIntegration(TestCase):
     def test_beta_version(self):
-        self.assertIn('<Version>1.0.0-beta.5</Version>',source('YrmPanel/YrmPanel.csproj'))
+        self.assertRegex(source('YrmPanel/YrmPanel.csproj'),r'<Version>1\.0\.0-beta\.[4-9][0-9]*</Version>')
     def test_my_folders_root_only_disk_selector(self):
         files=source('YrmPanel/Pages/Files.cshtml')
         model=source('YrmPanel/Pages/Files.cshtml.cs')
@@ -132,8 +132,8 @@ class UiIntegration(TestCase):
         self.assertIn('If-None-Match',cs)
     def test_update_completed_acknowledgement_removes_100_percent(self):
         js=source('YrmPanel/wwwroot/js/v1-settings.js')
-        self.assertIn("complete?'Up to Date'",js)
-        self.assertIn('const awaitingReload=complete&&pending',js)
+        self.assertIn("available?'Update Available'",js)
+        self.assertIn('const awaitingReload=completed&&pending',js)
         self.assertIn('bar.hidden=!(active||awaitingReload)',js)
     def test_firewall_input_describes_cidr_and_ranges(self):
         view=source('YrmPanel/Pages/Settings.cshtml')

@@ -198,12 +198,12 @@ public sealed class SettingsModel : PageModel
         string urlTemplate, string httpMethod, string headerName, string token, string bodyTemplate,
         string successContains, int intervalMinutes, string? detectionUrl, string? authType,
         string? username, string? responseMode, string? successCodes, string? unchangedCodes,
-        string? errorCodes, string? jsonProperty, string? jsonExpected, bool verifyDns)
+        string? errorCodes, string? jsonProperty, string? jsonExpected, bool verifyDns, string? provider)
     {
         var options = new DdnsProfileOptions(
             detectionUrl ?? "", authType ?? "header", username ?? "", responseMode ?? "codes",
             successCodes ?? "", unchangedCodes ?? "", errorCodes ?? "",
-            jsonProperty ?? "success", jsonExpected ?? "true", verifyDns);
+            jsonProperty ?? "success", jsonExpected ?? "true", verifyDns, provider ?? "custom");
         Notice = await _ddns.AddAsync(name, hostname, recordType, urlTemplate, httpMethod, headerName,
             token, bodyTemplate, successContains, intervalMinutes, HttpContext.RequestAborted, options);
         return RedirectToPage(new { tab = "ddns" });

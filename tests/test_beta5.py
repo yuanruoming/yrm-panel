@@ -141,6 +141,6 @@ class DdnsContracts(unittest.TestCase):
 
 class ReleaseTests(unittest.TestCase):
     def test_beta5_version(self):
-        self.assertIn('1.0.0-beta.5',src('YrmPanel/YrmPanel.csproj'))
+        self.assertRegex(src('YrmPanel/YrmPanel.csproj'),r'1\.0\.0-beta\.[5-9][0-9]*')
 
 if __name__=='__main__':unittest.main()

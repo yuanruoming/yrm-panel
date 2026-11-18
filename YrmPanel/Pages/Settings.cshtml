@@ -204,7 +204,7 @@
           <div class="yrm-ddns-profile">
             <div class="yrm-ddns-profile-main">
               <div class="yrm-ddns-heading"><strong>@profile.Name</strong><span class="tag">@(profile.Enabled ? "Active" : "Paused")</span></div>
-              <small>@profile.Hostname · @profile.RecordType · Every @profile.IntervalMinutes min</small>
+              <small>@profile.Hostname · @profile.RecordType · @profile.Provider · Hybrid check every @profile.IntervalMinutes min</small>
               <div class="yrm-ddns-status"><span>@profile.LastStatus</span>
                 <span>IP: @(profile.LastIp.Length > 0 ? profile.LastIp : "Not detected")</span>
                 @if (profile.VerifyDns) { <span>DNS: @profile.Verification @(profile.LastDnsIp.Length > 0 ? "· " + profile.LastDnsIp : "")</span> }
@@ -229,29 +229,30 @@
           <h3>Configure Dynamic DNS</h3>
           <form method="post" asp-page-handler="DdnsAdd" asp-route-tab="ddns" id="yrm-ddns-new-form">
             <label>Provider template
-              <select id="yrm-ddns-provider-preset"><option value="dynu4">Dynu · IPv4</option><option value="dynu6">Dynu · IPv6</option><option value="custom">Custom HTTPS API</option></select>
+              <select id="yrm-ddns-provider-preset"><option value="dynu4">Dynu · IPv4</option><option value="dynu6">Dynu · IPv6</option><option value="cloudflare4">Cloudflare · IPv4</option><option value="cloudflare6">Cloudflare · IPv6</option><option value="custom">Custom HTTPS API</option></select>
             </label>
+            <p id="yrm-ddns-provider-note" class="muted">Dynu: enter your hostname, username and IP Update Password.</p>
             <div class="v1-grid">
               <label>Profile name<input name="name" required maxlength="50" placeholder="Dynu IPv4" /></label>
               <label>Hostname<input name="hostname" required placeholder="nas.example.com" /></label>
             </div>
-            <div class="v1-grid">
+            <div class="v1-grid" data-ddns-technical>
               <label>Record type<select name="recordType"><option>A</option><option>AAAA</option></select></label>
               <label>Method<select name="httpMethod"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option></select></label>
             </div>
-            <label>Provider HTTPS API URL<input name="urlTemplate" type="text" required placeholder="https://api.example.com/update?hostname={hostname}&amp;myip={ip}" spellcheck="false" /></label>
+            <label data-ddns-technical>Provider HTTPS API URL<input name="urlTemplate" type="text" required placeholder="https://api.example.com/update?hostname={hostname}&amp;myip={ip}" spellcheck="false" /></label>
             <div class="v1-grid">
               <label>Authentication
                 <select name="authType" id="yrm-ddns-auth"><option value="basic">HTTP Basic</option><option value="bearer">Bearer token</option><option value="header">Custom header</option><option value="none">None</option></select>
               </label>
-              <label data-ddns-auth="username">Username<input name="username" autocomplete="off" placeholder="Dynu username" /></label>
+              <label data-ddns-auth="basic">Username<input name="username" autocomplete="off" placeholder="Dynu username" /></label>
             </div>
             <div class="v1-grid">
               <label data-ddns-auth="header">Header name<input name="headerName" value="Authorization" placeholder="Authorization" /></label>
-              <label>Credential / API token<input name="token" type="password" autocomplete="new-password" placeholder="Dynu IP Update Password" /></label>
+              <label><span id="yrm-ddns-secret-label">Credential / API token</span><input name="token" type="password" autocomplete="new-password" placeholder="Dynu IP Update Password" /></label>
             </div>
-            <label>JSON body (optional)<textarea rows="3" name="bodyTemplate" placeholder='{"type":"A","name":"{hostname}","content":"{ip}"}'></textarea></label>
-            <details class="yrm-ddns-advanced"><summary>Detection &amp; response options</summary>
+            <label data-ddns-technical>JSON body (optional)<textarea rows="3" name="bodyTemplate" placeholder='{"type":"A","name":"{hostname}","content":"{ip}"}'></textarea></label>
+            <details class="yrm-ddns-advanced"><summary>Advanced settings</summary>
               <label>Custom public IP detection URL (optional)
                 <input name="detectionUrl" type="url" placeholder="Automatic (two HTTPS detection sources)" spellcheck="false" />
                 <small>Leave empty to detect IPv4/IPv6 automatically. A custom URL must return only a public IP address.</small>
@@ -273,6 +274,7 @@
               <div class="v1-grid"><label>Update interval (minutes)<input name="intervalMinutes" type="number" min="5" max="1440" value="10" /></label></div>
               <p class="muted">Variables: {hostname}, {ip}, {ipv4}, {ipv6}. DNS caches or proxies may temporarily show a different IP.</p>
             </details>
+            <input type="hidden" name="provider" id="yrm-ddns-provider" value="dynu" />
             <input type="hidden" name="successContains" value="" />
             <div class="v1-row"><button class="button button-primary" type="submit">Save Profile</button></div>
           </form>
@@ -444,27 +446,22 @@
           <div><small>Latest release</small><strong>@(Model.LastUpdateCheck?.Tag ?? "Not checked")</strong></div>
         </div>
         <div class="yrm-update-tracker" id="v1-update-progress" role="status" aria-live="polite">
-          <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@((Model.UpdateStatus.Phase ?? Model.UpdateStatus.State) switch { "completed" => "Up to Date", "failed" => "Failed", "running" => "Working", "idle" => "Idle", var s => s })</strong><span id="yrm-update-percent"></span></div>
+          <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@(Model.UpdateStatus.State == "running" ? "Updating" : Model.LastUpdateCheck?.HasUpdate == true ? "Update Available" : Model.UpdateStatus.State == "failed" ? "Update Failed" : Model.LastUpdateCheck?.Available == true ? "Up to Date" : "Not Checked")</strong><span id="yrm-update-percent"></span></div>
           <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress" hidden><span id="yrm-update-bar-fill"></span></div>
-          <p id="yrm-update-message" class="muted">@Model.UpdateStatus.Message</p>
+          <p id="yrm-update-message" class="muted">@(Model.UpdateStatus.State == "running" ? "Updating YRM PANEL." : Model.LastUpdateCheck?.HasUpdate == true ? Model.LastUpdateCheck.Message : Model.LastUpdateCheck?.Available == true ? "Your installed build is up to date." : Model.UpdateStatus.Message)</p>
           <p id="yrm-update-time" class="yrm-update-time muted"></p>
           <button type="button" id="yrm-update-reload" class="button button-primary" hidden>Reload Panel</button>
         </div>
-        @if (Model.LastUpdateCheck is { } releaseCheck)
-        {
-          <p class="muted">@releaseCheck.Message</p>
-        }
-        else if (Model.UpdateStatus.State != "completed")
-        {
-          <p class="muted">Check updates to compare your installed build with the release channel.</p>
-        }
+
         <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel/releases" target="_blank" rel="noopener noreferrer">View release notes ↗</a>
         @if (!string.IsNullOrWhiteSpace(Model.Notice)) { <p class="muted">@Model.Notice</p> }
         <div class="settings-button-row">
           <form method="post" asp-page-handler="CheckUpdate" asp-route-tab="about"><button class="button button-secondary" type="submit">Check Updates</button></form>
           @if (OperatingSystem.IsLinux())
           {
-            @if (Model.LastUpdateCheck?.HasUpdate == true)
+            @if (Model.UpdateStatus.State == "running")
+            { <button class="button button-primary" disabled type="button">Updating...</button> }
+            else if (Model.LastUpdateCheck?.HasUpdate == true)
             { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" data-v1-update type="submit">Update Now</button></form> }
             else { <button class="button button-primary" disabled type="button" title="Check for updates first">Update Now</button> }
           }

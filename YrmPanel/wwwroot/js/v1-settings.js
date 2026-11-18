@@ -63,31 +63,36 @@
   const updatePendingKey='yrm-panel:update-pending';
   const ucfirst=value=>value ? value[0].toUpperCase()+value.slice(1).toLowerCase() : 'Idle';
   const updateTracker=()=>document.getElementById('v1-update-progress');
-  function renderUpdate(p) {
+  function renderUpdate(p, availability) {
     if (!updateTracker()) return;
     const state=String(p?.state||'idle').toLowerCase();
-    const phase=p?.phase || state;
+    const active=state==='running', completed=state==='completed';
+    const available=availability?.available===true && availability?.hasUpdate===true;
     let pending=false;
-    try { pending=sessionStorage.getItem(updatePendingKey)==='1'; } catch {}
-    const complete=state==='completed', failed=state==='failed';
-    const active=state==='running';
-    const awaitingReload=complete&&pending;
-    const percentage=Number.isInteger(p?.percent) && p.percent>=0 && p.percent<=100 ? p.percent : null;
+    try {pending=sessionStorage.getItem(updatePendingKey)==='1'} catch {}
+    const awaitingReload=completed&&pending;
+    const phaseEl=$('yrm-update-phase'),msg=$('yrm-update-message'),stamp=$('yrm-update-time');
     const bar=$('yrm-update-bar'),fill=$('yrm-update-bar-fill'),text=$('yrm-update-percent');
-    const phaseEl=$('yrm-update-phase'),msg=$('yrm-update-message'),stamp=$('yrm-update-time'),reload=$('yrm-update-reload');
-    if (phaseEl) phaseEl.textContent=awaitingReload?'Completed':complete?'Up to Date':ucfirst(phase);
-    if (msg) msg.textContent=complete?(awaitingReload?'Update installed successfully. Reload to use the new interface.':'The latest installed build is ready.'):(p?.message||'');
+    const reload=$('yrm-update-reload');
+    const label=active?'Updating':awaitingReload?'Completed':available?'Update Available':
+      state==='failed'?'Update Failed':availability?.available===true?'Up to Date':'Not Checked';
+    if (phaseEl) phaseEl.textContent=label;
+    if (msg) msg.textContent=active?'Updating YRM PANEL. Do not close this page.':
+      awaitingReload?'Update installed successfully. Reload Panel.':
+      available?(availability.message||'A new build is available.'):
+      state==='failed'?(p?.message||'Update failed.'):
+      availability?.available===true?'Your installed build is up to date.':'Check for updates to compare builds.';
     if (stamp) {
-      const date=p?.at ? new Date(p.at) : null;
-      stamp.textContent=date && !Number.isNaN(date.getTime()) && (complete || failed)
-        ? `Last update: ${date.toLocaleString()}` : '';
+      const date=p?.at?new Date(p.at):null;
+      stamp.textContent=date&&!Number.isNaN(date.getTime())&&(completed||state==='failed')
+        ?`Last update: ${date.toLocaleString()}`:'';
     }
-    if (text) text.textContent=awaitingReload?'100%':percentage!==null && active && String(phase).toLowerCase()==='downloading'?`${percentage}%` : '';
     if (bar) {
       bar.hidden=!(active||awaitingReload);
-      bar.classList.toggle('is-indeterminate',active && (percentage===null || String(phase).toLowerCase()!=='downloading'));
+      bar.classList.toggle('is-indeterminate',active);
     }
-    if (fill) fill.style.width=(awaitingReload ? 100 : active && percentage!==null && String(phase).toLowerCase()==='downloading' ? percentage : 0)+'%';
+    if (fill) fill.style.width=awaitingReload?'100%':'0%';
+    if (text) text.textContent=awaitingReload?'100%':'';
     if (reload) reload.hidden=!awaitingReload;
   }
   let pendingPoll=false;
@@ -102,7 +107,7 @@
       if (state==='running') {
         try {if (sessionStorage.getItem(updatePendingKey)==='starting') sessionStorage.setItem(updatePendingKey,'1')} catch {}
       }
-      renderUpdate(data.progress);
+      renderUpdate(data.progress,data.availability);
       if (state==='failed') try {sessionStorage.removeItem(updatePendingKey)} catch {}
     } catch { // Expected while Kestrel is restarting. Keep polling.
       const phase=$('yrm-update-phase');if(phase)phase.textContent='Reconnecting';
@@ -122,22 +127,44 @@
   void pollUpdate();
 
 
-  // Dynu is an editable preset, not a separate HTTP implementation.
+  // Dynu and Cloudflare use friendly presets; Custom keeps full HTTP freedom.
   function updateDdnsFields(form) {
     const auth=form.elements.namedItem('authType')?.value || 'header';
     const mode=form.elements.namedItem('responseMode')?.value || 'codes';
+    const provider=$('yrm-ddns-provider-preset')?.value||'custom';
+    const custom=provider==='custom';
     form.querySelectorAll('[data-ddns-auth]').forEach(node => {
-      node.hidden = auth !== node.dataset.ddnsAuth;
+      node.hidden=auth!==node.dataset.ddnsAuth;
+      const input=node.querySelector('input');
+      if (input) input.required=!node.hidden&&auth==='basic';
     });
     form.querySelectorAll('[data-ddns-response]').forEach(node => {
-      node.hidden = mode !== node.dataset.ddnsResponse;
+      node.hidden=mode!==node.dataset.ddnsResponse;
     });
+    form.querySelectorAll('[data-ddns-technical]').forEach(node=>{node.hidden=!custom;});
+    const credential=form.elements.namedItem('token');
+    const credentialLabel=credential?.closest('label');
+    if (credentialLabel) credentialLabel.hidden=auth==='none';
+    if (credential) credential.required=auth!=='none';
+    const title=$('yrm-ddns-secret-label');
+    if (title) title.textContent=auth==='basic'?'IP Update Password':
+      provider.startsWith('cloudflare')?'Cloudflare API Token':
+      auth==='bearer'?'API Token':'Header value / API token';
+    const note=$('yrm-ddns-provider-note');
+    if (note) note.textContent=provider.startsWith('cloudflare')
+      ?'Cloudflare: the API token needs Zone Read and DNS Edit. Create the A/AAAA record once in Cloudflare; its Proxy and TTL settings are preserved.'
+      :provider.startsWith('dynu')
+      ?'Dynu: enter your hostname, username and IP Update Password.'
+      :'Custom: configure the API URL, authentication and response rules yourself.';
+    const advanced=form.querySelector('.yrm-ddns-advanced');
+    if (advanced && !custom) advanced.open=false;
   }
   function applyDdnsPreset(form) {
-    const preset=$('yrm-ddns-provider-preset')?.value || 'custom';
-    const field=(key,val)=>{ const node=form.elements.namedItem(key); if(node) node.value=val; };
-    if (preset==='dynu4' || preset==='dynu6') {
+    const preset=$('yrm-ddns-provider-preset')?.value||'custom';
+    const field=(name,val)=>{const node=form.elements.namedItem(name);if(node) node.value=val;};
+    if (preset==='dynu4'||preset==='dynu6') {
       const v6=preset==='dynu6';
+      field('provider','dynu');
       field('name',v6?'Dynu IPv6':'Dynu IPv4');
       field('recordType',v6?'AAAA':'A');
       field('httpMethod','GET');
@@ -152,7 +179,22 @@
       field('unchangedCodes','nochg');
       field('errorCodes','badauth,nohost,notfqdn,unknown,servererror,911');
       field('detectionUrl','');
+    } else if (preset==='cloudflare4'||preset==='cloudflare6') {
+      const v6=preset==='cloudflare6';
+      field('provider','cloudflare');
+      field('name',v6?'Cloudflare IPv6':'Cloudflare IPv4');
+      field('recordType',v6?'AAAA':'A');
+      field('httpMethod','PATCH');
+      field('urlTemplate','https://api.cloudflare.com/client/v4/zones');
+      field('authType','bearer');
+      field('headerName','Authorization');
+      field('bodyTemplate','');
+      field('responseMode','json');
+      field('jsonProperty','success');
+      field('jsonExpected','true');
+      field('detectionUrl','');
     } else {
+      field('provider','custom');
       field('name','Custom DDNS');
       field('httpMethod','PATCH');
       field('urlTemplate','');
@@ -164,6 +206,8 @@
       field('unchangedCodes','');
       field('errorCodes','');
     }
+    // Never copy an earlier provider's secrets into a new profile.
+    field('token','');field('username','');
     updateDdnsFields(form);
   }
   document.addEventListener('change', event=>{

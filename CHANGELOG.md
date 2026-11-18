@@ -1,3 +1,11 @@
+## v1.0.0 BETA6 — Hybrid DDNS, Cloudflare, and recovery fixes
+
+- Cloudflare A/AAAA preset with zone/record lookup, exact-record update, protected token, API-based verification; preserves existing DNS settings.
+- DDNS network change triggers with periodic polling fallback; Dynu Basic username UX and targeted validation.
+- Update Available/Updating status precedence repaired.
+- Fixed read-only GPT partition recovery probes (`wipefs --output` and `blkid -s TYPE`).
+- Regression tests and direct-replace handoff added. This is **not yet Stable**.
+
 # Changelog
 
 ## 1.0.0 BETA5 — DDNS, guarded Firewall, disk recovery

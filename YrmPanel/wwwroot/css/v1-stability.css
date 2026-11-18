@@ -156,3 +156,8 @@
 @media(max-width:700px){.yrm-ddns-profile{display:block}.yrm-ddns-actions{margin-top:12px}}
 
 .yrm-small-partitions{margin:9px 0;border-top:1px solid #36475a;padding:10px 0;color:#90aabe;font-size:11px}.yrm-small-partitions>summary{cursor:pointer}.yrm-small-partitions p{margin:6px 0}
+
+/* BETA6: only advanced Custom HTTP fields appear in the normal form. */
+#yrm-ddns-new-form [hidden],#yrm-ddns-new-form [data-ddns-auth][hidden],
+#yrm-ddns-new-form [data-ddns-response][hidden]{display:none!important}
+#yrm-ddns-new-form label small{color:#a7bad0;font-size:11px}

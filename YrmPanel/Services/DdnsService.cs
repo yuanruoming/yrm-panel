@@ -1,5 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Net.NetworkInformation;
+using System.Diagnostics;
+using System.Threading.Channels;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
@@ -17,7 +20,8 @@ public sealed record DdnsProfile(
     string ResponseMode = "legacy", string SuccessCodes = "", string UnchangedCodes = "",
     string ErrorCodes = "", string JsonProperty = "", string JsonExpected = "true",
     bool VerifyDns = true, string LastDnsIp = "", string Verification = "Not checked",
-    DateTimeOffset? NextAttemptAt = null, int ConsecutiveFailures = 0);
+    DateTimeOffset? NextAttemptAt = null, int ConsecutiveFailures = 0,
+    string Provider = "custom");
 
 public sealed record DdnsProfileView(
     string Id, string Name, string Hostname, string RecordType, string UrlTemplate,
@@ -26,13 +30,15 @@ public sealed record DdnsProfileView(
     DateTimeOffset? LastRun, string DetectionUrl, string AuthType,
     string ResponseMode, string SuccessCodes, string UnchangedCodes,
     string ErrorCodes, string JsonProperty, string JsonExpected,
-    bool VerifyDns, string LastDnsIp, string Verification, DateTimeOffset? NextAttemptAt);
+    bool VerifyDns, string LastDnsIp, string Verification, DateTimeOffset? NextAttemptAt,
+    string Provider);
 
 public sealed record DdnsProfileOptions(
     string DetectionUrl = "", string AuthType = "header", string Username = "",
     string ResponseMode = "codes", string SuccessCodes = "good",
     string UnchangedCodes = "nochg", string ErrorCodes = "badauth,nohost,notfqdn,unknown,servererror,911",
-    string JsonProperty = "success", string JsonExpected = "true", bool VerifyDns = true);
+    string JsonProperty = "success", string JsonExpected = "true", bool VerifyDns = true,
+    string Provider = "custom");
 
 /// <summary>
 /// Single-request DDNS client with explicit response rules, IP detection and DNS checks.
@@ -46,6 +52,9 @@ public sealed class DdnsService : BackgroundService
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { WriteIndented = true };
     private static readonly Regex HostPattern = new(@"^(?=.{3,253}$)[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])$", RegexOptions.CultureInvariant);
     private readonly HttpClient _client;
+    private readonly CloudflareDdnsClient _cloudflare;
+    private readonly Channel<bool> _wake = Channel.CreateBounded<bool>(new BoundedChannelOptions(1)
+    { SingleReader = true, SingleWriter = false, FullMode = BoundedChannelFullMode.DropOldest });
 
     public DdnsService(PanelDataPaths paths, ILogger<DdnsService> logger)
     {
@@ -78,6 +87,7 @@ public sealed class DdnsService : BackgroundService
         };
         _client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
         _client.DefaultRequestHeaders.UserAgent.ParseAdd("YRM-Panel-DDNS/1.0");
+        _cloudflare = new CloudflareDdnsClient(_client);
     }
 
     private static bool IsPublic(IPAddress value)
@@ -141,7 +151,7 @@ public sealed class DdnsService : BackgroundService
                 p.Enabled, p.LastIp, p.LastStatus, p.LastRun, p.DetectionUrl, p.AuthType,
                 p.ResponseMode, p.SuccessCodes, p.UnchangedCodes, p.ErrorCodes,
                 p.JsonProperty, p.JsonExpected, p.VerifyDns, p.LastDnsIp,
-                p.Verification, p.NextAttemptAt)).ToArray();
+                p.Verification, p.NextAttemptAt, p.Provider)).ToArray();
         }
         finally { _gate.Release(); }
     }
@@ -152,23 +162,43 @@ public sealed class DdnsService : BackgroundService
     {
         options ??= new DdnsProfileOptions();
         name = (name ?? "").Trim(); hostname = (hostname ?? "").Trim(); url = (url ?? "").Trim();
+        var provider = (options.Provider ?? "custom").Trim().ToLowerInvariant();
         var detect = (options.DetectionUrl ?? "").Trim();
         var auth = (options.AuthType ?? "header").ToLowerInvariant();
         var mode = (options.ResponseMode ?? "codes").ToLowerInvariant();
-        if (name.Length is < 1 or > 50 || !HostPattern.IsMatch(hostname)
-            || recordType is not ("A" or "AAAA") || method is not ("GET" or "POST" or "PUT" or "PATCH")
-            || interval is < 5 or > 1440 || (token?.Length ?? 0) > 2048
-            || (header?.Length ?? 0) > 80 || (body?.Length ?? 0) > 8000
-            || (success?.Length ?? 0) > 200 || !ValidPublicHttps(url)
-            || (detect.Length != 0 && !ValidPublicHttps(detect))
-            || auth is not ("none" or "header" or "basic" or "bearer")
-            || mode is not ("codes" or "json" or "http")
-            || (options.Username?.Length ?? 0) > 120
-            || !Regex.IsMatch(header ?? "Authorization", @"^[A-Za-z0-9-]{1,80}$")
-            || (auth == "basic" && string.IsNullOrWhiteSpace(options.Username))
-            || (auth != "none" && string.IsNullOrWhiteSpace(token))
-            || !ValidResponseOptions(options))
-            return "Error: Invalid DDNS configuration. Check HTTPS URLs, authentication and response rules.";
+        if (name.Length is < 1 or > 50) return "Error: Enter a profile name (maximum 50 characters).";
+        if (!HostPattern.IsMatch(hostname) || !hostname.Contains('.'))
+            return "Error: Enter a complete DNS hostname, such as nas.example.com.";
+        if (recordType is not ("A" or "AAAA")) return "Error: Choose IPv4 (A) or IPv6 (AAAA).";
+        if (interval is < 5 or > 1440) return "Error: The interval must be between 5 and 1440 minutes.";
+        if (detect.Length != 0 && !ValidPublicHttps(detect))
+            return "Error: Custom IP detection needs a public HTTPS URL.";
+        if (provider is not ("dynu" or "cloudflare" or "custom"))
+            return "Error: Unsupported DDNS provider type.";
+        if ((token?.Length ?? 0) > 2048 || (body?.Length ?? 0) > 8000 || (success?.Length ?? 0) > 200)
+            return "Error: DDNS credential or request body is too long.";
+        if (provider == "cloudflare")
+        {
+            if (string.IsNullOrWhiteSpace(token)) return "Error: Enter a Cloudflare API Token.";
+            url = "https://api.cloudflare.com/client/v4/zones";
+            method = "PATCH"; auth = "bearer"; mode = "json";
+            header = "Authorization"; body = "";
+        }
+        else
+        {
+            if (method is not ("GET" or "POST" or "PUT" or "PATCH")) return "Error: Unsupported HTTP method.";
+            if (!ValidPublicHttps(url)) return "Error: Provider API URL must be a valid public HTTPS address.";
+            if (auth is not ("none" or "header" or "basic" or "bearer")) return "Error: Choose an authentication type.";
+            if (auth == "basic" && string.IsNullOrWhiteSpace(options.Username))
+                return "Error: Username is required for HTTP Basic authentication.";
+            if (auth != "none" && string.IsNullOrWhiteSpace(token))
+                return "Error: Enter the DDNS password or API token.";
+            if ((header?.Length ?? 0) > 80 || !Regex.IsMatch(header ?? "Authorization", @"^[A-Za-z0-9-]{1,80}$"))
+                return "Error: Invalid HTTP header name.";
+            if (mode is not ("codes" or "json" or "http") || !ValidResponseOptions(options))
+                return "Error: Check the success/unchanged response rules in Advanced settings.";
+        }
+        if ((options.Username?.Length ?? 0) > 120) return "Error: DDNS username is too long.";
         await _gate.WaitAsync(ct);
         try
         {
@@ -180,7 +210,8 @@ public sealed class DdnsService : BackgroundService
                 Username: options.Username ?? "", ResponseMode: mode,
                 SuccessCodes: options.SuccessCodes ?? "", UnchangedCodes: options.UnchangedCodes ?? "",
                 ErrorCodes: options.ErrorCodes ?? "", JsonProperty: options.JsonProperty ?? "",
-                JsonExpected: options.JsonExpected ?? "true", VerifyDns: options.VerifyDns));
+                JsonExpected: options.JsonExpected ?? "true", VerifyDns: options.VerifyDns,
+                Provider: provider));
             WriteUnsafe(profiles);
             return "DDNS profile saved. Use Detect IP, then Update Now to verify the provider.";
         }
@@ -340,10 +371,16 @@ public sealed class DdnsService : BackgroundService
             if (index < 0) return "Error: Profile not found.";
             var profile = profiles[index];
             if (string.IsNullOrWhiteSpace(profile.LastIp)) return "Detect and update an IP first.";
-            var result = await VerifyDnsAsync(profile, profile.LastIp, ct);
-            profiles[index] = profile with { LastDnsIp = result.ip, Verification = result.status };
-            WriteUnsafe(profiles);
-            return result.status + (result.ip.Length > 0 ? " · DNS: " + result.ip : "");
+            try
+            {
+                var result = await VerifyProfileAsync(profile, profile.LastIp, ct);
+                profiles[index] = profile with { LastDnsIp = result.ip, Verification = result.status };
+                WriteUnsafe(profiles);
+                return result.status + (result.ip.Length > 0 ? " · DNS: " + result.ip : "");
+            }
+            catch (Exception ex) when (ex is IOException or HttpRequestException or TaskCanceledException
+                or JsonException or InvalidOperationException or KeyNotFoundException)
+            { return "Error: " + ex.Message; }
         }
         finally { _gate.Release(); }
     }
@@ -388,7 +425,7 @@ public sealed class DdnsService : BackgroundService
         return unchanged ? "Unchanged" : "Updated";
     }
 
-    public async Task<string> UpdateAsync(string id, bool force, CancellationToken ct)
+    public async Task<string> UpdateAsync(string id, bool force, CancellationToken ct, bool networkTriggered = false)
     {
         await _gate.WaitAsync(ct);
         try
@@ -402,7 +439,8 @@ public sealed class DdnsService : BackgroundService
                 return "Provider requested a temporary cooldown; retry later.";
             if (!force && (!profile.Enabled
                 || (profile.NextAttemptAt is { } next && DateTimeOffset.UtcNow < next)
-                || (profile.LastRun is { } last && DateTimeOffset.UtcNow - last < TimeSpan.FromMinutes(profile.IntervalMinutes))))
+                || (!networkTriggered && profile.LastRun is { } last &&
+                    DateTimeOffset.UtcNow - last < TimeSpan.FromMinutes(profile.IntervalMinutes))))
                 return "Not due.";
             var now = DateTimeOffset.UtcNow;
             var status = "Failed"; var ip = ""; var dnsIp = profile.LastDnsIp;
@@ -410,7 +448,14 @@ public sealed class DdnsService : BackgroundService
             try
             {
                 ip = await DetectIpAsync(profile, ct);
-                if (ip == profile.LastIp && (profile.LastStatus is "Updated" or "Unchanged" or "IP unchanged"))
+                if (profile.Provider == "cloudflare")
+                {
+                    // Query the actual Cloudflare record even if our last observed IP
+                    // has not changed: remote DNS edits should also be corrected.
+                    var record = await _cloudflare.ReadRecordAsync(profile, ct);
+                    status = await _cloudflare.UpdateRecordAsync(profile, record, ip, ct);
+                }
+                else if (ip == profile.LastIp && (profile.LastStatus is "Updated" or "Unchanged" or "IP unchanged"))
                 {
                     status = "IP unchanged";
                 }
@@ -447,13 +492,14 @@ public sealed class DdnsService : BackgroundService
                 }
                 if (profile.VerifyDns)
                 {
-                    var dns = await VerifyDnsAsync(profile, ip, ct);
+                    var dns = await VerifyProfileAsync(profile, ip, ct);
                     dnsIp = dns.ip; verification = dns.status;
                 }
                 else verification = "Disabled";
             }
             catch (Exception ex) when (ex is IOException or HttpRequestException or TaskCanceledException
-                or SocketException or InvalidOperationException or ArgumentException)
+                or SocketException or InvalidOperationException or ArgumentException or JsonException
+                or KeyNotFoundException)
             {
                 if (ct.IsCancellationRequested) throw;
                 status = "Failed: " + ex.Message[..Math.Min(ex.Message.Length, 140)];
@@ -479,19 +525,143 @@ public sealed class DdnsService : BackgroundService
         finally { _gate.Release(); }
     }
 
+    private async Task<(string ip, string status)> VerifyProfileAsync(
+        DdnsProfile profile, string expected, CancellationToken ct)
+    {
+        if (profile.Provider != "cloudflare")
+            return await VerifyDnsAsync(profile, expected, ct);
+        // Proxied Cloudflare A/AAAA records resolve to Cloudflare edge IPs.
+        // The API's source record content is the authoritative verification.
+        var record = await _cloudflare.ReadRecordAsync(profile, ct);
+        return (record.Content, record.Content.Equals(expected, StringComparison.OrdinalIgnoreCase)
+            ? "Verified (Cloudflare API)" : "DNS record differs from detected IP");
+    }
+
+    private void SignalNetworkChange()
+    {
+        // Bounded capacity coalesces Netlink bursts (Docker, VPN, DHCP).
+        _wake.Writer.TryWrite(true);
+    }
+
+    private static string? IpTool()
+    {
+        if (File.Exists("/usr/sbin/ip")) return "/usr/sbin/ip";
+        if (File.Exists("/usr/bin/ip")) return "/usr/bin/ip";
+        if (File.Exists("/sbin/ip")) return "/sbin/ip";
+        return null;
+    }
+
+    private async Task MonitorRoutesAsync(CancellationToken ct)
+    {
+        if (!OperatingSystem.IsLinux() || IpTool() is not { } binary) return;
+        // ip monitor is a read-only rtnetlink subscriber; never needs root.
+        // It complements .NET address/availability events with route changes.
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                using var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo(binary)
+                    {
+                        RedirectStandardOutput = true, RedirectStandardError = false,
+                        UseShellExecute = false, CreateNoWindow = true
+                    }
+                };
+                process.StartInfo.ArgumentList.Add("monitor");
+                process.StartInfo.ArgumentList.Add("address");
+                process.StartInfo.ArgumentList.Add("route");
+                process.StartInfo.ArgumentList.Add("link");
+                if (!process.Start()) throw new IOException("Cannot start ip route monitor.");
+                try
+                {
+                    while (!ct.IsCancellationRequested)
+                    {
+                        var line = await process.StandardOutput.ReadLineAsync(ct);
+                        if (line is null) break;
+                        SignalNetworkChange();
+                    }
+                }
+                finally
+                {
+                    try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+                    catch (InvalidOperationException) { /* Process already exited. */ }
+                    await process.WaitForExitAsync(CancellationToken.None);
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
+            catch (Exception ex) when (ex is IOException or InvalidOperationException
+                or System.ComponentModel.Win32Exception)
+            { _logger.LogWarning(ex, "DDNS route monitor unavailable; timer remains active"); }
+            await Task.Delay(TimeSpan.FromSeconds(30), ct);
+        }
+    }
+
+    private async Task TickAsync(bool networkTriggered, CancellationToken ct)
+    {
+        var profiles = await ListAsync(ct);
+        foreach (var profile in profiles.Where(p => p.Enabled))
+        {
+            try { await UpdateAsync(profile.Id, false, ct, networkTriggered); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception ex) { _logger.LogWarning(ex, "DDNS profile check failed"); }
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Address changes and IP route changes wake up the same update engine;
+        // a periodic timer remains mandatory for NAT/WAN IP changes that do not
+        // generate local network events.
+        void OnAddressChanged(object? sender, EventArgs args) => SignalNetworkChange();
+        void OnAvailabilityChanged(object? sender, NetworkAvailabilityEventArgs args) => SignalNetworkChange();
+        if (OperatingSystem.IsLinux())
+        {
+            NetworkChange.NetworkAddressChanged += OnAddressChanged;
+            NetworkChange.NetworkAvailabilityChanged += OnAvailabilityChanged;
+        }
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+        var periodic = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                _wake.Writer.TryWrite(true); // Startup check bypasses normal interval, no sudo.
+                while (await timer.WaitForNextTickAsync(stoppingToken))
+                    _wake.Writer.TryWrite(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        }, stoppingToken);
+        var routeMonitor = MonitorRoutesAsync(stoppingToken);
+        var lastEvent = DateTimeOffset.MinValue;
         try
         {
-            await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
-            using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
-            do
+            await foreach (var isNetworkEvent in _wake.Reader.ReadAllAsync(stoppingToken))
             {
-                var profiles = await ListAsync(stoppingToken);
-                foreach (var profile in profiles.Where(p => p.Enabled))
-                    await UpdateAsync(profile.Id, false, stoppingToken);
-            } while (await timer.WaitForNextTickAsync(stoppingToken));
+                var trigger = isNetworkEvent;
+                if (trigger)
+                {
+                    // Coalesce bursts and avoid repeated checks on noisy Docker links.
+                    var elapsed = DateTimeOffset.UtcNow - lastEvent;
+                    if (elapsed < TimeSpan.FromSeconds(45)) continue;
+                    await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+                    while (_wake.Reader.TryRead(out var pending)) trigger |= pending;
+                    lastEvent = DateTimeOffset.UtcNow;
+                }
+                await TickAsync(trigger, stoppingToken);
+            }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        finally
+        {
+            if (OperatingSystem.IsLinux())
+            {
+                NetworkChange.NetworkAddressChanged -= OnAddressChanged;
+                NetworkChange.NetworkAvailabilityChanged -= OnAvailabilityChanged;
+            }
+            _wake.Writer.TryComplete();
+            try { await Task.WhenAll(periodic, routeMonitor); }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { }
+        }
     }
 }

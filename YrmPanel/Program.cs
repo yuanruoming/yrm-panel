@@ -192,7 +192,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapRazorPages();
 app.MapGet("/api/update/status", (UpdateService updates, ServerInfoService info) =>
-    Results.Ok(new { progress = updates.Progress, version = info.Get().PanelVersion.Split('+')[0] }))
+    Results.Ok(new { progress = updates.Progress, availability = updates.LastCheck, version = info.Get().PanelVersion.Split('+')[0] }))
     .RequireAuthorization();
 app.MapGet("/api/metrics", (MetricsPublisher metrics) => Results.Ok(metrics.Current))
     .RequireAuthorization();
