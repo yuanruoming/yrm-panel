@@ -15,6 +15,7 @@ dataRoot = Path.GetFullPath(dataRoot);
 Directory.CreateDirectory(dataRoot);
 
 var accounts = new AdminCredentialStore(dataRoot);
+var panelCertificate = new PanelCertificateService(dataRoot);
 if (args.Contains("--set-admin", StringComparer.Ordinal))
 {
     if (isLinux)
@@ -47,20 +48,19 @@ if (isLinux)
 {
     if (httpPort is < 1024 or > 65535 || httpsPort is < 1024 or > 65535 || httpPort == httpsPort)
         throw new InvalidOperationException("Invalid HTTP/HTTPS port configuration.");
-    var certFile = Path.Combine(dataRoot, "tls", "server.crt");
-    var keyFile = Path.Combine(dataRoot, "tls", "server.key");
-    var certificate = X509Certificate2.CreateFromPemFile(certFile, keyFile);
+    var certificate = panelCertificate;
+    _ = certificate.Current();
     builder.WebHost.ConfigureKestrel(kestrel =>
     {
         if (localOnly)
         {
             kestrel.ListenLocalhost(httpPort);
-            kestrel.ListenLocalhost(httpsPort, endpoint => endpoint.UseHttps(certificate));
+            kestrel.ListenLocalhost(httpsPort, endpoint => endpoint.UseHttps(options => options.ServerCertificateSelector = (_, _) => certificate.Current()));
         }
         else
         {
             kestrel.ListenAnyIP(httpPort);
-            kestrel.ListenAnyIP(httpsPort, endpoint => endpoint.UseHttps(certificate));
+            kestrel.ListenAnyIP(httpsPort, endpoint => endpoint.UseHttps(options => options.ServerCertificateSelector = (_, _) => certificate.Current()));
         }
     });
 }
@@ -70,6 +70,7 @@ else
 }
 
 builder.Services.AddSingleton(accounts);
+builder.Services.AddSingleton(panelCertificate);
 builder.Services.AddSingleton<LinuxPamAuthenticator>();
 builder.Services.AddSingleton<PrivilegedCommandService>();
 builder.Services.AddSingleton<UpdateService>();
@@ -79,6 +80,10 @@ builder.Services.AddSingleton<DockerApiService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<MyFoldersStore>();
 builder.Services.AddSingleton<StorageManagementService>();
+builder.Services.AddSingleton<StorageDeviceService>();
+builder.Services.AddSingleton<FirewallService>();
+builder.Services.AddSingleton<DdnsService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DdnsService>());
 builder.Services.AddSingleton<ServerInfoService>();
 builder.Services.AddSingleton<SambaManagementService>();
 builder.Services.AddSingleton<SystemdStatusService>();
@@ -132,7 +137,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             return Task.CompletedTask;
         };
     });
-builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = 256L * 1024 * 1024);
+builder.Services.Configure<FormOptions>(options => options.MultipartBodyLengthLimit = 4L * 1024 * 1024 * 1024);
 builder.Services.AddAuthorization();
 builder.Services.AddRazorPages(options =>
 {
@@ -151,7 +156,7 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0
             }));
 });
-builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 257L * 1024 * 1024);
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4L * 1024 * 1024 * 1024 + 1024 * 1024);
 var app = builder.Build();
 if (!app.Environment.IsDevelopment()) app.UseExceptionHandler("/Error");
 
@@ -171,10 +176,10 @@ app.Use(async (context, next) =>
         return;
     }
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["X-Frame-Options"] = "SAMEORIGIN";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     context.Response.Headers["Content-Security-Policy"] =
-        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+        "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; " +
         "script-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
     if (context.Request.Path.StartsWithSegments("/api"))
         context.Response.Headers["Cache-Control"] = "no-store";
@@ -186,6 +191,9 @@ app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapRazorPages();
+app.MapGet("/api/update/status", (UpdateService updates, ServerInfoService info) =>
+    Results.Ok(new { progress = updates.Progress, version = info.Get().PanelVersion.Split('+')[0] }))
+    .RequireAuthorization();
 app.MapGet("/api/metrics", (MetricsPublisher metrics) => Results.Ok(metrics.Current))
     .RequireAuthorization();
 

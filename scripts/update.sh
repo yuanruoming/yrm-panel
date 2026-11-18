@@ -19,8 +19,15 @@ trap on_failure ERR
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 write_status running 'Downloading the latest release.'
+script_ref="$BRANCH"
+if [[ "$CHANNEL" == stable ]]; then
+  latest=$(curl -fLSs --retry 3 --connect-timeout 10 \
+    "https://api.github.com/repos/${REPO}/releases/latest")
+  script_ref=$(printf '%s' "$latest" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tag_name"])')
+  [[ "$script_ref" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 2
+fi
 curl -fLSs --retry 3 --connect-timeout 10 \
-  "https://raw.githubusercontent.com/${REPO}/${BRANCH}/scripts/install.sh" -o "$workdir/install.sh"
+  "https://raw.githubusercontent.com/${REPO}/${script_ref}/scripts/install.sh" -o "$workdir/install.sh"
 # install.sh preserves the selected Linux user, certificate and Panel data.
 bash "$workdir/install.sh" \
   --repo "$REPO" --channel "$CHANNEL" --branch "$BRANCH" \

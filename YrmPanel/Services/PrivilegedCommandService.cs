@@ -18,7 +18,9 @@ public sealed class PrivilegedCommandService
             ["storage"] = "/usr/local/libexec/yrm-panel-storage",
             ["samba"] = "/usr/local/libexec/yrm-panel-samba",
             ["power"] = "/usr/local/libexec/yrm-panel-power",
-            ["update"] = "/usr/local/libexec/yrm-panel-update-trigger"
+            ["update"] = "/usr/local/libexec/yrm-panel-update-trigger",
+            ["mount"] = "/usr/local/libexec/yrm-panel-mount",
+            ["firewall"] = "/usr/local/libexec/yrm-panel-firewall"
         };
 
     public async Task<PrivilegedResult> RunAsync(

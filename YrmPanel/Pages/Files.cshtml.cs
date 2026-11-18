@@ -167,13 +167,62 @@ public sealed class FilesModel : PageModel
     public IActionResult OnPostMove(string name, string destination)
     { Notice = Act(() => _files.Move("system", CurrentRelative, name, destination), "Moved."); return Back(); }
 
-    public async Task<IActionResult> OnPostUploadAsync(IFormFile? upload)
+    public IActionResult OnGetExists(string name)
     {
-        if (upload is null) { Notice = "Error: Select a file."; return Back(); }
-        try { await _files.UploadAsync("system", CurrentRelative, upload, HttpContext.RequestAborted); Notice = "File uploaded."; }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-                                   or ArgumentException or NotSupportedException)
-        { Notice = "Error: " + FileManagerService.SafeError(ex); }
+        try { return new JsonResult(new { exists = _files.Exists("system", CurrentRelative, name) }); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { return BadRequest(new { error = FileManagerService.SafeError(ex) }); }
+    }
+
+    public IActionResult OnGetPreview(string name)
+    {
+        var ext = System.IO.Path.GetExtension(name).ToLowerInvariant();
+        var mime = ext switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png", ".webp" => "image/webp", ".gif" => "image/gif",
+            ".mp4" => "video/mp4", ".webm" => "video/webm",
+            ".mp3" => "audio/mpeg", ".wav" => "audio/wav", ".ogg" => "audio/ogg",
+            ".pdf" => "application/pdf", ".txt" or ".log" or ".json" or ".xml" => "text/plain",
+            _ => null
+        };
+        if (mime is null) return BadRequest("Preview is not available for this file type.");
+        try
+        {
+            var (stream, _) = _files.OpenDownload("system", CurrentRelative, name);
+            Response.Headers["Cache-Control"] = "private, no-store";
+            // The built-in PDF preview is same-origin only.
+            Response.Headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'self'; object-src 'none'";
+            return new FileStreamResult(stream, mime) { EnableRangeProcessing = true };
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { return BadRequest(FileManagerService.SafeError(ex)); }
+    }
+
+    public async Task<IActionResult> OnPostUploadAsync(IFormFile? upload, bool replace = false)
+    {
+        var ajax = Request.Headers.Accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
+        if (upload is null) return ajax ? BadRequest(new { ok = false, message = "Select a file." })
+            : Back();
+        try
+        {
+            if (!replace && _files.Exists("system", CurrentRelative, upload.FileName))
+            {
+                if (ajax)
+                    return new ConflictObjectResult(new { ok = false, conflict = true, message = "File exists." });
+                Notice = "Error: File already exists. Choose Replace or Skip.";
+                return Back();
+            }
+            await _files.UploadAsync("system", CurrentRelative, upload, replace, HttpContext.RequestAborted);
+            if (ajax) return new JsonResult(new { ok = true, message = "File uploaded." });
+            Notice = "File uploaded.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            var message = FileManagerService.SafeError(ex);
+            if (ajax) return BadRequest(new { ok = false, message });
+            Notice = "Error: " + message;
+        }
         return Back();
     }
 

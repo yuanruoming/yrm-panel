@@ -14,6 +14,10 @@ public sealed class SettingsModel : PageModel
     private readonly SystemdStatusService _services;
     private readonly SambaManagementService _samba;
     private readonly UpdateService _updates;
+    private readonly StorageDeviceService _devices;
+    private readonly FirewallService _firewall;
+    private readonly DdnsService _ddns;
+    private readonly PanelCertificateService _certificates;
 
     public SettingsModel(
         PanelSettingsStore settings,
@@ -22,7 +26,11 @@ public sealed class SettingsModel : PageModel
         ServerInfoService server,
         SystemdStatusService services,
         SambaManagementService samba,
-        UpdateService updates)
+        UpdateService updates,
+        StorageDeviceService devices,
+        FirewallService firewall,
+        DdnsService ddns,
+        PanelCertificateService certificates)
     {
         _settings = settings;
         _accounts = accounts;
@@ -31,6 +39,10 @@ public sealed class SettingsModel : PageModel
         _services = services;
         _samba = samba;
         _updates = updates;
+        _devices = devices;
+        _firewall = firewall;
+        _ddns = ddns;
+        _certificates = certificates;
     }
 
     [BindProperty(SupportsGet = true)] public string Tab { get; set; } = "overview";
@@ -44,6 +56,12 @@ public sealed class SettingsModel : PageModel
     public IReadOnlyList<SystemdServiceState> Services { get; private set; } = [];
     public SambaOverview Sharing { get; private set; } = new(false, "Samba is unavailable.", "", false, []);
     public UpdateProgress UpdateStatus => _updates.Progress;
+    public UpdateAvailability? LastUpdateCheck => _updates.LastCheck;
+    public string UpdateChannel => _updates.Channel;
+    public IReadOnlyList<StorageDevice> StorageDevices { get; private set; } = [];
+    public FirewallOverview Firewall { get; private set; } = new(false, "Not checked.", false, [], "Unavailable.");
+    public IReadOnlyList<DdnsProfileView> DdnsProfiles { get; private set; } = [];
+    public PanelCertificateInfo Certificate => _certificates.Info();
     [TempData] public string? Notice { get; set; }
 
     public bool IsVirtualAdapter(string name)
@@ -72,6 +90,15 @@ public sealed class SettingsModel : PageModel
             case "services":
                 Services = await _services.ListAsync();
                 break;
+            case "storage":
+                StorageDevices = await _devices.ListAsync(HttpContext.RequestAborted);
+                break;
+            case "security":
+                Firewall = await _firewall.GetAsync(HttpContext.RequestAborted);
+                break;
+            case "ddns":
+                DdnsProfiles = await _ddns.ListAsync(HttpContext.RequestAborted);
+                break;
             case "sharing":
                 Sharing = await _samba.ListAsync(HttpContext.RequestAborted);
                 break;
@@ -81,15 +108,70 @@ public sealed class SettingsModel : PageModel
     public async Task<IActionResult> OnPostCheckUpdateAsync()
     {
         var result = await _updates.CheckAsync(HttpContext.RequestAborted);
-        Notice = result.Available ? result.Message : "Error: " + result.Message;
+        // The update result belongs to About, not the global toast system.
         return RedirectToPage(new { tab = "about" });
     }
 
     public async Task<IActionResult> OnPostUpdateAsync(string? adminPassword)
     {
         var result = await _updates.StartAsync(adminPassword, HttpContext.RequestAborted);
-        Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        if (!result.Ok) Notice = "Error: " + result.Message;
         return RedirectToPage(new { tab = "about" });
+    }
+
+    public async Task<IActionResult> OnPostMountAsync(string uuid, string mountPath, bool automatic,
+        string? adminPassword)
+    {
+        var result = await _devices.MountAsync(uuid, mountPath, automatic, adminPassword, HttpContext.RequestAborted);
+        Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        return RedirectToPage(new { tab = "storage" });
+    }
+
+    public async Task<IActionResult> OnPostUnmountAsync(string mountPath, string? adminPassword)
+    {
+        var result = await _devices.UnmountAsync(mountPath, adminPassword, HttpContext.RequestAborted);
+        Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        return RedirectToPage(new { tab = "storage" });
+    }
+
+    public async Task<IActionResult> OnPostFirewallAsync(string? rulesJson, string? adminPassword)
+    {
+        var result = await _firewall.ApplyAsync(rulesJson,adminPassword,HttpContext.RequestAborted);
+        Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        return RedirectToPage(new { tab = "security" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsAddAsync(string name,string hostname,string recordType,
+        string urlTemplate,string httpMethod,string headerName,string token,string bodyTemplate,
+        string successContains,int intervalMinutes)
+    {
+        Notice = await _ddns.AddAsync(name,hostname,recordType,urlTemplate,httpMethod,headerName,token,
+            bodyTemplate,successContains,intervalMinutes,HttpContext.RequestAborted);
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsDeleteAsync(string id)
+    {
+        Notice = await _ddns.RemoveAsync(id,HttpContext.RequestAborted);
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsTestAsync(string id)
+    {
+        Notice = await _ddns.UpdateAsync(id,true,HttpContext.RequestAborted);
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostCertificateAsync(IFormFile? certificate,IFormFile? privateKey)
+    {
+        Notice = await _certificates.ImportAsync(certificate,privateKey,HttpContext.RequestAborted);
+        return RedirectToPage(new { tab = "security" });
+    }
+
+    public IActionResult OnPostRestoreCertificate()
+    {
+        Notice = _certificates.RestoreDefault();
+        return RedirectToPage(new { tab = "security" });
     }
 
     public async Task<IActionResult> OnPostWallpaperAsync(IFormFile? wallpaper)

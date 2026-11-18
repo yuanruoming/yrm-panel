@@ -28,9 +28,10 @@ jobs:
               -p:PublishSingleFile=true -p:PublishTrimmed=false \
               -o "publish/$pair"
             mkdir -p "publish/$pair/deployment"
-            cp packaging/yrm-panel.service "publish/$pair/deployment/"
+            cp packaging/yrm-panel.service packaging/yrm-panel-firewall-restore.service "publish/$pair/deployment/"
             cp scripts/yrm-panel-samba.py scripts/yrm-panel-storage.py \
               scripts/yrm-panel-power.sh scripts/yrm-panel-update-trigger.sh \
+              scripts/yrm-panel-mount.py scripts/yrm-panel-firewall.py \
               "publish/$pair/deployment/"
             cp scripts/update.sh scripts/uninstall.sh "publish/$pair/deployment/"
             (cd "publish/$pair" && tar -czf "../../artifacts/yrm-panel-$pair.tar.gz" .)

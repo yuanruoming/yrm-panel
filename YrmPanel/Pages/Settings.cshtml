@@ -6,9 +6,11 @@
         ("overview", "Overview", "i-server"),
         ("storage", "Storage", "i-harddrive"),
         ("network", "Network", "i-globe"),
+        ("ddns", "Dynamic DNS", "i-globe"),
         ("sharing", "File Sharing", "i-folder"),
         ("services", "Services", "i-server"),
         ("accounts", "Accounts", "i-settings"),
+        ("security", "Security", "i-shield"),
         ("appearance", "Appearance", "i-folder"),
         ("about", "About & Updates", "i-grid")
     };
@@ -16,7 +18,7 @@
     var info = Model.Info;
     var snapshot = Model.Snapshot;
 }
-@if (!string.IsNullOrWhiteSpace(Model.Notice))
+@if (!string.IsNullOrWhiteSpace(Model.Notice) && Model.Tab != "about")
 { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
 <div class="server-settings-layout settings-rc41">
   <nav class="server-settings-nav" aria-label="Settings sections">
@@ -59,6 +61,38 @@
         }
         @if (snapshot.Disks.Count == 0) { <div class="empty-hint">No storage volumes detected.</div> }
       </div>
+      <section class="v1-settings-panel">
+        <h3>Disks &amp; Mount Management</h3>
+        <p>Existing filesystems only. Choose any empty directory, including a folder under your Linux Home. Formatting and partitioning are not performed.</p>
+        @foreach (var disk in Model.StorageDevices.Where(x => x.Type is "disk" or "part"))
+        {
+          <div class="v1-device-row">
+            <div class="v1-device-meta">
+              <strong>@disk.Name · @(disk.Label.Length > 0 ? disk.Label : disk.Type)</strong>
+              <small>@disk.Path · @disk.Size · @(disk.FileSystem.Length > 0 ? disk.FileSystem : "No filesystem") · @(disk.MountPoint.Length > 0 ? disk.MountPoint : "Not mounted")</small>
+              @if (disk.Uuid.Length > 0) { <small>UUID: @disk.Uuid</small> }
+            </div>
+            @if (disk.CanMount && disk.MountPoint.Length == 0)
+            {
+              <form method="post" asp-page-handler="Mount" asp-route-tab="storage" data-requires-admin="Mount existing Linux filesystem">
+                <input type="hidden" name="uuid" value="@disk.Uuid" />
+                <label>Mount location <input name="mountPath" required value="@(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Disk-" + disk.Name))" /></label>
+                <label class="v1-check"><input type="checkbox" name="automatic" value="true" checked /> Mount on startup</label>
+                <button class="button button-primary" type="submit">Mount</button>
+              </form>
+            }
+            else if (disk.ManagedMount && disk.MountPoint.Length > 0)
+            {
+              <form method="post" asp-page-handler="Unmount" asp-route-tab="storage" data-requires-admin="Unmount disk" data-confirm="Unmount this disk? Make sure no files are in use.">
+                <input type="hidden" name="mountPath" value="@disk.MountPoint" />
+                <button class="button button-secondary" type="submit">Unmount</button>
+              </form>
+            }
+          </div>
+        }
+        @if (Model.StorageDevices.Count == 0) { <p class="muted">No physical disks reported by lsblk (Windows preview is read-only).</p> }
+        <p class="muted">The destination must be empty; existing files must not be hidden by a mount. The mounted filesystem retains its own Linux ownership and permissions.</p>
+      </section>
     }
     else if (activeTab == "network")
     {
@@ -104,6 +138,45 @@
         @if (info.Adapters.Count == 0) { <p class="muted">No network interfaces detected.</p> }
       </div>
     }
+    else if (activeTab == "ddns")
+    {
+      <div class="settings-section-heading"><h2>Dynamic DNS</h2><p>Custom HTTPS API templates. Check public IPv4 or IPv6 and update only when it changes.</p></div>
+      <section class="v1-settings-panel">
+        <h3>DDNS Profiles</h3>
+        @foreach (var profile in Model.DdnsProfiles)
+        {
+          <div class="v1-device-row">
+            <div class="v1-device-meta">
+              <strong>@profile.Name · @profile.Hostname (@profile.RecordType)</strong>
+              <small>@profile.LastStatus · Last IP: @(profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</small>
+              <small>Interval @profile.IntervalMinutes minutes · Token is never displayed</small>
+            </div>
+            <div class="v1-row">
+              <form method="post" asp-page-handler="DdnsTest" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id" /><button class="button button-secondary">Update Now</button></form>
+              <form method="post" asp-page-handler="DdnsDelete" asp-route-tab="ddns" data-confirm="Delete this DDNS profile?"><input type="hidden" name="id" value="@profile.Id" /><button class="button button-secondary">Remove</button></form>
+            </div>
+          </div>
+        }
+        @if (Model.DdnsProfiles.Count == 0) { <p>No DDNS profiles yet.</p> }
+      </section>
+      <section class="v1-settings-panel">
+        <h3>Add Custom DDNS Provider</h3>
+        <form method="post" asp-page-handler="DdnsAdd" asp-route-tab="ddns">
+          <div class="v1-grid"><label>Profile name<input name="name" required maxlength="50" placeholder="Cloudflare A Record" /></label>
+            <label>Domain hostname<input name="hostname" required placeholder="nas.example.com" /></label></div>
+          <div class="v1-grid"><label>Record type<select name="recordType"><option>A</option><option>AAAA</option></select></label>
+            <label>HTTP method<select name="httpMethod"><option>GET</option><option>POST</option><option>PUT</option><option selected>PATCH</option></select></label></div>
+          <label>HTTPS API endpoint<input name="urlTemplate" type="url" required placeholder="https://api.example.com/records/RECORD_ID" /></label>
+          <div class="v1-grid"><label>Token header name<input name="headerName" value="Authorization" placeholder="Authorization" /></label>
+            <label>Header value / API token<input name="token" type="password" autocomplete="new-password" placeholder="Bearer ..." /></label></div>
+          <label>JSON request body<textarea rows="4" name="bodyTemplate" placeholder='{"type":"A","name":"{hostname}","content":"{ip}"}'></textarea></label>
+          <div class="v1-grid"><label>Optional success response text<input name="successContains" placeholder="success" /></label>
+            <label>Interval (minutes)<input name="intervalMinutes" type="number" min="5" max="1440" value="10" /></label></div>
+          <p>Variables: {ip}, {ipv4}, {ipv6}, {hostname}. Only public HTTPS endpoints are allowed. Templates should follow the provider's published API documentation.</p>
+          <div class="v1-row"><button class="button button-primary" type="submit">Save Profile</button></div>
+        </form>
+      </section>
+    }
     else if (activeTab == "sharing")
     {
       <div class="settings-section-heading"><h2>File Sharing</h2><p>SMB shares configured on this server.</p></div>
@@ -142,12 +215,49 @@
         <p class="muted">Linux PAM handles login. YRM PANEL runs with the permissions of this account, and asks for sudo authorization only for administrative operations.</p>
       </section>
     }
+    else if (activeTab == "security")
+    {
+      <div class="settings-section-heading"><h2>Security</h2><p>Firewall draft rules and HTTPS certificate.</p></div>
+      <section class="v1-settings-panel">
+        <div class="settings-row-top"><h3>Firewall</h3><span class="tag">@(Model.Firewall.Available ? "Detected" : "Unavailable")</span></div>
+        <p>Edit freely. Only Save &amp; Apply requests the Linux administrator password.</p>
+        <details><summary>Current UFW status</summary><pre class="v1-fw-status">@Model.Firewall.Status</pre></details>
+        <p>Host rules use UFW. Docker rules are supported only with a compatible iptables DOCKER-USER chain; the helper refuses unsupported backends. Docker filtering is IPv4-only in this build; IPv6 reachability must be checked separately.</p>
+        <form id="v1-firewall-form" method="post" asp-page-handler="Firewall" asp-route-tab="security" data-requires-admin="Save &amp; Apply firewall rule changes">
+          <div id="v1-firewall-rules" data-initial="@(System.Text.Json.JsonSerializer.Serialize(Model.Firewall.Rules.Select(x=>new {scope=x.Scope,action=x.Action,port=x.Port,protocol=x.Protocol,source=x.Source})))"></div>
+          <input type="hidden" id="v1-fw-json" name="rulesJson" value="[]" />
+          <div class="v1-row"><button class="button button-secondary" data-fw-add type="button">+ Add Rule</button><span id="v1-fw-dirty" class="muted"></span></div>
+          <div class="v1-row"><button class="button button-primary" type="submit" disabled="@(!Model.Firewall.Available)">Save &amp; Apply</button></div>
+        </form>
+        <p>Existing rules not created by YRM PANEL are preserved. UFW must already be enabled for host rules to filter traffic; no global policy reset is performed.</p>
+      </section>
+      <section class="v1-settings-panel">
+        <h3>HTTPS Certificate</h3>
+        @if (Model.Certificate.Available)
+        {
+          <p><strong>@(Model.Certificate.IsCustom ? "Imported PEM certificate" : "Default self-signed certificate")</strong></p>
+          <p>Subject: @Model.Certificate.Subject</p>
+          <p>Issuer: @Model.Certificate.Issuer</p>
+          <p>Valid until: @Model.Certificate.NotAfter.ToString("yyyy-MM-dd")</p>
+          <p>Fingerprint: @Model.Certificate.Thumbprint</p>
+        }
+        else { <p>Certificate information is available on Linux installations.</p> }
+        <form method="post" asp-page-handler="Certificate" asp-route-tab="security" enctype="multipart/form-data">
+          <div class="v1-grid"><label>Certificate (PEM)<input name="certificate" type="file" accept=".crt,.pem" required /></label>
+            <label>Private key (PEM)<input name="privateKey" type="file" accept=".key,.pem" required /></label></div>
+          <div class="v1-row"><button class="button button-primary" type="submit">Import &amp; Activate</button></div>
+        </form>
+        <form method="post" asp-page-handler="RestoreCertificate" asp-route-tab="security" data-confirm="Restore the original self-signed certificate?"><button class="button button-secondary">Restore Default Certificate</button></form>
+        <p>Let's Encrypt automation is not included. An imported PEM key is stored in the Panel's private Linux data directory. Existing connections are unaffected until a new TLS handshake.</p>
+      </section>
+    }
     else if (activeTab == "appearance")
     {
       <div class="settings-section-heading"><h2>Appearance</h2><p>Customize your desktop without changing the shared login screen.</p></div>
       <section class="surface-card settings-simple-card settings-wallpaper-card">
         <div class="settings-row-top"><h3>Desktop Wallpaper</h3><span class="muted">Personal desktop</span></div>
-        <div class="wallpaper-preview" id="wallpaper-preview" style="background-image:url('@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))')"></div>
+        <img class="v1-wallpaper-preview" id="wallpaper-preview" src="@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))" alt="Wallpaper preview" />
+        <div class="v1-wallpaper-mode"><button type="button" class="mini-button" data-wallpaper-fit>Full image</button> · Toggle actual desktop crop</div>
         <div class="wallpaper-actions">
           <form method="post" asp-page-handler="Wallpaper" asp-route-tab="appearance" enctype="multipart/form-data" id="wallpaper-upload-form" class="wallpaper-upload-actions">
             <input type="file" name="wallpaper" id="wallpaper-select" class="fm-visually-hidden" accept="image/jpeg,image/png,image/webp" required/>
@@ -171,12 +281,18 @@
         <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel" target="_blank" rel="noopener noreferrer">Source and releases ↗</a>
       </section>
       <section class="surface-card settings-simple-card settings-update-card">
-        <div class="settings-row-top"><h3>System Update</h3><span class="tag">Dev channel</span></div>
-        <p class="muted">@Model.UpdateStatus.State — @Model.UpdateStatus.Message</p>
+        <div class="settings-row-top"><h3>System Update</h3><span class="tag">@Model.UpdateChannel channel</span></div>
+        <p class="muted">@(Model.LastUpdateCheck?.Message ?? "Not checked for updates yet.")</p>
+        <div class="v1-update-status" id="v1-update-progress">@Model.UpdateStatus.State — @Model.UpdateStatus.Message</div>
+        @if (!string.IsNullOrWhiteSpace(Model.Notice)) { <p class="muted">@Model.Notice</p> }
         <div class="settings-button-row">
           <form method="post" asp-page-handler="CheckUpdate" asp-route-tab="about"><button class="button button-secondary" type="submit">Check Updates</button></form>
           @if (OperatingSystem.IsLinux())
-          { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" type="submit">Update Now</button></form> }
+          {
+            @if (Model.LastUpdateCheck?.HasUpdate == true)
+            { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" data-v1-update type="submit">Update Now</button></form> }
+            else { <button class="button button-primary" disabled type="button" title="Check for updates first">Update Now</button> }
+          }
         </div>
         <p class="muted">Updates preserve user files, Docker data, Samba shares and your selected Linux account.</p>
       </section>

@@ -4,6 +4,7 @@
   const authForm = document.getElementById("admin-password-form");
   const passwordField = document.getElementById("admin-password-input");
   const description = document.getElementById("admin-password-description");
+  const errorMessage = document.getElementById("admin-password-error");
   if (!modal || !authForm || !passwordField || !description) return;
   let targetForm = null;
   let targetSubmitter = null;
@@ -25,13 +26,19 @@
     targetSubmitter = event.submitter instanceof HTMLElement ? event.submitter : null;
     description.textContent = `Administrator permission is required: ${operation}.`;
     passwordField.value = "";
+    if (errorMessage) errorMessage.textContent = "";
     if (!modal.open) modal.showModal();
     passwordField.focus();
   }, true);
 
   authForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!targetForm || !targetForm.isConnected || !passwordField.value) return;
+    if (!targetForm || !targetForm.isConnected) return;
+    if (!passwordField.value) {
+      if (errorMessage) errorMessage.textContent = "Enter your Linux password to authorize this operation.";
+      passwordField.focus();
+      return;
+    }
     let hidden = targetForm.querySelector('input[name="adminPassword"]');
     if (!hidden) {
       hidden = document.createElement("input");
@@ -58,6 +65,7 @@
   });
   modal.addEventListener("close", () => {
     passwordField.value = "";
+    if (errorMessage) errorMessage.textContent = "";
     targetForm = null;
     targetSubmitter = null;
   });

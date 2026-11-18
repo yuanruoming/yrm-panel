@@ -1,0 +1,47 @@
+name: Build signed-off stable release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Verify the tag matches the project version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/.*<Version>\(.*\)<\/Version>.*/\1/p' YrmPanel/YrmPanel.csproj)
+          [[ "v$version" == "$GITHUB_REF_NAME" ]] || { echo 'Version/tag mismatch' >&2; exit 1; }
+      - name: Publish Linux x64 and ARM64
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          for target in linux-x64 linux-arm64; do
+            dotnet publish YrmPanel/YrmPanel.csproj -c Release -r "$target" --self-contained true \
+              -p:PublishSingleFile=true -p:PublishTrimmed=false -o "publish/$target"
+            mkdir -p "publish/$target/deployment"
+            cp packaging/yrm-panel.service packaging/yrm-panel-firewall-restore.service "publish/$target/deployment/"
+            cp scripts/yrm-panel-samba.py scripts/yrm-panel-storage.py \
+              scripts/yrm-panel-power.sh scripts/yrm-panel-update-trigger.sh \
+              scripts/yrm-panel-mount.py scripts/yrm-panel-firewall.py \
+              "publish/$target/deployment/"
+            cp scripts/update.sh scripts/uninstall.sh "publish/$target/deployment/"
+            (cd "publish/$target" && tar -czf "../../artifacts/yrm-panel-$target.tar.gz" .)
+            (cd artifacts && sha256sum "yrm-panel-$target.tar.gz" > "yrm-panel-$target.tar.gz.sha256")
+          done
+      - name: Release stable assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" artifacts/* --verify-tag --latest \
+            --title "YRM PANEL $GITHUB_REF_NAME" \
+            --notes 'Stable self-contained Ubuntu/Debian binaries, with SHA256 checksums.'

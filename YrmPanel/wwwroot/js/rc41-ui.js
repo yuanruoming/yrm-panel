@@ -54,7 +54,7 @@
       }
       previewUrl = URL.createObjectURL(file);
       const preview = id('wallpaper-preview');
-      if (preview) preview.style.backgroundImage = `url("${previewUrl.replaceAll('"', '%22')}")`;
+      if (preview instanceof HTMLImageElement) preview.src = previewUrl;
       if (apply) apply.disabled = false;
       return;
     }

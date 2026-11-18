@@ -1,24 +1,15 @@
 # Changelog
 
-## 1.0.0-rc.4.1 — Stabilization pass
+## 1.0.0 — Stable candidate (validation pending)
 
-- Fixed Samba config writes blocked by the web service's read-only `/etc` namespace while retaining systemd sandboxing; added controlled Samba transaction regression tests.
-- Files defaults to a deliberate My Folders list, keeps System Files/Root available, and defaults to hiding Linux dotfiles.
-- Redesigned compact Files and Settings surfaces, including network grouping and a readable IPv6 presentation.
-- Rebuilt wallpaper selection with preview and explicit Apply; verified no button overlap across four test widths in Chromium UI smoke tests.
-- Enabled Pinned Monitor by default for first-time visitors, preserving subsequent unpin choices.
-- Simplified sharing labels to Share and removed About source hash and endpoint display.
+- Added real-disk discovery (lsblk) and controlled existing-filesystem mount/unmount to custom paths, including Home; persistent mounts use UUID/fstab.
+- Added draft-first host UFW rules and guarded Docker iptables rules (no automatic UFW enable). Rule application invokes sudo once for the full batch.
+- Added configurable HTTPS DDNS profiles with background interval updates, separate IPv4/IPv6 public-IP detection, and private-token handling.
+- Added Security certificate details, validated PEM import and return to the generated self-signed certificate.
+- Added native Files viewer (image/video/audio/PDF/text), automatic multi-upload with explicit Replace or Skip, and a 4 GiB/file limit.
+- Fixed wallpaper preview by using an image element and allowing blob: images under CSP; a full-image / desktop-crop toggle is provided.
+- Update checks display inline rather than as stacked global toasts, with Dev and Stable channels and service reconnect refresh.
+- Merged RC-specific UI styles into a single v1.css bundle. Original UI and Samba code remain in the source tree.
+- Stable packaging is based on versioned v* GitHub tags with SHA256 assets. The rolling dev release stays separate.
 
-## 1.0.0-rc.4 — Source candidate
-
-- Switch to selected existing Linux user identity and Linux PAM authentication on Ubuntu/Debian; Windows local development auth preserved.
-- Ordinary Files operations use real Linux permissions; restricted sudo helpers for explicit administration only.
-- Native Samba one-time password prompt at first share, with system-authenticated share management.
-- Auto-generated, update-persistent Kestrel self-signed HTTPS listener on port 6081; legacy HTTP 6080 retained.
-- 1-second shared monitoring samples via SSE; pinned monitor stays visible over open apps.
-- Services relocated into Settings and graphical Update integrated into About.
-- Installer/update/uninstaller aligned to `--user` and persistent Linux configuration; Windows Visual Studio and Ubuntu VM acceptance still pending.
-
-## 1.0.0-rc.3
-
-- Previous source candidate: file manager changes, Samba integration, desktop customization and Settings navigation.
+**No claim of production readiness is made before Windows .NET build and real Ubuntu VM acceptance.** See `V1_ACCEPTANCE.md` for limits and testing.

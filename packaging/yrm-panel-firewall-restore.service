@@ -1,0 +1,13 @@
+[Unit]
+Description=Restore YRM PANEL Docker firewall rules after Docker initialization
+After=docker.service network-online.target
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/yrm-panel-firewall restore
+RemainAfterExit=yes
+
+[Install]
+WantedBy=docker.service

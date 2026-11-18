@@ -115,10 +115,10 @@
           @if (Model.View.Available && Model.View.CanWrite)
           {
             <form method="post" asp-page-handler="Upload" asp-route-path="@currentRoute" enctype="multipart/form-data" class="explorer-upload fm-upload-form">
-              <input name="upload" id="fm-upload-file" type="file" class="fm-visually-hidden" required />
+              <input name="upload" id="fm-upload-file" type="file" class="fm-visually-hidden" multiple required />
               <button type="button" class="button button-secondary" data-file-picker="fm-upload-file">Choose File</button>
               <span id="fm-upload-name" class="fm-upload-name">No file selected</span>
-              <button class="button button-primary" type="submit">Upload</button>
+              <span id="fm-upload-progress" class="fm-upload-progress" aria-live="polite"></span>
             </form>
           }
           @if (Model.View.Available && Model.View.CanEnable && !Model.View.CanWrite)
@@ -148,7 +148,7 @@
                 <td class="explorer-name">
                   @if (item.IsDirectory)
                   { <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
-                  else { <span class="explorer-file-icon">▤</span> <span>@item.Name</span> }
+                  else { <span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" title="Double-click to open">@item.Name</button> }
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared folder">Shared</small> }
                 </td>
                 <td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
@@ -203,6 +203,11 @@
     </div>
   </div>
 </section>
+<dialog id="file-preview-dialog" class="panel-modal fm-preview-dialog" aria-labelledby="file-preview-title">
+  <div class="panel-modal-head"><strong id="file-preview-title">Preview</strong><button type="button" data-close-dialog="file-preview-dialog" aria-label="Close">×</button></div>
+  <div id="file-preview-body" class="fm-preview-body"></div>
+  <div class="panel-modal-actions"><a id="file-preview-download" class="button button-secondary" data-native-download href="#">Download</a><button type="button" class="button button-secondary" data-close-dialog="file-preview-dialog">Close</button></div>
+</dialog>
 <dialog id="new-folder-dialog" class="panel-modal explorer-dialog" aria-labelledby="new-folder-title">
   <div class="panel-modal-head"><strong id="new-folder-title">New Folder</strong><button type="button" data-close-dialog="new-folder-dialog" aria-label="Close">×</button></div>
   <form method="post" asp-page-handler="Create" class="explorer-create-form">

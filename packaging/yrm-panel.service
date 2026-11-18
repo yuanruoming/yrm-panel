@@ -20,8 +20,9 @@ PrivateTmp=true
 ProtectSystem=full
 ProtectHome=false
 # Password-verified Samba helpers inherit this service mount namespace.
-# Permit only Samba configuration writes, not a writable /etc.
-ReadWritePaths=/var/lib/yrm-panel /etc/samba
+# The service still runs as an unprivileged Linux UID. Its fixed sudo helpers
+# require /etc write mounts for atomic fstab/UFW/Samba configuration replacements.
+ReadWritePaths=/var/lib/yrm-panel /etc
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true

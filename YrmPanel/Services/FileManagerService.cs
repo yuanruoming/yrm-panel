@@ -120,23 +120,42 @@ public sealed class FileManagerService
         else throw new IOException("Item not found.");
     }
 
-    public async Task UploadAsync(string root, string? relative, IFormFile file, CancellationToken ct)
+    public bool Exists(string root, string? relative, string name)
     {
-        if (file.Length <= 0 || file.Length > 256L * 1024 * 1024)
-            throw new IOException("Upload limit: 256 MiB per file.");
+        ValidateName(name);
+        _ = Resolve(root, relative, true);
+        var target = Resolve(root, Combine(relative, name));
+        return File.Exists(target) || Directory.Exists(target);
+    }
+
+    public async Task UploadAsync(string root, string? relative, IFormFile file,
+        bool replace, CancellationToken ct)
+    {
+        if (file.Length <= 0 || file.Length > 4L * 1024 * 1024 * 1024)
+            throw new IOException("Upload limit: 4 GiB per file.");
         ValidateName(file.FileName);
-        _ = ResolveWritable(root, relative);
+        var parent = ResolveWritable(root, relative);
         var target = Resolve(root, Combine(relative, file.FileName));
-        EnsureAbsent(target);
-        await using var output = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None,
-            1024 * 1024, FileOptions.Asynchronous);
-        try { await file.CopyToAsync(output, ct); }
-        catch
+        if (Directory.Exists(target) || File.Exists(target) && !replace)
+            throw new IOException("A file with that name already exists. Choose Replace or Skip.");
+        if (File.Exists(target) && File.GetAttributes(target).HasFlag(FileAttributes.ReparsePoint))
+            throw new UnauthorizedAccessException("Cannot overwrite a symbolic link.");
+        var temp = Path.Combine(parent, ".yrm-upload-" + Guid.NewGuid().ToString("N"));
+        try
         {
-            await output.DisposeAsync();
-            File.Delete(target);
-            throw;
+            await using (var output = new FileStream(temp, FileMode.CreateNew, FileAccess.Write,
+                FileShare.None, 1024 * 1024, FileOptions.Asynchronous))
+            {
+                await file.CopyToAsync(output, ct);
+                await output.FlushAsync(ct);
+            }
+            if (Directory.Exists(target) || File.Exists(target) && !replace)
+                throw new IOException("A file with that name already exists. Choose Replace or Skip.");
+            if (File.Exists(target) && File.GetAttributes(target).HasFlag(FileAttributes.ReparsePoint))
+                throw new UnauthorizedAccessException("Cannot overwrite a symbolic link.");
+            File.Move(temp, target, replace);
         }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 
     public (FileStream Stream, string Name) OpenDownload(string root, string? relative, string name)

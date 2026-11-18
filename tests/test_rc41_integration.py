@@ -20,7 +20,7 @@ class RC41FileAndUiTests(TestCase):
     def test_samba_writes_available_inside_protected_service(self):
         unit = (ROOT / 'packaging/yrm-panel.service').read_text()
         self.assertIn('ProtectSystem=full', unit)
-        self.assertIn('ReadWritePaths=/var/lib/yrm-panel /etc/samba', unit)
+        self.assertIn('ReadWritePaths=/var/lib/yrm-panel /etc', unit)
 
     def test_settings_model_matches_razor(self):
         view = (ROOT / 'YrmPanel/Pages/Settings.cshtml').read_text()
@@ -49,7 +49,7 @@ class RC41FileAndUiTests(TestCase):
     def test_wallpaper_has_explicit_apply_and_prevent_old_autosubmit(self):
         view = (ROOT / 'YrmPanel/Pages/Settings.cshtml').read_text()
         code = (ROOT / 'YrmPanel/wwwroot/js/rc41-ui.js').read_text()
-        css = (ROOT / 'YrmPanel/wwwroot/css/rc41.css').read_text()
+        css = (ROOT / 'YrmPanel/wwwroot/css/v1.css').read_text()
         self.assertIn('id="wallpaper-apply"', view)
         self.assertIn('event.stopPropagation()', code)
         self.assertIn('field.id === \'wallpaper-select\'', code)
@@ -62,7 +62,7 @@ class RC41FileAndUiTests(TestCase):
         project = (ROOT / 'YrmPanel/YrmPanel.csproj').read_text()
         self.assertIn("localStorage.setItem('yrm-panel:pinned-monitor', '1')", code)
         self.assertIn('src="~/js/rc41-ui.js"', layout)
-        self.assertIn('href="~/css/rc41.css"', layout)
+        self.assertIn('href="~/css/v1.css"', layout)
         self.assertIn('<IncludeSourceRevisionInInformationalVersion>false', project)
         self.assertNotIn('Listening:', (ROOT / 'YrmPanel/Pages/Settings.cshtml').read_text())
 

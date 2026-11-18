@@ -17,8 +17,7 @@
   <title>@title · YRM Panel</title>
   <link rel="stylesheet" asp-append-version="true" href="~/css/panel.css" />
   <link rel="stylesheet" asp-append-version="true" href="~/css/desktop.css" />
-  <link rel="stylesheet" asp-append-version="true" href="~/css/rc4.css" />
-    <link rel="stylesheet" asp-append-version="true" href="~/css/rc41.css" />
+  <link rel="stylesheet" asp-append-version="true" href="~/css/v1.css" />
 </head>
 <body class="os-shell @(isDesktop ? "is-desktop" : "has-window")" data-wallpaper="@wallpaper" data-initial-page="@current" data-initial-title="@title">
   <svg class="icon-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
@@ -125,15 +124,17 @@
   <dialog id="admin-password-dialog" class="panel-modal admin-password-dialog" aria-labelledby="admin-password-title">
     <div class="panel-modal-head"><strong id="admin-password-title">Administrator authorization</strong><button id="admin-password-cancel" type="button" aria-label="Close">×</button></div>
     <p id="admin-password-description">Administrator permission is required.</p>
-    <form id="admin-password-form" method="dialog"><label>Linux password<input id="admin-password-input" type="password" autocomplete="current-password" required /></label>
+    <form id="admin-password-form" method="dialog"><label>Linux password<input id="admin-password-input" type="password" autocomplete="current-password" /></label><small id="admin-password-error" class="v1-admin-error" role="alert"></small>
       <div class="panel-modal-actions"><button id="admin-password-cancel-bottom" type="button" class="button button-secondary">Cancel</button><button type="submit" class="button button-primary">Authorize</button></div>
     </form>
   </dialog>
   <div id="toast-host" class="toast-host" aria-live="polite" aria-atomic="true"></div>
   <script asp-append-version="true" src="~/js/rc41-ui.js" defer></script>
   <script asp-append-version="true" src="~/js/panel.js" defer></script>
+  <script asp-append-version="true" src="~/js/v1-settings.js" defer></script>
   <script asp-append-version="true" src="~/js/rc4-admin.js" defer></script>
   <script asp-append-version="true" src="~/js/rc4-monitor.js" defer></script>
+  <script asp-append-version="true" src="~/js/v1-files.js" defer></script>
   @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

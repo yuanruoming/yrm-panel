@@ -78,6 +78,8 @@ elif ! docker compose version >/dev/null 2>&1; then
 fi
 systemctl enable --now docker
 if ! command -v smbd >/dev/null 2>&1; then apt_install samba; fi
+if ! command -v ufw >/dev/null 2>&1; then apt_install ufw; fi
+if ! command -v lsblk >/dev/null 2>&1; then apt_install util-linux; fi
 systemctl enable --now smbd
 
 # No /data, /backup, mount points or user-data folders are ever created here.
@@ -118,6 +120,7 @@ chmod 0644 /etc/pam.d/yrm-panel
 cat >/etc/yrm-panel/panel.env <<ENV
 YRM_PANEL_DATA_DIR=/var/lib/yrm-panel
 YRM_PANEL_USER=$PANEL_USER
+YRM_PANEL_CHANNEL=$CHANNEL
 Panel__Bind=$BIND
 Panel__HttpPort=$PORT
 Panel__HttpsPort=$HTTPS_PORT
@@ -153,7 +156,15 @@ fi
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 asset="yrm-panel-$platform.tar.gz"
-base="https://github.com/$REPO/releases/download/$CHANNEL"
+release_tag="$CHANNEL"
+if [[ "$CHANNEL" == stable ]]; then
+  release_json=$(curl -fLSs --retry 2 "https://api.github.com/repos/$REPO/releases/latest") || {
+    echo 'No published stable release available.' >&2; exit 1;
+  }
+  release_tag=$(printf '%s' "$release_json" | python3 -c 'import json,sys;print(json.load(sys.stdin)["tag_name"])')
+  [[ "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Invalid stable release tag.' >&2; exit 1; }
+fi
+base="https://github.com/$REPO/releases/download/$release_tag"
 echo "Downloading and verifying YRM Panel $CHANNEL ($platform)..."
 curl -fLSs --retry 3 "$base/$asset" -o "$workdir/$asset"
 curl -fLSs --retry 3 "$base/$asset.sha256" -o "$workdir/$asset.sha256"
@@ -162,7 +173,9 @@ mkdir -p "$workdir/publish"
 tar -xzf "$workdir/$asset" -C "$workdir/publish"
 for path in YrmPanel deployment/yrm-panel.service deployment/yrm-panel-samba.py \
  deployment/yrm-panel-storage.py deployment/yrm-panel-power.sh deployment/yrm-panel-update-trigger.sh \
- deployment/update.sh deployment/uninstall.sh; do
+ deployment/update.sh deployment/uninstall.sh \
+ deployment/yrm-panel-mount.py deployment/yrm-panel-firewall.py \
+ deployment/yrm-panel-firewall-restore.service; do
   [[ -f "$workdir/publish/$path" ]] || { echo "Missing release asset: $path" >&2; exit 1; }
 done
 
@@ -170,12 +183,14 @@ install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-samba.py"
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-storage.py" /usr/local/libexec/yrm-panel-storage
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-power.sh" /usr/local/libexec/yrm-panel-power
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-update-trigger.sh" /usr/local/libexec/yrm-panel-update-trigger
+install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-mount.py" /usr/local/libexec/yrm-panel-mount
+install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-firewall.py" /usr/local/libexec/yrm-panel-firewall
 
 # Mutations require the selected account's Linux password. Only an exact Samba
 # status action is available without a password; all inputs are validated by helper.
 cat >/etc/sudoers.d/yrm-panel <<SUDO
-$PANEL_USER ALL=(root) PASSWD: /usr/local/libexec/yrm-panel-storage *, /usr/local/libexec/yrm-panel-samba *, /usr/local/libexec/yrm-panel-power *, /usr/local/libexec/yrm-panel-update-trigger start
-$PANEL_USER ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba list
+$PANEL_USER ALL=(root) PASSWD: /usr/local/libexec/yrm-panel-storage *, /usr/local/libexec/yrm-panel-samba *, /usr/local/libexec/yrm-panel-power *, /usr/local/libexec/yrm-panel-update-trigger start, /usr/local/libexec/yrm-panel-mount *, /usr/local/libexec/yrm-panel-firewall apply
+$PANEL_USER ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba list, /usr/local/libexec/yrm-panel-firewall list
 SUDO
 chmod 0440 /etc/sudoers.d/yrm-panel
 visudo -cf /etc/sudoers.d/yrm-panel >/dev/null
@@ -199,10 +214,13 @@ fi
 sed -e "s/@PANEL_USER@/$PANEL_USER/g" -e "s/@PANEL_GROUP@/$PANEL_GROUP/g" \
   "$workdir/publish/deployment/yrm-panel.service" >/etc/systemd/system/yrm-panel.service
 chmod 0644 /etc/systemd/system/yrm-panel.service
+install -o root -g root -m 0644 "$workdir/publish/deployment/yrm-panel-firewall-restore.service" \
+  /etc/systemd/system/yrm-panel-firewall-restore.service
 install -o root -g root -m 0750 "$workdir/publish/deployment/update.sh" /usr/local/sbin/yrm-panel-update
 install -o root -g root -m 0750 "$workdir/publish/deployment/uninstall.sh" /usr/local/sbin/yrm-panel-uninstall
 systemctl daemon-reload
 systemctl enable yrm-panel.service >/dev/null
+systemctl enable yrm-panel-firewall-restore.service >/dev/null
 if ! systemctl restart yrm-panel.service || ! (sleep 2; systemctl is-active --quiet yrm-panel.service); then
   echo 'YRM Panel failed to start: journalctl -u yrm-panel -n 80' >&2
   systemctl stop yrm-panel.service 2>/dev/null || true

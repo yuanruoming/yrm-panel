@@ -8,12 +8,15 @@ if (($#)); then
   PURGE=1
 fi
 systemctl disable --now yrm-panel.service 2>/dev/null || true
+systemctl disable --now yrm-panel-firewall-restore.service >/dev/null 2>&1 || true
+rm -f /etc/systemd/system/yrm-panel-firewall-restore.service
 rm -f /etc/systemd/system/yrm-panel.service
 systemctl daemon-reload
 rm -rf /opt/yrm-panel /opt/yrm-panel.previous
 rm -f /usr/local/sbin/yrm-panel-update /usr/local/sbin/yrm-panel-uninstall
 rm -f /usr/local/libexec/yrm-panel-samba /usr/local/libexec/yrm-panel-storage \
-  /usr/local/libexec/yrm-panel-power /usr/local/libexec/yrm-panel-update-trigger
+  /usr/local/libexec/yrm-panel-power /usr/local/libexec/yrm-panel-update-trigger \
+  /usr/local/libexec/yrm-panel-mount /usr/local/libexec/yrm-panel-firewall
 rm -f /etc/sudoers.d/yrm-panel /etc/sudoers.d/yrm-panel-samba \
   /etc/sudoers.d/yrm-panel-storage /etc/sudoers.d/yrm-panel-power
 rm -f /etc/pam.d/yrm-panel
