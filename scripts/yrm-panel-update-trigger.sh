@@ -7,13 +7,18 @@ if systemctl list-units --no-legend 'yrm-panel-update-*' | grep -q 'running'; th
   printf '{"ok":false,"message":"An update is already running."}\n'; exit 1
 fi
 status=/var/lib/yrm-panel/update-status.json
-printf '{"state":"running","message":"Updating from GitHub Release."}\n' > "$status"
-chmod 0644 "$status"
+temp_status=$(mktemp /var/lib/yrm-panel/.update-progress.XXXXXX)
+printf '{"state":"running","phase":"Checking","percent":null,"message":"Checking the release channel."}\n' > "$temp_status"
+chmod 0644 "$temp_status"
+mv -f -- "$temp_status" "$status"
 unit="yrm-panel-update-$(date +%s)"
 if systemd-run --quiet --collect --unit="$unit" --property=Type=exec /usr/local/sbin/yrm-panel-update; then
   printf '{"ok":true,"message":"Update started. The panel may briefly disconnect."}\n'
 else
-  printf '{"state":"failed","message":"Could not start updater."}\n' > "$status"
+  temp_status=$(mktemp /var/lib/yrm-panel/.update-progress.XXXXXX)
+  printf '{"state":"failed","phase":"Failed","percent":null,"message":"Could not start updater."}\n' > "$temp_status"
+  chmod 0644 "$temp_status"
+  mv -f -- "$temp_status" "$status"
   printf '{"ok":false,"message":"Could not start updater."}\n'
   exit 1
 fi

@@ -5,7 +5,8 @@ namespace YrmPanel.Services;
 
 public sealed record UpdateAvailability(bool Available, bool HasUpdate, string Message,
     string CurrentHash, string LatestHash, string Channel, string Tag = "dev");
-public sealed record UpdateProgress(string State, string Message, string? At = null);
+public sealed record UpdateProgress(string State, string Message, string? At = null,
+    string? Phase = null, int? Percent = null);
 
 /// <summary>Stable uses GitHub latest tagged release; Dev uses the rolling dev build.</summary>
 public sealed class UpdateService

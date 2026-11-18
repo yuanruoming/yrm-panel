@@ -48,3 +48,53 @@
 @media(max-width:620px){.yrm-cert-details>div{grid-template-columns:1fr;gap:4px}.yrm-update-overview{grid-template-columns:1fr}}
 
 .yrm-topmark{display:block;width:27px;height:27px;object-fit:contain;margin-right:8px;flex:none}
+
+/* Final usability pass — maximize leaves only the persistent taskbar visible. */
+.workspace-stage:has(>.workspace-window.is-maximized) {padding:74px 0 0!important;max-width:none!important;min-height:100dvh;align-items:stretch!important;}
+.workspace-stage>.workspace-window.is-maximized {width:100%!important;max-width:none!important;height:calc(100dvh - 74px)!important;min-height:0!important;border-radius:0!important;border-left:0;border-right:0;border-bottom:0;box-shadow:none;margin:0!important;}
+@media(max-width:740px){.workspace-stage:has(>.workspace-window.is-maximized){padding-top:70px!important}.workspace-stage>.workspace-window.is-maximized{height:calc(100dvh - 70px)!important}}
+/* Chrome/Edge fill previously inherited a browser-yellow background. */
+.login-form-v2 input:-webkit-autofill,.login-form-v2 input:-webkit-autofill:hover,
+.login-form-v2 input:-webkit-autofill:focus{-webkit-text-fill-color:#f3f8ff!important;-webkit-box-shadow:0 0 0 1000px #111d2c inset!important;box-shadow:0 0 0 1000px #111d2c inset!important;caret-color:#f3f8ff;transition:background-color 600000s 0s;}
+
+/* Media modal sizes itself to intrinsic aspect ratio instead of 920px for portrait. */
+.fm-preview-dialog.is-video-preview{box-sizing:border-box!important;width:min(var(--yrm-video-dialog-width,640px),calc(100vw - 24px))!important;max-width:calc(100vw - 24px)!important;}
+.fm-preview-dialog.is-video-preview .fm-preview-body{padding:0;min-height:0;overflow:visible;max-height:calc(100dvh - 185px);}
+.yrm-player{width:100%;min-width:0;overflow:hidden;background:#080e17;}
+.yrm-player-screen{position:relative;background:#060b12;display:flex;align-items:center;justify-content:center;max-height:calc(100dvh - 275px);}
+.yrm-player-screen video{display:block;width:100%;height:auto;max-height:calc(100dvh - 275px);object-fit:contain;cursor:pointer;}
+.yrm-player-overlay-play{position:absolute;inset:50% auto auto 50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;border:1px solid #ffffff59;color:white;background:#1c2e45bb;font-size:26px;cursor:pointer;}
+.yrm-player-overlay-play[hidden]{display:none!important;}
+.yrm-player-controls{background:#152232;padding:10px 13px;display:grid;gap:8px;}
+.yrm-player-seek{width:100%;margin:0;appearance:none;height:5px;border-radius:10px;cursor:pointer;background:linear-gradient(to right,#76b9ea var(--yrm-played,0%),#4a5b6e var(--yrm-played,0%));accent-color:#75b7e7;}
+.yrm-player-seek::-webkit-slider-thumb,.yrm-player-volume::-webkit-slider-thumb{appearance:none;width:12px;height:12px;border-radius:50%;background:#bdddf3;border:2px solid #315f80;}
+.yrm-player-row{display:flex;align-items:center;gap:12px;min-width:0;}
+.yrm-player-row button{border:0;background:transparent;color:#eaf4fc;cursor:pointer;font-size:17px;padding:4px;min-width:26px;}
+.yrm-player-time{font-variant-numeric:tabular-nums;color:#c4d5e4;font-size:11px;white-space:nowrap;flex:1;}
+.yrm-player-volume{width:60px;accent-color:#75b7e7;cursor:pointer;}
+.yrm-player-speed{color:#d7e8f4;border:1px solid #516379;background:#1d3045;border-radius:5px;font-size:11px;max-width:62px;}
+.yrm-player:fullscreen{display:flex;flex-direction:column;justify-content:center;background:#070a10;}
+.yrm-player:fullscreen .yrm-player-screen,.yrm-player:fullscreen video{max-height:calc(100dvh - 85px);}
+@media(max-width:480px){.yrm-player-row{gap:7px}.yrm-player-volume{width:44px}}
+
+.yrm-update-tracker{border:1px solid rgba(117,166,207,.29);border-radius:11px;padding:13px 15px;margin-top:13px;background:rgba(18,37,52,.65);display:grid;gap:9px;}
+.yrm-update-tracker-head{display:flex;align-items:center;justify-content:space-between;gap:15px;}
+.yrm-update-tracker-head strong{font-size:13px;color:#e2f1fc;}
+.yrm-update-tracker-head span{font-size:12px;color:#8cdbbb;font-variant-numeric:tabular-nums;}
+.yrm-update-bar{height:7px;border-radius:999px;background:#334558;overflow:hidden;}
+.yrm-update-bar[hidden]{display:none!important;}
+.yrm-update-bar>span{display:block;height:100%;width:0;background:#74b7e6;transition:width .24s ease;}
+.yrm-update-bar.is-indeterminate>span{width:30%!important;animation:yrm-indeterminate 1.5s ease-in-out infinite;}
+@keyframes yrm-indeterminate{0%{transform:translateX(-110%)}100%{transform:translateX(440%)}}
+.yrm-update-tracker p{margin:0!important;}
+.yrm-update-tracker #yrm-update-reload{justify-self:start;}
+.yrm-update-tracker #yrm-update-reload[hidden]{display:none!important;}
+@media(prefers-reduced-motion:reduce){.yrm-update-bar.is-indeterminate>span{animation:none;opacity:.65;}}
+/* Completely separate confirmation area for destructive disk initialization. */
+.yrm-disk-initialize{margin-top:12px;padding:10px;border:1px solid rgba(240,174,113,.33);border-radius:9px;}
+.yrm-disk-initialize>summary{cursor:pointer;max-width:max-content;list-style:none;}
+.yrm-disk-initialize>summary::-webkit-details-marker{display:none;}
+.yrm-disk-initialize form{padding:12px 2px 2px;}
+.yrm-disk-initialize input{max-width:340px;}
+.yrm-disk-initialize .button-danger{max-width:max-content;background:#864947;border-color:#ba6461;color:#fff;}
+.yrm-disk-initialize .yrm-storage-warning{color:#f1c89e;}

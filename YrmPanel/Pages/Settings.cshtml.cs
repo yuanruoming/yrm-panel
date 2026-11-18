@@ -137,6 +137,15 @@ public sealed class SettingsModel : PageModel
         return RedirectToPage(new { tab = "storage" });
     }
 
+    public async Task<IActionResult> OnPostInitializeDiskAsync(string diskPath, string confirmation,
+        string? adminPassword)
+    {
+        // The privileged helper re-examines partition tables, signatures and mounts.
+        var result = await _devices.InitializeAsync(diskPath, confirmation, adminPassword, HttpContext.RequestAborted);
+        Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        return RedirectToPage(new { tab = "storage" });
+    }
+
     public async Task<IActionResult> OnPostFirewallAsync(string? rulesJson, string? adminPassword)
     {
         var result = await _firewall.ApplyAsync(rulesJson,adminPassword,HttpContext.RequestAborted);

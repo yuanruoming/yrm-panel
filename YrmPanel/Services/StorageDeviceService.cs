@@ -88,4 +88,12 @@ public sealed class StorageDeviceService
         _privileged.RunAsync("mount", "mount", [uuid, mountPath, automatic ? "auto" : "manual"], password, null, ct);
     public Task<PrivilegedResult> UnmountAsync(string mountPath, string? password,
         CancellationToken ct) => _privileged.RunAsync("mount", "unmount", [mountPath], password, null, ct);
+
+    public Task<PrivilegedResult> InitializeAsync(string diskPath, string confirmation,
+        string? password, CancellationToken ct)
+    {
+        if (confirmation != "ERASE " + diskPath)
+            return Task.FromResult(new PrivilegedResult(false, "Type ERASE and the exact device path to confirm."));
+        return _privileged.RunAsync("mount", "initialize", [diskPath, confirmation], password, null, ct);
+    }
 }

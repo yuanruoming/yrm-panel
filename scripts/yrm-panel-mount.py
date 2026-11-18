@@ -5,6 +5,9 @@ No formatting, partition modification, arbitrary mount options, recursive chmod,
 or mounting over a non-empty directory. Managed fstab entries carry an explicit marker.
 """
 import json
+import stat
+import time
+import shutil
 import os
 import pathlib
 import re
@@ -162,6 +165,96 @@ def unmount(dest):
     emit(True, 'Disk unmounted. Existing files and the mount directory were preserved.')
 
 
+# Never run any partitioning command against an already used device. This code
+# intentionally supports only a blank whole disk; existing partitions or
+# signatures cannot be modified through the Panel.
+DISK_NAME = re.compile(r'^/dev/(?:sd[a-z]+|vd[a-z]+|xvd[a-z]+|nvme[0-9]+n[0-9]+)$')
+
+
+def identify_blank_disk(device):
+    if not DISK_NAME.fullmatch(device) or os.path.realpath(device) != device:
+        raise ValueError('Only an unambiguous whole-disk /dev path is supported.')
+    if not pathlib.Path(device).exists() or not stat.S_ISBLK(os.stat(device).st_mode):
+        raise ValueError('Selected disk is not a block device.')
+    output = run(['/usr/bin/lsblk', '-J', '-p', '-o',
+                  'PATH,TYPE,FSTYPE,UUID,MOUNTPOINTS,RO,RM,PTTYPE'])
+    devices = json.loads(output).get('blockdevices', [])
+    def walk(items):
+        for entry in items:
+            if entry.get('path') == device:
+                return entry
+            found = walk(entry.get('children') or [])
+            if found is not None:
+                return found
+        return None
+    item = walk(devices)
+    if item is None or item.get('type') != 'disk':
+        raise ValueError('The requested device is not a whole disk.')
+    if item.get('ro') or item.get('rm') or item.get('fstype') or item.get('uuid') or item.get('pttype'):
+        raise ValueError('Disk is removable, read-only, partitioned or already contains a filesystem.')
+    if item.get('children') or any(item.get('mountpoints') or []):
+        raise ValueError('Disk contains partitions or is mounted. Refusing initialization.')
+    wipefs = shutil.which('wipefs')
+    blkid = shutil.which('blkid')
+    if not wipefs or not blkid or not shutil.which('parted') or not shutil.which('mkfs.ext4'):
+        raise ValueError('Required disk tools (wipefs, blkid, parted, mkfs.ext4) are missing.')
+    probe = subprocess.run([wipefs, '--no-act', '--noheadings', '--output', 'TYPE', device],
+                           capture_output=True, text=True, timeout=12)
+    if probe.returncode != 0 or probe.stdout.strip():
+        raise ValueError('Existing disk signature detected or signature inspection failed.')
+    secondary = subprocess.run([blkid, '-p', device], capture_output=True, timeout=12)
+    if secondary.returncode != 2:
+        raise ValueError('Disk identification is not conclusively blank.')
+    return item
+
+
+def initialize_blank_disk(device, confirmation):
+    # The client must type the exact device path, AND authenticate with sudo.
+    if confirmation != 'ERASE ' + device:
+        raise ValueError('Type ERASE followed by the exact disk path to confirm.')
+    identify_blank_disk(device)
+    # One final read-only check just before any irreversible operation.
+    identify_blank_disk(device)
+    parted = shutil.which('parted')
+    mkfs = shutil.which('mkfs.ext4')
+    if not parted or not mkfs:
+        raise ValueError('Disk initialization utilities are missing.')
+    run([parted, '-s', '--align', 'optimal', device, 'mklabel', 'gpt',
+         'mkpart', 'primary', 'ext4', '1MiB', '100%'], timeout=60)
+    udevadm = shutil.which('udevadm')
+    if udevadm:
+        subprocess.run([udevadm, 'settle', '--timeout=12'], capture_output=True, timeout=15)
+    partition = None
+    for attempt in range(12):
+        output = run(['/usr/bin/lsblk', '-J', '-p', '-o',
+                      'PATH,TYPE,FSTYPE,UUID,MOUNTPOINTS,RO,RM,PTTYPE'])
+        def search(entries):
+            for row in entries:
+                if row.get('path') == device:
+                    return row
+                child = search(row.get('children') or [])
+                if child is not None:
+                    return child
+            return None
+        disk = search(json.loads(output).get('blockdevices', []))
+        children = (disk or {}).get('children') or []
+        if len(children) == 1 and children[0].get('type') == 'part':
+            candidate = children[0]
+            path = candidate.get('path')
+            if (isinstance(path, str) and path.startswith(device) and
+                    not candidate.get('fstype') and not candidate.get('uuid') and
+                    not any(candidate.get('mountpoints') or []) and
+                    stat.S_ISBLK(os.stat(path).st_mode)):
+                partition = path
+                break
+            raise ValueError('New partition does not match the expected empty state; not formatting.')
+        time.sleep(1)
+    if partition is None:
+        raise ValueError('Partition table created, but partition was not detected. No filesystem was written.')
+    run([mkfs, '-F', partition], timeout=120)
+    emit(True, f'Initialized {device} as ext4. Mount its new filesystem in Storage next.')
+
+
 if __name__ == '__main__':
     try:
         if os.geteuid() != 0: raise ValueError('Root helper is required.')
@@ -169,6 +262,8 @@ if __name__ == '__main__':
             create_mount(sys.argv[2], sys.argv[3], sys.argv[4] == 'auto')
         elif len(sys.argv) == 3 and sys.argv[1] == 'unmount':
             unmount(sys.argv[2])
+        elif len(sys.argv) == 4 and sys.argv[1] == 'initialize':
+            initialize_blank_disk(sys.argv[2], sys.argv[3])
         else: raise ValueError('Unsupported mount operation.')
     except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError) as error:
         emit(False, str(error))

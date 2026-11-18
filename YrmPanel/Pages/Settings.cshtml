@@ -99,11 +99,28 @@
               </div>
             }
             @if (!Model.StorageDevices.Any(x => x.ParentPath == disk.Path) && disk.FileSystem.Length == 0)
-            { <p class="muted yrm-storage-warning">This disk has no identified partitions or filesystem. It cannot be mounted yet.</p> }
+            {
+              <p class="muted yrm-storage-warning">This disk has no identified partitions or filesystem. Mount is not available yet.</p>
+              @if (!disk.ReadOnly && !disk.Removable && disk.MountPoint.Length == 0 && disk.Uuid.Length == 0)
+              {
+                <details class="yrm-disk-initialize">
+                  <summary class="button button-secondary">Initialize Empty Disk</summary>
+                  <form method="post" asp-page-handler="InitializeDisk" asp-route-tab="storage"
+                        data-requires-admin="Permanently erase selected blank disk" data-confirm="This will erase the selected disk and cannot be undone. Continue?">
+                    <input type="hidden" name="diskPath" value="@disk.Path" />
+                    <p class="yrm-storage-warning"><strong>Destructive operation:</strong> Creates a GPT partition and formats it as ext4. All data on <code>@disk.Path</code> will be lost. No existing partitions or signatures are permitted.</p>
+                    <label>Confirm exactly: <code>ERASE @disk.Path</code>
+                      <input name="confirmation" aria-label="Confirm disk erase" required autocomplete="off" placeholder="ERASE @disk.Path" pattern="ERASE @disk.Path" />
+                    </label>
+                    <button type="submit" class="button button-danger">Erase &amp; Initialize</button>
+                  </form>
+                </details>
+              }
+            }
           </article>
         }
         @if (!Model.StorageDevices.Any(x => x.Type == "disk")) { <p class="muted">No physical disks reported by lsblk.</p> }
-        <p class="muted yrm-storage-note">Mount requires an existing filesystem and an empty destination folder. Nothing here formats, partitions or hides existing files.</p>
+        <p class="muted yrm-storage-note">Mount requires an existing filesystem and an empty destination folder. Initialization is a separate destructive operation for verified blank disks only. It never runs automatically.</p>
       </section>
     }
     else if (activeTab == "network")
@@ -317,7 +334,13 @@
           <div><small>Installed version</small><strong>@info.PanelVersion.Split('+')[0]</strong></div>
           <div><small>Latest release</small><strong>@(Model.LastUpdateCheck?.Tag ?? "Not checked")</strong></div>
         </div>
-        <div class="v1-update-status" id="v1-update-progress" role="status">@Model.UpdateStatus.State — @Model.UpdateStatus.Message</div>
+        <div class="yrm-update-tracker" id="v1-update-progress" role="status" aria-live="polite">
+          <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@((Model.UpdateStatus.Phase ?? Model.UpdateStatus.State) switch { "completed" => "Completed", "failed" => "Failed", "running" => "Working", "idle" => "Idle", var s => s })</strong><span id="yrm-update-percent">@(Model.UpdateStatus.Percent is int p ? $"{p}%" : "")</span></div>
+          <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress"><span id="yrm-update-bar-fill"></span></div>
+          <p id="yrm-update-message" class="muted">@Model.UpdateStatus.Message</p>
+          <p id="yrm-update-time" class="yrm-update-time muted"></p>
+          <button type="button" id="yrm-update-reload" class="button button-primary" hidden>Reload Panel</button>
+        </div>
         @if (Model.LastUpdateCheck is { } releaseCheck)
         {
           <p class="muted">@releaseCheck.Message</p>

@@ -11,6 +11,18 @@
   };
   const put = (id, value) => { const el = get(id); if (el) el.textContent = String(value); };
   const pct = n => Math.max(0, Math.min(100, Number(n) || 0));
+  // The legacy 5-second metrics poll still updates the same DOM node.
+  // Guard the single uptime label so its shorter minutes-only formatting
+  // cannot overwrite the newer seconds-accurate monitor display.
+  let latestUptimeText='';
+  const uptimeElement=get('uptime');
+  if (uptimeElement && typeof MutationObserver==='function') {
+    const observer=new MutationObserver(()=>{
+      if (latestUptimeText && uptimeElement.textContent!==latestUptimeText)
+        uptimeElement.textContent=latestUptimeText;
+    });
+    observer.observe(uptimeElement,{childList:true,characterData:true,subtree:true});
+  }
   function apply(s) {
     if (!s || document.hidden) return;
     const cpu = pct(s.cpuPercent), ram = pct(s.memoryPercent);
@@ -28,7 +40,8 @@
     for (const id of ["ram-meter", "pinned-ram-meter"]) { const el = get(id); if (el) el.style.width = `${ram}%`; }
     const uptime = Math.max(0, Math.floor(Number(s.uptimeSeconds) || 0));
     const d = Math.floor(uptime / 86400), h = Math.floor(uptime % 86400 / 3600), m = Math.floor(uptime % 3600 / 60), sec = uptime % 60;
-    put("uptime", `Uptime · ${d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : m ? `${m}m ${sec}s` : `${sec}s`}`);
+    latestUptimeText=`Uptime · ${d ? `${d}d ${h}h ${m}m ${sec}s` : h ? `${h}h ${m}m ${sec}s` : `${m}m ${sec}s`}`;
+    put("uptime",latestUptimeText);
   }
   const pinned = get("pinned-monitor");
   if (pinned) {

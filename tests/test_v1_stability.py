@@ -28,7 +28,7 @@ class LoginTests(unittest.TestCase):
         shell=source('YrmPanel/Pages/Shared/_Layout.cshtml')
         login=source('YrmPanel/Pages/Account/Login.cshtml')
         self.assertIn('rel="preload" as="image"',shell)
-        self.assertIn('yrm-panel-mark.png',shell)
+        self.assertNotIn('yrm-topmark',shell)  # Topbar starts with Launcher / Home; logo remains in login and About.
         self.assertIn('yrm-panel-mark.png',login)
         self.assertIn('favicon.ico',shell)
         self.assertIn('favicon.ico',login)

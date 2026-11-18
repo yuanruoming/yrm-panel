@@ -60,6 +60,10 @@ for program in curl ca-certificates python3 sudo tar openssl pamtester setfacl; 
     case "$program" in setfacl) apt_install acl;; *) apt_install "$program";; esac
   fi
 done
+# Storage initialization requires standard, packaged Linux tools.
+# They are never invoked without a separate typed confirmation and sudo authorization.
+if ! command -v parted >/dev/null 2>&1; then apt_install parted; fi
+if ! command -v mkfs.ext4 >/dev/null 2>&1; then apt_install e2fsprogs; fi
 if ! command -v docker >/dev/null 2>&1; then
   echo 'Docker missing. Installing official Docker Engine and Compose Plugin.'
   apt_install ca-certificates curl
@@ -153,6 +157,19 @@ if getent group docker >/dev/null 2>&1; then
   fi
 fi
 
+# The updater may pass a fixed status-file path. Ordinary installs do not write UI progress.
+progress_file="${YRM_PANEL_UPDATE_STATUS_FILE:-}"
+if [[ "$progress_file" != '/var/lib/yrm-panel/update-status.json' ]]; then progress_file=''; fi
+progress() {
+  [[ -n "$progress_file" ]] || return 0
+  local phase="$1" message="$2" percentage="${3:-null}"
+  local temp_status
+  temp_status=$(mktemp /var/lib/yrm-panel/.update-progress.XXXXXX)
+  printf '{"state":"running","phase":"%s","message":"%s","percent":%s,"at":"%s"}\n' \
+      "$phase" "$message" "$percentage" "$(date -u +%FT%TZ)" > "$temp_status"
+  chmod 0644 "$temp_status"
+  mv -f -- "$temp_status" "$progress_file"
+}
 workdir=$(mktemp -d)
 trap 'rm -rf "$workdir"' EXIT
 asset="yrm-panel-$platform.tar.gz"
@@ -166,11 +183,50 @@ if [[ "$CHANNEL" == stable ]]; then
 fi
 base="https://github.com/$REPO/releases/download/$release_tag"
 echo "Downloading and verifying YRM Panel $CHANNEL ($platform)..."
-curl -fLSs --retry 3 "$base/$asset" -o "$workdir/$asset"
+progress Checking 'Release identified; preparing download.'
+# The only displayed transfer percentage is actual received bytes / HTTP Content-Length.
+# If the server provides no reliable length, the download stays indeterminate.
+expected=0
+if [[ -n "$progress_file" ]]; then
+  expected=$(curl -fLIs --connect-timeout 10 --max-time 20 "$base/$asset" 2>/dev/null \
+    | tr -d '\r' | awk 'tolower($1)=="content-length:" && $2 ~ /^[0-9]+$/ {size=$2} END {print size+0}') || expected=0
+  [[ "$expected" =~ ^[0-9]+$ ]] || expected=0
+  if ((expected == 0)); then
+    # GitHub's release API includes the exact asset byte size when CDN HEAD
+    # responses are chunked or omit Content-Length.
+    release_metadata=$(curl -fLSs --connect-timeout 10 --max-time 15 \
+      "https://api.github.com/repos/$REPO/releases/tags/$release_tag" 2>/dev/null || true)
+    if [[ -n "$release_metadata" ]]; then
+      expected=$(printf '%s' "$release_metadata" | python3 -c \
+        'import json,sys; d=json.load(sys.stdin); n=sys.argv[1]; print(next((a.get("size",0) for a in d.get("assets",[]) if a.get("name")==n),0))' \
+        "$asset" 2>/dev/null || printf 0)
+    fi
+    [[ "$expected" =~ ^[0-9]+$ ]] || expected=0
+  fi
+fi
+progress Downloading 'Downloading the selected release.'
+if [[ -n "$progress_file" ]]; then
+  curl -fLSs --retry 3 --connect-timeout 15 "$base/$asset" -o "$workdir/$asset" &
+  download_pid=$!
+  while kill -0 "$download_pid" 2>/dev/null; do
+    if ((expected>0)); then
+      received=$(stat -c %s "$workdir/$asset" 2>/dev/null || printf 0)
+      pct=$((received*100/expected))
+      if ((pct>99)); then pct=99; fi
+      progress Downloading 'Downloading the selected release.' "$pct"
+    fi
+    sleep 1
+  done
+  wait "$download_pid"
+else
+  curl -fLSs --retry 3 "$base/$asset" -o "$workdir/$asset"
+fi
+progress Verifying 'Verifying release SHA256 and extracting files.'
 curl -fLSs --retry 3 "$base/$asset.sha256" -o "$workdir/$asset.sha256"
 (cd "$workdir" && sha256sum -c "$asset.sha256")
 mkdir -p "$workdir/publish"
 tar -xzf "$workdir/$asset" -C "$workdir/publish"
+progress Installing 'Deploying and configuring the verified release.' 
 for path in YrmPanel deployment/yrm-panel.service deployment/yrm-panel-samba.py \
  deployment/yrm-panel-storage.py deployment/yrm-panel-power.sh deployment/yrm-panel-update-trigger.sh \
  deployment/update.sh deployment/uninstall.sh \
@@ -218,6 +274,7 @@ install -o root -g root -m 0644 "$workdir/publish/deployment/yrm-panel-firewall-
   /etc/systemd/system/yrm-panel-firewall-restore.service
 install -o root -g root -m 0750 "$workdir/publish/deployment/update.sh" /usr/local/sbin/yrm-panel-update
 install -o root -g root -m 0750 "$workdir/publish/deployment/uninstall.sh" /usr/local/sbin/yrm-panel-uninstall
+progress Restarting 'Restarting YRM PANEL service and checking health.'
 systemctl daemon-reload
 systemctl enable yrm-panel.service >/dev/null
 systemctl enable yrm-panel-firewall-restore.service >/dev/null

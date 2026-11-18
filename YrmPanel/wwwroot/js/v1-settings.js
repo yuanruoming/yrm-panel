@@ -57,29 +57,70 @@
     const out=$('v1-fw-json');if(out)out.value=JSON.stringify(draft);
   },true);
 
-  let updaterStarted=false, lastReload='';
+  // The server reports real download bytes when HTTP provides a length.
+  // Installation phases have no fabricated percentage, and completing requires
+  // one explicit reload so users can read the result before the page resets.
+  const updatePendingKey='yrm-panel:update-pending';
+  const ucfirst=value=>value ? value[0].toUpperCase()+value.slice(1).toLowerCase() : 'Idle';
+  const updateTracker=()=>document.getElementById('v1-update-progress');
+  function renderUpdate(p) {
+    if (!updateTracker()) return;
+    const state=String(p?.state||'idle').toLowerCase();
+    const phase=p?.phase || state;
+    const complete=state==='completed', failed=state==='failed';
+    const active=state==='running';
+    const percentage=Number.isInteger(p?.percent) && p.percent>=0 && p.percent<=100 ? p.percent : null;
+    const bar=$('yrm-update-bar'),fill=$('yrm-update-bar-fill'),text=$('yrm-update-percent');
+    const phaseEl=$('yrm-update-phase'),msg=$('yrm-update-message'),stamp=$('yrm-update-time'),reload=$('yrm-update-reload');
+    if (phaseEl) phaseEl.textContent=ucfirst(phase);
+    if (msg) msg.textContent=p?.message||'';
+    if (stamp) {
+      const date=p?.at ? new Date(p.at) : null;
+      stamp.textContent=date && !Number.isNaN(date.getTime()) && (complete || failed)
+        ? `Last update: ${date.toLocaleString()}` : '';
+    }
+    if (text) text.textContent=complete ? '100%' : percentage!==null && active ? `${percentage}% of download` : '';
+    if (bar) {
+      bar.hidden=!(active||complete);
+      bar.classList.toggle('is-indeterminate',active && percentage===null);
+    }
+    if (fill) fill.style.width=(complete ? 100 : percentage??0)+'%';
+    if (reload) {
+      let pending=false;
+      try { pending=sessionStorage.getItem(updatePendingKey)==='1'; } catch {}
+      reload.hidden=!(complete&&pending);
+    }
+  }
+  let pendingPoll=false;
   async function pollUpdate() {
-    const host=$('v1-update-progress'); if (!host) return;
+    if (!updateTracker() || pendingPoll) return;
+    pendingPoll=true;
     try {
-      const result=await fetch('/api/update/status',{credentials:'same-origin',cache:'no-store'});
-      if (!result.ok) return;
-      const data=await result.json();
-      const state=data.progress?.state||'idle';
-      host.textContent=`${state}: ${data.progress?.message||''}`;
-      if (state==='running') updaterStarted=true;
-      if (state==='completed' && updaterStarted) {
-        const key=`yrm-v1-updated-${data.version}-${data.progress?.at||''}`;
-        if (lastReload!==key && sessionStorage.getItem(key)!=='1') {
-          lastReload=key;sessionStorage.setItem(key,'1');location.reload();
-        }
+      const response=await fetch('/api/update/status',{credentials:'same-origin',cache:'no-store'});
+      if (!response.ok) return;
+      const data=await response.json();
+      const state=(data.progress?.state||'').toLowerCase();
+      if (state==='running') {
+        try {if (sessionStorage.getItem(updatePendingKey)==='starting') sessionStorage.setItem(updatePendingKey,'1')} catch {}
       }
-    } catch { /* Service restarts during update. Keep polling. */ }
+      renderUpdate(data.progress);
+      if (state==='failed') try {sessionStorage.removeItem(updatePendingKey)} catch {}
+    } catch { // Expected while Kestrel is restarting. Keep polling.
+      const phase=$('yrm-update-phase');if(phase)phase.textContent='Reconnecting';
+    } finally {pendingPoll=false;}
   }
   document.addEventListener('click',e=>{
-    const b=e.target instanceof Element ? e.target.closest('[data-v1-update]') : null;
-    if (b) updaterStarted=true;
+    const target=e.target instanceof Element ? e.target : null;
+    if (target?.closest('[data-v1-update]')) {
+      try {sessionStorage.setItem(updatePendingKey,'starting')} catch {}
+    }
+    if (target?.closest('#yrm-update-reload')) {
+      try {sessionStorage.removeItem(updatePendingKey)} catch {}
+      location.reload();
+    }
   },true);
-  window.setInterval(()=>{if (!document.hidden && $('v1-update-progress'))void pollUpdate();},2000);
+  window.setInterval(()=>{if(!document.hidden && updateTracker())void pollUpdate()},1500);
+  void pollUpdate();
 
   const initializeDraft = () => {
     const draft=$('v1-firewall-rules');
