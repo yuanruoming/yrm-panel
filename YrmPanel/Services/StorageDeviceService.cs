@@ -89,6 +89,14 @@ public sealed class StorageDeviceService
     public Task<PrivilegedResult> UnmountAsync(string mountPath, string? password,
         CancellationToken ct) => _privileged.RunAsync("mount", "unmount", [mountPath], password, null, ct);
 
+    public Task<PrivilegedResult> CompleteAsync(string partitionPath, string confirmation,
+        string? password, CancellationToken ct)
+    {
+        if (confirmation != "FORMAT " + partitionPath)
+            return Task.FromResult(new PrivilegedResult(false, "Type FORMAT and the exact partition path to confirm."));
+        return _privileged.RunAsync("mount", "complete", [partitionPath, confirmation], password, null, ct);
+    }
+
     public Task<PrivilegedResult> InitializeAsync(string diskPath, string confirmation,
         string? password, CancellationToken ct)
     {

@@ -18,9 +18,9 @@
     const row = document.createElement('div'); row.className='v1-firewall-row';
     row.append(field('scope',data.scope||'host',[['host','Host'],['docker','Docker']]));
     row.append(field('action',data.action||'allow',actions.map(x=>[x,x[0].toUpperCase()+x.slice(1)])));
-    row.append(field('port',data.port||'',null,'Port'));
+    row.append(field('port',data.port||'',null,'80,443 or 20-442'));
     row.append(field('protocol',data.protocol||'tcp',[['tcp','TCP'],['udp','UDP']]));
-    row.append(field('source',data.source||'any',null,'any or CIDR'));
+    row.append(field('source',data.source||'any',null,'any · IP · CIDR'));
     const remove = document.createElement('button'); remove.type='button';
     remove.className='mini-button'; remove.textContent='×'; remove.title='Remove rule';
     remove.addEventListener('click',()=>{row.remove(); markDirty();});
@@ -48,9 +48,9 @@
     const draft=[];
     for (const row of root.querySelectorAll('.v1-firewall-row')) {
       const get=name=>row.querySelector(`[data-fw="${name}"]`)?.value||'';
-      const port=Number(get('port'));
-      if (!Number.isInteger(port)||port<1||port>65535) {
-        e.preventDefault(); e.stopImmediatePropagation(); window.alert('Each firewall rule needs a port from 1 to 65535.'); return;
+      const port=get('port').replace(/\s+/g,'');
+      if (!/^\d{1,5}(?:-\d{1,5})?(?:,\d{1,5}(?:-\d{1,5})?)*$/.test(port)) {
+        e.preventDefault(); e.stopImmediatePropagation(); window.alert('Ports: use 80, 80,443, or 20-442.'); return;
       }
       draft.push({scope:get('scope'),action:get('action'),port,protocol:get('protocol'),source:get('source')||'any'});
     }
@@ -67,29 +67,28 @@
     if (!updateTracker()) return;
     const state=String(p?.state||'idle').toLowerCase();
     const phase=p?.phase || state;
+    let pending=false;
+    try { pending=sessionStorage.getItem(updatePendingKey)==='1'; } catch {}
     const complete=state==='completed', failed=state==='failed';
     const active=state==='running';
+    const awaitingReload=complete&&pending;
     const percentage=Number.isInteger(p?.percent) && p.percent>=0 && p.percent<=100 ? p.percent : null;
     const bar=$('yrm-update-bar'),fill=$('yrm-update-bar-fill'),text=$('yrm-update-percent');
     const phaseEl=$('yrm-update-phase'),msg=$('yrm-update-message'),stamp=$('yrm-update-time'),reload=$('yrm-update-reload');
-    if (phaseEl) phaseEl.textContent=ucfirst(phase);
-    if (msg) msg.textContent=p?.message||'';
+    if (phaseEl) phaseEl.textContent=awaitingReload?'Completed':complete?'Up to Date':ucfirst(phase);
+    if (msg) msg.textContent=complete?(awaitingReload?'Update installed successfully. Reload to use the new interface.':'The latest installed build is ready.'):(p?.message||'');
     if (stamp) {
       const date=p?.at ? new Date(p.at) : null;
       stamp.textContent=date && !Number.isNaN(date.getTime()) && (complete || failed)
         ? `Last update: ${date.toLocaleString()}` : '';
     }
-    if (text) text.textContent=complete ? '100%' : percentage!==null && active ? `${percentage}% of download` : '';
+    if (text) text.textContent=awaitingReload?'100%':percentage!==null && active && String(phase).toLowerCase()==='downloading'?`${percentage}%` : '';
     if (bar) {
-      bar.hidden=!(active||complete);
-      bar.classList.toggle('is-indeterminate',active && percentage===null);
+      bar.hidden=!(active||awaitingReload);
+      bar.classList.toggle('is-indeterminate',active && (percentage===null || String(phase).toLowerCase()!=='downloading'));
     }
-    if (fill) fill.style.width=(complete ? 100 : percentage??0)+'%';
-    if (reload) {
-      let pending=false;
-      try { pending=sessionStorage.getItem(updatePendingKey)==='1'; } catch {}
-      reload.hidden=!(complete&&pending);
-    }
+    if (fill) fill.style.width=(awaitingReload ? 100 : active && percentage!==null && String(phase).toLowerCase()==='downloading' ? percentage : 0)+'%';
+    if (reload) reload.hidden=!awaitingReload;
   }
   let pendingPoll=false;
   async function pollUpdate() {

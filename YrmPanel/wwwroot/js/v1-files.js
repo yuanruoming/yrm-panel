@@ -43,7 +43,13 @@
     seek.className='yrm-player-seek';seek.setAttribute('aria-label','Seek playback position');
     const play=document.createElement('button');play.type='button';play.textContent='▶';play.setAttribute('aria-label','Play');
     const time=document.createElement('span');time.className='yrm-player-time';time.textContent='00:00 / 00:00';
-    const volumeLabel=document.createElement('span');volumeLabel.textContent='◖';volumeLabel.setAttribute('aria-hidden','true');
+    const volumeLabel=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    volumeLabel.setAttribute('viewBox','0 0 24 24');volumeLabel.setAttribute('width','18');volumeLabel.setAttribute('height','18');
+    volumeLabel.setAttribute('fill','none');volumeLabel.setAttribute('stroke','currentColor');volumeLabel.setAttribute('stroke-width','1.8');
+    volumeLabel.setAttribute('stroke-linecap','round');volumeLabel.setAttribute('aria-hidden','true');
+    for (const d of ['M11 5 6 9H3v6h3l5 4V5Z','M15 9a5 5 0 0 1 0 6','M18 6a9 9 0 0 1 0 12']) {
+      const shape=document.createElementNS('http://www.w3.org/2000/svg','path');shape.setAttribute('d',d);volumeLabel.append(shape);
+    }
     const volume=document.createElement('input');volume.type='range';volume.min='0';volume.max='1';volume.step='0.05';volume.value='1';
     volume.className='yrm-player-volume';volume.setAttribute('aria-label','Volume');
     const speed=document.createElement('select');speed.setAttribute('aria-label','Playback speed');speed.className='yrm-player-speed';
@@ -111,7 +117,17 @@
     const extension = name.split('.').at(-1).toLowerCase();
     let view;
     if (['jpg','jpeg','png','webp','gif'].includes(extension)) {
-      view = document.createElement('img'); view.src = url; view.alt = name;
+      view = document.createElement('img'); view.className='yrm-image-loading'; view.alt = name;
+      const loading=document.createElement('div');loading.className='yrm-image-placeholder';
+      loading.textContent='Loading image…';
+      body.append(loading);
+      view.addEventListener('load',async()=>{
+        try {if (view.decode) await view.decode()} catch { /* load already succeeded */ }
+        if (!view.isConnected) return;
+        view.classList.remove('yrm-image-loading');loading.remove();
+      },{once:true});
+      view.addEventListener('error',()=>{loading.textContent='Could not load preview. You can download the original file.';view.remove();},{once:true});
+      view.src = url;
     } else if (['mp4','webm'].includes(extension)) {
       dialog.classList.add('is-video-preview');
       view=videoPlayer(url,dialog);
@@ -145,6 +161,12 @@
     if (!form) return;
     const selected = Array.from(input.files || []);
     const progress = id('fm-upload-progress');
+    let hideTimer;
+    const status = message => {
+      if (!progress) return;
+      clearTimeout(hideTimer);progress.hidden=false;progress.textContent=message;
+      hideTimer=setTimeout(()=>{if(progress.isConnected)progress.hidden=true},6000);
+    };
     input.disabled = true;
     let success = 0;
     try {
@@ -156,8 +178,8 @@
         if (!check.ok) throw new Error('Could not verify whether the destination file exists.');
         const conflict = (await check.json()).exists;
         const replace = conflict && window.confirm(`“${file.name}” already exists.\n\nOK = Replace existing file\nCancel = Skip (do not rename)`);
-        if (conflict && !replace) { if (progress) progress.textContent = `${file.name}: skipped`; continue; }
-        if (progress) progress.textContent = `Uploading ${file.name}: 0%`;
+        if (conflict && !replace) { status(`${file.name}: skipped`); continue; }
+        status(`Uploading ${file.name}: 0%`);
         await new Promise((resolve,reject) => {
           const xhr = new XMLHttpRequest();
           const body = new FormData();
@@ -168,8 +190,7 @@
           xhr.open('POST',form.action,true);
           xhr.withCredentials = true;
           xhr.setRequestHeader('Accept','application/json');
-          xhr.upload.onprogress = e => { if (e.lengthComputable && progress) progress.textContent =
-            `Uploading ${file.name}: ${Math.round(e.loaded / e.total * 100)}%`; };
+          xhr.upload.onprogress = e => { if (e.lengthComputable) status(`Uploading ${file.name}: ${Math.round(e.loaded / e.total * 100)}%`); };
           xhr.onload = () => {
             let data; try { data = JSON.parse(xhr.responseText); } catch { data = {}; }
             if (xhr.status>=200 && xhr.status<300 && data.ok) resolve();
@@ -180,9 +201,9 @@
         });
         success++;
       }
-      if (progress) progress.textContent = `${success} file(s) uploaded.`;
+      if(success)status(`${success} file(s) uploaded.`);
       if (success) window.location.reload();
-    } catch (error) { if (progress) progress.textContent = `Error: ${error.message}`; }
+    } catch (error) { status(`Error: ${error.message}`); }
     finally { input.value = ''; input.disabled = false; }
   },true);
 })();

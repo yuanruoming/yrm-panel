@@ -26,6 +26,36 @@ def run(cmd, timeout=20):
     return process.stdout.strip()
 
 
+
+def parse_ports(raw):
+    """Return normalized spec and bounded (start,end) segments. No shell parsing."""
+    if type(raw) is int:
+        raw = str(raw)
+    if not isinstance(raw, str) or len(raw) > 120:
+        raise ValueError('Port must be a number, list (80,443) or range (20-442).')
+    parts = raw.replace(' ', '').split(',')
+    if not 1 <= len(parts) <= 20:
+        raise ValueError('Use at most 20 port entries per rule.')
+    spans = []
+    for part in parts:
+        matched = re.fullmatch(r'([0-9]{1,5})(?:-([0-9]{1,5}))?', part)
+        if not matched:
+            raise ValueError('Use single ports, comma lists or a dash range.')
+        lo = int(matched.group(1))
+        hi = int(matched.group(2) or lo)
+        if not (1 <= lo <= hi <= 65535):
+            raise ValueError('Port numbers must be between 1 and 65535.')
+        spans.append((lo, hi))
+    for index, (lo, hi) in enumerate(spans):
+        if any(lo <= previous_hi and hi >= previous_lo for previous_lo, previous_hi in spans[:index]):
+            raise ValueError('Overlapping ports are not supported in one rule.')
+    return ','.join(str(lo) if lo == hi else f'{lo}-{hi}' for lo, hi in spans), spans
+
+
+def port_arguments(rule):
+    _, spans = parse_ports(rule['port'])
+    return [str(lo) if lo == hi else f'{lo}:{hi}' for lo, hi in spans]
+
 def validate(value):
     if not isinstance(value, dict): raise ValueError('Invalid firewall rule.')
     scope = value.get('scope')
@@ -35,14 +65,16 @@ def validate(value):
     source = value.get('source') or 'any'
     if scope not in ('host', 'docker') or action not in ('allow', 'deny', 'lan'):
         raise ValueError('Unsupported firewall scope or action.')
-    if type(port) is not int or not 1 <= port <= 65535 or proto not in ('tcp', 'udp'):
-        raise ValueError('Port must be 1–65535 and protocol must be TCP or UDP.')
+    if proto not in ('tcp', 'udp'):
+        raise ValueError('Protocol must be TCP or UDP.')
+    port, spans = parse_ports(port)
     if scope == 'host' and action == 'lan': raise ValueError('Use a source network for host rules.')
     if scope == 'docker' and source != 'any': raise ValueError('Docker rules use a preset LAN scope.')
     if source != 'any':
         try: source = str(ipaddress.ip_network(source, strict=False))
         except ValueError: raise ValueError('Source must be a valid IPv4/IPv6 CIDR.')
-    if scope == 'host' and port in (22, 6080, 6081) and action == 'deny':
+    if scope == 'host' and action == 'deny' and any(
+            low <= protected <= high for low, high in spans for protected in (22, 6080, 6081)):
         raise ValueError('Refusing to block SSH or Panel management ports.')
     return {'scope':scope, 'action':action, 'port':port, 'protocol':proto, 'source':source}
 
@@ -54,10 +86,8 @@ def load():
     return [validate(rule) for rule in data]
 
 
-def ufw_args(rule):
-    action = rule['action']
-    src = rule['source']
-    return [action, 'from', src, 'to', 'any', 'port', str(rule['port']), 'proto', rule['protocol']]
+def ufw_args(rule, port):
+    return [rule['action'], 'from', rule['source'], 'to', 'any', 'port', port, 'proto', rule['protocol']]
 
 
 def docker_backend_check():
@@ -72,27 +102,34 @@ def docker_backend_check():
 
 def docker_specs(rule):
     if rule['action'] == 'allow': return []
-    proto, port = rule['protocol'], str(rule['port'])
-    main = ['-p', proto, '-m', 'conntrack', '--ctorigdstport', port]
-    if rule['action'] == 'deny': return [(IPTABLES, main + ['-j', 'DROP'])]
-    # For LAN-only, return for RFC1918 destinations, drop all other IPv4 sources.
-    return [(IPTABLES, main + ['-s', cidr, '-j', 'RETURN']) for cidr in
-            ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16')] + [(IPTABLES, main + ['-j','DROP'])]
+    proto = rule['protocol']
+    result = []
+    for port in port_arguments(rule):
+        main = ['-p', proto, '-m', 'conntrack', '--ctorigdstport', port]
+        if rule['action'] == 'deny':
+            result.append((IPTABLES, main + ['-j', 'DROP']))
+        else:
+            # Current Docker LAN preset is RFC1918 IPv4 only.
+            result.extend((IPTABLES, main + ['-s', cidr, '-j', 'RETURN']) for cidr in
+                         ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16'))
+            result.append((IPTABLES, main + ['-j', 'DROP']))
+    return result
 
 
 def install_rule(rule):
     if rule['scope'] == 'host':
-        run([UFW] + ufw_args(rule) + ['comment', 'YRM-Panel'])
+        for port in port_arguments(rule):
+            run([UFW] + ufw_args(rule, port) + ['comment', 'YRM-Panel'])
     elif rule['action'] != 'allow':
         docker_backend_check()
-        # Append to a purpose-built managed child chain rather than tampering with arbitrary Docker rules.
         for executable, spec in docker_specs(rule):
             run([executable, '-A', 'YRM-PANEL', *spec])
 
 
 def delete_rule(rule):
     if rule['scope'] == 'host':
-        run([UFW, '--force', 'delete'] + ufw_args(rule))
+        for port in port_arguments(rule):
+            run([UFW, '--force', 'delete'] + ufw_args(rule, port))
     # Docker rules are handled together by rebuilding our managed chain.
 
 

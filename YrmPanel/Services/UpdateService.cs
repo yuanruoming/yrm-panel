@@ -26,8 +26,15 @@ public sealed class UpdateService
     {
         get
         {
-            try { return JsonSerializer.Deserialize<UpdateProgress>(File.ReadAllText(StatusFile),
-                new JsonSerializerOptions {PropertyNameCaseInsensitive=true}) ?? new("idle","No update started."); }
+            try
+            {
+                var status = JsonSerializer.Deserialize<UpdateProgress>(File.ReadAllText(StatusFile),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? new("idle", "No update started.");
+                if (status.State == "running" && DateTimeOffset.TryParse(status.At, out var when) &&
+                    DateTimeOffset.UtcNow - when > TimeSpan.FromMinutes(45))
+                    return status with { State = "failed", Message = "Update stopped before completion. Check service logs." };
+                return status;
+            }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
             { return new("idle","No update started."); }
         }

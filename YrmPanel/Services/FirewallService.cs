@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace YrmPanel.Services;
 
-public sealed record FirewallRule(string Scope, string Action, int Port, string Protocol, string Source);
+public sealed record FirewallRule(string Scope, string Action, string Port, string Protocol, string Source);
 public sealed record FirewallOverview(bool Available, string Status, bool DockerSupported,
     IReadOnlyList<FirewallRule> Rules, string Message);
 
@@ -25,7 +25,7 @@ public sealed class FirewallService
             var rules = new List<FirewallRule>();
             foreach (var item in root.GetProperty("rules").EnumerateArray())
                 rules.Add(new FirewallRule(item.GetProperty("scope").GetString() ?? "host",
-                    item.GetProperty("action").GetString() ?? "allow", item.GetProperty("port").GetInt32(),
+                    item.GetProperty("action").GetString() ?? "allow", item.GetProperty("port").ToString(),
                     item.GetProperty("protocol").GetString() ?? "tcp", item.GetProperty("source").GetString() ?? "any"));
             return new(true, root.GetProperty("status").GetString() ?? "Unknown",
                 root.GetProperty("dockerSupported").GetBoolean(), rules, "Firewall state loaded.");

@@ -30,6 +30,20 @@ public sealed class FilesModel : PageModel
     public FileView View { get; private set; } = new("system", "", false, "Not loaded", []);
     public IReadOnlyList<string> MyFolders { get; private set; } = [];
     public IReadOnlyList<StorageDevice> MountedVolumes { get; private set; } = [];
+    public IReadOnlyList<StorageDevice> PhysicalDisks { get; private set; } = [];
+    public bool CanSelectStorage => IsMyFolders || string.IsNullOrEmpty(Path);
+    public string StorageLabel(StorageDevice volume)
+    {
+        var number = 0;
+        for (var i = 0; i < PhysicalDisks.Count; i++)
+        {
+            if (PhysicalDisks[i].Path != volume.ParentPath && PhysicalDisks[i].Path != volume.Path) continue;
+            number = i + 1;
+            break;
+        }
+        var display = !string.IsNullOrWhiteSpace(volume.Label) ? volume.Label : volume.Name;
+        return number > 0 ? $"Disk {number} · {display} — {volume.MountPoint}" : $"{display} — {volume.MountPoint}";
+    }
     public SambaOverview Samba { get; private set; } = new(false, "Samba unavailable", "", false, []);
     [TempData] public string? Notice { get; set; }
     public string Parent => string.IsNullOrEmpty(Path) ? FolderHome : FileManagerService.ParentOf(Path);
@@ -42,9 +56,14 @@ public sealed class FilesModel : PageModel
         if (!Request.Query.ContainsKey("path")) Path = FolderHome;
         if (Path == "/") Path = "";
         MyFolders = _folders.List();
-        MountedVolumes = (await _devices.ListAsync(HttpContext.RequestAborted))
+        var discovered = await _devices.ListAsync(HttpContext.RequestAborted);
+        PhysicalDisks = discovered.Where(d => d.Type == "disk").ToArray();
+        MountedVolumes = discovered
             .Where(device => device.MountPoint.Length > 0 && device.FileSystem.Length > 0 &&
-                device.MountPoint != "/" && !device.MountPoint.StartsWith("/var/", StringComparison.Ordinal))
+                device.MountPoint != "/" &&
+                !device.MountPoint.StartsWith("/var/", StringComparison.Ordinal) &&
+                !device.MountPoint.StartsWith("/boot", StringComparison.Ordinal) &&
+                !device.MountPoint.StartsWith("/home/", StringComparison.Ordinal))
             .GroupBy(device => device.MountPoint, StringComparer.Ordinal)
             .Select(group => group.First())
             .ToArray();
@@ -122,6 +141,10 @@ public sealed class FilesModel : PageModel
         string parent, string name, string? adminPassword, string? returnTo)
     {
         var normalizedParent = (parent ?? string.Empty).Trim('/');
+        // When browsing an existing directory, New Folder always belongs there.
+        // Only the library overview or filesystem root may choose another mount.
+        var fixedLocation = returnTo != FolderHome && !string.IsNullOrWhiteSpace(returnTo) && returnTo != "/";
+        if (fixedLocation) normalizedParent = returnTo!.Trim('/');
         Path = returnTo == FolderHome ? FolderHome : (returnTo ?? normalizedParent).TrimStart('/');
         var rootParent = normalizedParent.Length == 0;
         if (rootParent)
@@ -199,7 +222,17 @@ public sealed class FilesModel : PageModel
         try
         {
             var (stream, _) = _files.OpenDownload("system", CurrentRelative, name);
-            Response.Headers["Cache-Control"] = "private, no-store";
+            // Private browser cache with revalidation: do not stream the same image again
+            // when it has not changed. Never cache it publicly on a proxy/VPN gateway.
+            var details = new System.IO.FileInfo(stream.Name);
+            var etag = $"\"{details.Length:x}-{details.LastWriteTimeUtc.Ticks:x}\"";
+            Response.Headers["ETag"] = etag;
+            Response.Headers["Cache-Control"] = "private, no-cache";
+            if (Request.Headers["If-None-Match"].ToString() == etag)
+            {
+                stream.Dispose();
+                return new StatusCodeResult(StatusCodes.Status304NotModified);
+            }
             // The built-in PDF preview is same-origin only.
             Response.Headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'self'; object-src 'none'";
             return new FileStreamResult(stream, mime) { EnableRangeProcessing = true };

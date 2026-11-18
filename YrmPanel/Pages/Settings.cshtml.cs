@@ -85,6 +85,19 @@ public sealed class SettingsModel : PageModel
         !string.IsNullOrWhiteSpace(address) &&
         address.StartsWith("fe80:", StringComparison.OrdinalIgnoreCase);
 
+    public string SuggestedMountPath(StorageDevice partition)
+    {
+        var disks = StorageDevices.Where(x => x.Type == "disk").ToArray();
+        var index = Array.FindIndex(disks, x => x.Path == partition.ParentPath || x.Path == partition.Path);
+        // Friendly defaults for extra volumes; an existing directory is never overwritten.
+        return index switch
+        {
+            1 => "/data",
+            2 => "/backup",
+            _ => "/mnt/" + partition.Name
+        };
+    }
+
     public async Task OnGetAsync()
     {
         switch (Tab)
@@ -142,6 +155,14 @@ public sealed class SettingsModel : PageModel
     {
         // The privileged helper re-examines partition tables, signatures and mounts.
         var result = await _devices.InitializeAsync(diskPath, confirmation, adminPassword, HttpContext.RequestAborted);
+        Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        return RedirectToPage(new { tab = "storage" });
+    }
+
+    public async Task<IActionResult> OnPostCompleteDiskAsync(string partitionPath, string confirmation,
+        string? adminPassword)
+    {
+        var result = await _devices.CompleteAsync(partitionPath, confirmation, adminPassword, HttpContext.RequestAborted);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
         return RedirectToPage(new { tab = "storage" });
     }

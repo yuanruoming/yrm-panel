@@ -78,7 +78,7 @@
                 {
                   <form method="post" asp-page-handler="Mount" asp-route-tab="storage" data-requires-admin="Mount existing Linux filesystem" class="yrm-mount-form">
                     <input type="hidden" name="uuid" value="@partition.Uuid" />
-                    <label>Mount location <input name="mountPath" required value="@(System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Disk-" + partition.Name))" /></label>
+                    <label>Mount location <input name="mountPath" required value="@Model.SuggestedMountPath(partition)" /></label>
                     <label class="v1-check"><input type="checkbox" name="automatic" value="true" checked /> Mount on startup</label>
                     <button class="button button-primary" type="submit">Mount</button>
                   </form>
@@ -93,7 +93,27 @@
                 else if (partition.MountPoint.Length > 0)
                 { <span class="muted">System / external mount · managed outside YRM PANEL</span> }
                 else if (partition.FileSystem.Length == 0)
-                { <p class="muted yrm-storage-warning">No filesystem detected; mounting is not possible until the disk is initialized. YRM PANEL does not format disks.</p> }
+                {
+                  <p class="muted yrm-storage-warning">No filesystem detected. This partition cannot be mounted yet.</p>
+                  @if (partition.Type == "part" && !partition.ReadOnly && !partition.Removable &&
+                       partition.MountPoint.Length == 0 && partition.Uuid.Length == 0 &&
+                       Model.StorageDevices.Count(x => x.ParentPath == disk.Path) == 1 &&
+                       disk.MountPoint.Length == 0 && !disk.ReadOnly && !disk.Removable)
+                  {
+                    <details class="yrm-disk-initialize">
+                      <summary class="button button-secondary">Complete Incomplete Setup</summary>
+                      <form method="post" asp-page-handler="CompleteDisk" asp-route-tab="storage"
+                            data-requires-admin="Format verified empty partition" data-confirm="This will FORMAT the selected empty partition. Continue?">
+                        <input name="partitionPath" type="hidden" value="@partition.Path" />
+                        <p class="yrm-storage-warning">For an initialization that created a partition but stopped before formatting. Only a single, unmounted, signature-free GPT data partition is accepted. Existing filesystems are refused.</p>
+                        <label>Confirm exactly: <code>FORMAT @partition.Path</code>
+                          <input name="confirmation" required autocomplete="off" placeholder="FORMAT @partition.Path" />
+                        </label>
+                        <button type="submit" class="button button-danger">Verify &amp; Complete Setup</button>
+                      </form>
+                    </details>
+                  }
+                }
                 else
                 { <p class="muted">This filesystem is not eligible for automated mounting.</p> }
               </div>
@@ -261,12 +281,13 @@
         <details><summary>Current UFW status</summary><pre class="v1-fw-status">@Model.Firewall.Status</pre></details>
         <p>Host rules use UFW. Docker rules are supported only with a compatible iptables DOCKER-USER chain; the helper refuses unsupported backends. Docker filtering is IPv4-only in this build; IPv6 reachability must be checked separately.</p>
         <form id="v1-firewall-form" method="post" asp-page-handler="Firewall" asp-route-tab="security" data-requires-admin="Save &amp; Apply firewall rule changes">
+          <div class="yrm-fw-header"><span>Scope</span><span>Action</span><span>Ports</span><span>Protocol</span><span>Source IP / CIDR</span><span></span></div>
           <div id="v1-firewall-rules" data-initial="@(System.Text.Json.JsonSerializer.Serialize(Model.Firewall.Rules.Select(x=>new {scope=x.Scope,action=x.Action,port=x.Port,protocol=x.Protocol,source=x.Source})))"></div>
           <input type="hidden" id="v1-fw-json" name="rulesJson" value="[]" />
           <div class="v1-row"><button class="button button-secondary" data-fw-add type="button">+ Add Rule</button><span id="v1-fw-dirty" class="muted"></span></div>
           <div class="v1-row"><button class="button button-primary" type="submit" disabled="@(!Model.Firewall.Available)">Save &amp; Apply</button></div>
         </form>
-        <p>Existing rules not created by YRM PANEL are preserved. UFW must already be enabled for host rules to filter traffic; no global policy reset is performed.</p>
+        <p class="muted">Ports: 80,443 or 20-442. Source: any, a single IP or CIDR (192.168.0.0/24). Host rules only take effect when UFW is active.</p>
       </section>
       }
       else
@@ -275,13 +296,20 @@
         <div class="settings-row-top"><h3>HTTPS Certificate</h3><span class="tag">@(Model.Certificate.IsCustom ? "Imported" : "System default")</span></div>
         @if (Model.Certificate.Available)
         {
-          <p><strong>@(Model.Certificate.IsCustom ? "Imported PEM certificate" : "Default self-signed certificate")</strong></p>
-          <dl class="yrm-cert-details">
-             <div><dt>Issued to</dt><dd>@Model.Certificate.Subject</dd></div>
-             <div><dt>Issuer</dt><dd>@Model.Certificate.Issuer</dd></div>
-             <div><dt>Expires</dt><dd>@Model.Certificate.NotAfter.ToString("yyyy-MM-dd")</dd></div>
-             <div><dt>Fingerprint</dt><dd><code>@Model.Certificate.Thumbprint</code></dd></div>
-           </dl>
+          <div class="yrm-cert-summary">
+            <svg class="ui-icon"><use href="#i-shield"/></svg>
+            <div class="yrm-cert-title"><strong>YRM PANEL HTTPS</strong>
+              <small>@(Model.Certificate.IsCustom ? "Imported certificate" : "Default self-signed certificate")</small></div>
+            <span class="tag">@(Model.Certificate.NotAfter > DateTime.UtcNow ? "Valid" : "Expired")</span>
+          </div>
+          <div class="yrm-cert-expiry"><span class="muted">Expires</span><strong>@Model.Certificate.NotAfter.ToString("dd MMM yyyy")</strong></div>
+          <details class="yrm-cert-technical"><summary>View certificate details</summary>
+            <dl class="yrm-cert-details">
+              <div><dt>Issued to</dt><dd>@Model.Certificate.Subject</dd></div>
+              <div><dt>Issuer</dt><dd>@Model.Certificate.Issuer</dd></div>
+              <div><dt>Fingerprint</dt><dd><code>@Model.Certificate.Thumbprint</code></dd></div>
+            </dl>
+          </details>
         }
         else { <p>Certificate information is available on Linux installations.</p> }
         <details class="yrm-certificate-import"><summary class="button button-secondary">+ Import Certificate</summary>
@@ -295,7 +323,7 @@
         {
           <form method="post" asp-page-handler="RestoreCertificate" asp-route-tab="security" asp-route-section="certificates" data-confirm="Restore the original self-signed certificate?"><button class="button button-secondary">Restore Default Certificate</button></form>
         }
-        <p class="muted">Let's Encrypt automation is not included. Imported private keys remain in the Panel's private Linux data directory.</p>
+
       </section>
       }
     }
@@ -335,8 +363,8 @@
           <div><small>Latest release</small><strong>@(Model.LastUpdateCheck?.Tag ?? "Not checked")</strong></div>
         </div>
         <div class="yrm-update-tracker" id="v1-update-progress" role="status" aria-live="polite">
-          <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@((Model.UpdateStatus.Phase ?? Model.UpdateStatus.State) switch { "completed" => "Completed", "failed" => "Failed", "running" => "Working", "idle" => "Idle", var s => s })</strong><span id="yrm-update-percent">@(Model.UpdateStatus.Percent is int p ? $"{p}%" : "")</span></div>
-          <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress"><span id="yrm-update-bar-fill"></span></div>
+          <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@((Model.UpdateStatus.Phase ?? Model.UpdateStatus.State) switch { "completed" => "Up to Date", "failed" => "Failed", "running" => "Working", "idle" => "Idle", var s => s })</strong><span id="yrm-update-percent"></span></div>
+          <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress" hidden><span id="yrm-update-bar-fill"></span></div>
           <p id="yrm-update-message" class="muted">@Model.UpdateStatus.Message</p>
           <p id="yrm-update-time" class="yrm-update-time muted"></p>
           <button type="button" id="yrm-update-reload" class="button button-primary" hidden>Reload Panel</button>

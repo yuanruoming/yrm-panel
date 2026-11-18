@@ -65,7 +65,7 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('Collect(child, devices, Field(item, "name"))',service)
         self.assertIn('x.ParentPath == disk.Path',view)
         self.assertIn('No filesystem detected',view)
-        self.assertIn('YRM PANEL does not format disks.',view)
+        self.assertIn('Complete Incomplete Setup',view)
     def test_last_route_only_explicitly_allowed_pages(self):
         js=source('YrmPanel/wwwroot/js/v1-stability.js')
         self.assertIn('const allowed = /^\\/(?:Files|Settings|Docker|Applications|Features|Shares|Services)',js)

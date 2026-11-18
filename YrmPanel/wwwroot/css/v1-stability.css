@@ -98,3 +98,31 @@
 .yrm-disk-initialize input{max-width:340px;}
 .yrm-disk-initialize .button-danger{max-width:max-content;background:#864947;border-color:#ba6461;color:#fff;}
 .yrm-disk-initialize .yrm-storage-warning{color:#f1c89e;}
+
+/* BETA4: Files fills the available window instead of leaving an empty card. */
+.window-page:has(.fm-explorer){display:flex;flex-direction:column;min-height:100%;box-sizing:border-box;}
+.window-page:has(.fm-explorer) .fm-explorer{flex:1;display:flex;flex-direction:column;min-height:0;}
+.window-page:has(.fm-explorer) .fm-columns{flex:1;min-height:0;align-items:stretch;}
+.window-page:has(.fm-explorer) .fm-content{min-height:0;display:flex;flex-direction:column;}
+.window-page:has(.fm-explorer) .fm-content>.responsive-table{min-height:0;overflow:auto;flex:1;}
+.fm-upload-progress[hidden]{display:none!important;}
+.fm-upload-progress{position:fixed;right:18px;bottom:24px;z-index:102;max-width:360px;padding:11px 15px;border:1px solid #557f9d;border-radius:10px;background:#13283b;color:#e5f6ff;box-shadow:0 10px 35px #0008;}
+.explorer-dialog-grid.yrm-fixed-location{grid-template-columns:1fr;}
+.yrm-fixed-storage-note{padding:9px 11px;background:#172638;border-radius:8px;margin:0 0 9px;}
+/* Balanced firewall columns: PORTS expands, TCP/UDP does not. */
+.v1-firewall-row{grid-template-columns:105px 105px minmax(138px,1fr) 82px minmax(170px,1.3fr) 32px;}
+.yrm-fw-header{display:grid;grid-template-columns:105px 105px minmax(138px,1fr) 82px minmax(170px,1.3fr) 32px;gap:7px;font-size:11px;color:#91a9bf;margin:10px 0 6px;}
+.yrm-cert-summary{display:flex;align-items:center;gap:14px;margin:16px 0 20px;}
+.yrm-cert-summary svg{width:35px;height:35px;color:#80c5e9;}
+.yrm-cert-summary .yrm-cert-title{display:grid;gap:5px;flex:1;}
+.yrm-cert-summary strong{color:#eef7fe;font-size:15px;}
+.yrm-cert-summary small{color:#9ab1c5;font-size:12px;}
+.yrm-cert-expiry{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:1px solid #ffffff19;}
+.yrm-cert-technical{margin:10px 0 14px;}
+.yrm-cert-technical>summary{font-size:12px;cursor:pointer;color:#a5c5dc;}
+.yrm-cert-technical .yrm-cert-details{margin:7px 0 0;}
+@media(max-width:850px){.v1-firewall-row,.yrm-fw-header{grid-template-columns:repeat(3,minmax(0,1fr));}}
+
+.fm-preview-body img.yrm-image-loading{visibility:hidden;position:absolute;pointer-events:none;}
+.yrm-image-placeholder{display:flex;justify-content:center;align-items:center;min-height:min(65dvh,420px);width:100%;color:#a5c1d6;letter-spacing:.015em;background:#0d1520;}
+.fm-preview-body img:not(.yrm-image-loading){display:block;max-width:100%;max-height:calc(100dvh - 210px);width:auto;height:auto;object-fit:contain;}

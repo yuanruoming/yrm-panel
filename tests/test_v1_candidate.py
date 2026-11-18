@@ -104,7 +104,7 @@ class FirewallTests(TestCase):
                 firewall.validate(dict(scope='host', action='allow', port=445, protocol='tcp', source=source))
 
     def test_reject_out_of_range_ports(self):
-        for port in (0,65536,True,'80'):
+        for port in (0,65536,True,'abc', '80-10', '80,foo'):
             with self.subTest(port=port), self.assertRaises(ValueError):
                 firewall.validate(dict(scope='host', action='allow', port=port, protocol='tcp', source='any'))
 
@@ -118,7 +118,7 @@ class FirewallTests(TestCase):
         with mock.patch.object(firewall,'run',side_effect=lambda args,**k: calls.append(args) or ''):
             message=firewall.apply(json.dumps([rule]))
         self.assertIn('applied',message)
-        self.assertEqual(firewall.load(),[rule])
+        self.assertEqual(firewall.load(),[dict(rule,port='445')])
         self.assertTrue(any('ufw' in call[0] for call in calls))
 
     def test_reject_duplicate_draft_before_mutation(self):

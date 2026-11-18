@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Restricted, non-destructive mount operations for existing filesystems only.
+"""Restricted mount operations and separately confirmed empty-disk provisioning.
 
-No formatting, partition modification, arbitrary mount options, recursive chmod,
-or mounting over a non-empty directory. Managed fstab entries carry an explicit marker.
+Normal mounts never format or hide files. Provisioning requires explicit confirmation
+and revalidates device identity, filesystem signatures and actual post-write state.
 """
 import json
 import stat
@@ -208,33 +208,22 @@ def identify_blank_disk(device):
     return item
 
 
-def initialize_blank_disk(device, confirmation):
-    # The client must type the exact device path, AND authenticate with sudo.
-    if confirmation != 'ERASE ' + device:
-        raise ValueError('Type ERASE followed by the exact disk path to confirm.')
-    identify_blank_disk(device)
-    # One final read-only check just before any irreversible operation.
-    identify_blank_disk(device)
-    parted = shutil.which('parted')
-    mkfs = shutil.which('mkfs.ext4')
-    if not parted or not mkfs:
-        raise ValueError('Disk initialization utilities are missing.')
-    run([parted, '-s', '--align', 'optimal', device, 'mklabel', 'gpt',
-         'mkpart', 'primary', 'ext4', '1MiB', '100%'], timeout=60)
+def find_new_partition(device, attempts=30):
+    """Wait for kernel/udev to expose the partition; never guess a block-device path."""
+    probe = shutil.which('partprobe')
+    if probe:
+        subprocess.run([probe, device], capture_output=True, timeout=15, check=False)
     udevadm = shutil.which('udevadm')
     if udevadm:
-        subprocess.run([udevadm, 'settle', '--timeout=12'], capture_output=True, timeout=15)
-    partition = None
-    for attempt in range(12):
+        subprocess.run([udevadm, 'settle', '--timeout=15'], capture_output=True, timeout=20, check=False)
+    for attempt in range(attempts):
         output = run(['/usr/bin/lsblk', '-J', '-p', '-o',
                       'PATH,TYPE,FSTYPE,UUID,MOUNTPOINTS,RO,RM,PTTYPE'])
         def search(entries):
             for row in entries:
-                if row.get('path') == device:
-                    return row
+                if row.get('path') == device: return row
                 child = search(row.get('children') or [])
-                if child is not None:
-                    return child
+                if child is not None: return child
             return None
         disk = search(json.loads(output).get('blockdevices', []))
         children = (disk or {}).get('children') or []
@@ -244,15 +233,105 @@ def initialize_blank_disk(device, confirmation):
             if (isinstance(path, str) and path.startswith(device) and
                     not candidate.get('fstype') and not candidate.get('uuid') and
                     not any(candidate.get('mountpoints') or []) and
-                    stat.S_ISBLK(os.stat(path).st_mode)):
-                partition = path
-                break
-            raise ValueError('New partition does not match the expected empty state; not formatting.')
+                    pathlib.Path(path).exists() and stat.S_ISBLK(os.stat(path).st_mode)):
+                return path
+            raise ValueError('New partition did not match the expected empty state. Refusing to format.')
+        if len(children) > 1:
+            raise ValueError('Unexpected multiple partitions. Refusing to format.')
         time.sleep(1)
-    if partition is None:
-        raise ValueError('Partition table created, but partition was not detected. No filesystem was written.')
+    raise ValueError('Partition created but not yet recognized. Refresh Storage; use Complete Setup after verifying the disk.')
+
+
+def verify_ext4(partition):
+    # Formatting command exit status alone is not evidence of a usable filesystem.
+    uuid = run(['/usr/sbin/blkid', '-s', 'UUID', '-o', 'value', partition]).strip()
+    fstype = run(['/usr/sbin/blkid', '-s', 'TYPE', '-o', 'value', partition]).strip()
+    if not uuid or fstype != 'ext4' or not UUID_RE.fullmatch(uuid):
+        raise ValueError('Filesystem verification failed; no mount was attempted.')
+    return uuid
+
+
+def identify_recoverable_partition(partition):
+    """Strictly a single blank GPT partition on a currently unused whole disk.
+
+    This also supports the previous BETA3 case where parted succeeded but udev
+    detected /dev/sdb1 after the helper had already exited. Confirmation and
+    a sudo password are still required; no automatic formatting takes place.
+    """
+    path = pathlib.Path(partition)
+    if not path.exists() or not stat.S_ISBLK(os.stat(partition).st_mode):
+        raise ValueError('Selected partition is not a block device.')
+    rows = json.loads(run(['/usr/bin/lsblk', '-J', '-p', '-b', '-o',
+        'PATH,TYPE,FSTYPE,UUID,MOUNTPOINTS,RO,RM,PTTYPE,PARTLABEL,SIZE'])).get('blockdevices', [])
+    selected = None
+    def scan(entries):
+        nonlocal selected
+        for disk in entries:
+            children = disk.get('children') or []
+            if disk.get('type') == 'disk' and any(c.get('path') == partition for c in children):
+                selected = (disk, children)
+                return
+            scan(children)
+    scan(rows)
+    if selected is None: raise ValueError('Partition is not directly attached to a recognized disk.')
+    disk, children = selected
+    diskpath = disk.get('path') or ''
+    if not DISK_NAME.fullmatch(diskpath) or os.path.realpath(diskpath) != diskpath:
+        raise ValueError('Unsupported or ambiguous parent disk.')
+    if len(children) != 1 or disk.get('pttype') != 'gpt':
+        raise ValueError('Recovery requires exactly one GPT partition.')
+    candidate = children[0]
+    if (disk.get('ro') or disk.get('rm') or disk.get('fstype') or disk.get('uuid') or
+            candidate.get('ro') or candidate.get('fstype') or candidate.get('uuid') or
+            candidate.get('partlabel') not in ('primary', 'YRM-PANEL-DATA')):
+        raise ValueError('The selected partition is not an eligible incomplete setup.')
+    if any(disk.get('mountpoints') or []) or any(candidate.get('mountpoints') or []):
+        raise ValueError('Mounted disks cannot be recovered.')
+    size = int(disk.get('size') or 0)
+    part_size = int(candidate.get('size') or 0)
+    if size < 64*1024*1024 or part_size < size * 0.90:
+        raise ValueError('Partition does not occupy the expected data disk.')
+    for device in (diskpath, partition):
+        probe = subprocess.run([shutil.which('wipefs') or '/usr/sbin/wipefs', '-n', '-o', 'TYPE', device],
+                               capture_output=True, text=True, timeout=12)
+        # The parent disk has a GPT signature: the partition must be empty.
+        if probe.returncode != 0 or (device == partition and probe.stdout.strip()):
+            raise ValueError('Partition contains a signature or cannot be safely inspected.')
+    raw = subprocess.run([shutil.which('blkid') or '/usr/sbin/blkid', '-p', partition],
+                         capture_output=True, timeout=12)
+    if raw.returncode != 2: raise ValueError('Partition might contain data. Refusing recovery.')
+    return diskpath
+
+
+def complete_setup(partition, confirmation):
+    if confirmation != 'FORMAT ' + partition:
+        raise ValueError('Type FORMAT followed by the exact partition path to confirm.')
+    identify_recoverable_partition(partition)
+    identify_recoverable_partition(partition)
+    mkfs = shutil.which('mkfs.ext4')
+    if not mkfs: raise ValueError('mkfs.ext4 is not installed.')
     run([mkfs, '-F', partition], timeout=120)
-    emit(True, f'Initialized {device} as ext4. Mount its new filesystem in Storage next.')
+    uuid = verify_ext4(partition)
+    emit(True, f'Filesystem created and verified (UUID {uuid}). Now mount it in Storage.')
+
+
+def initialize_blank_disk(device, confirmation):
+    # Never infer permission from the text: the entire helper runs via explicit sudo.
+    if confirmation != 'ERASE ' + device:
+        raise ValueError('Type ERASE followed by the exact disk path to confirm.')
+    identify_blank_disk(device)
+    identify_blank_disk(device)
+    parted = shutil.which('parted')
+    mkfs = shutil.which('mkfs.ext4')
+    if not parted or not mkfs: raise ValueError('Disk initialization utilities are missing.')
+    run([parted, '-s', '--align', 'optimal', device, 'mklabel', 'gpt',
+         'mkpart', 'YRM-PANEL-DATA', 'ext4', '1MiB', '100%'], timeout=60)
+    partition = find_new_partition(device)
+    # After the partition appears, ensure it is still the sole blank partition.
+    identify_recoverable_partition(partition)
+    run([mkfs, '-F', partition], timeout=120)
+    uuid = verify_ext4(partition)
+    emit(True, f'Initialized {device} as ext4 (UUID {uuid}). Mount the new filesystem in Storage.')
 
 
 if __name__ == '__main__':
@@ -264,6 +343,8 @@ if __name__ == '__main__':
             unmount(sys.argv[2])
         elif len(sys.argv) == 4 and sys.argv[1] == 'initialize':
             initialize_blank_disk(sys.argv[2], sys.argv[3])
+        elif len(sys.argv) == 4 and sys.argv[1] == 'complete':
+            complete_setup(sys.argv[2], sys.argv[3])
         else: raise ValueError('Unsupported mount operation.')
     except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError) as error:
         emit(False, str(error))

@@ -61,7 +61,13 @@
     const display=get('new-folder-full-path');
     if (display) display.textContent=`/${path ? `${path}/` : ''}${name?.value || ''}`;
     const volume=get('yrm-folder-volume');
-    if (volume instanceof HTMLSelectElement && volume.value!==path) volume.selectedIndex=-1;
+    if (volume instanceof HTMLSelectElement) {
+      const known=Array.from(volume.options).filter(o=>o.value && (path===o.value||path.startsWith(o.value+'/')));
+      known.sort((a,b)=>b.value.length-a.value.length);
+      if (known.length) volume.value=known[0].value;
+      else if (!path) volume.selectedIndex=0;
+      else volume.selectedIndex=-1;
+    }
   }
   document.addEventListener('change',event => {
     const node=event.target;
