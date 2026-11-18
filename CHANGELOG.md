@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.0 BETA5 — DDNS, guarded Firewall, disk recovery
+
+- DDNS: editable **Dynu IPv4 / IPv6 preset** and **Custom HTTPS API** forms using the same request engine; automatic public IP detection with fallback endpoints and optional user-provided HTTPS detector. Support HTTP Basic/Bearer/custom-header auth, explicit plain-text `good` / `nochg` / failure codes, JSON property checks or explicitly selected HTTP status checks. Reject provider replies that do not match the configured success condition, bound response bodies, pin public endpoint IPs and keep secrets outside the UI. Track last detected/updated IP, DNS verification status and retry backoff. Separate Detect IP, Update Now, Verify DNS and Pause/Resume.
+- Firewall: choose UFW **Active / Inactive** in the browser draft; one Save & Apply sudo prompt. No UFW -> disabled editing. When activating UFW, preserve Panel/SSH and detected WireGuard listening ports, schedule a root-owned 120-second rollback **before** enabling; require a browser confirmation to keep it enabled, with **no second password**. Rules remain limited to UFW and supported Docker IPv4 iptables backends. Extra explanation moves to Advanced details.
+- Storage: explicit `lsblk --tree` at all mount/recovery probes fixes lost disk-partition parentage. The existing `FORMAT /dev/sdb1` safety gate and double signature verification remain mandatory. Tiny unformatted system partitions default to a collapsed Advanced/Reserved list.
+- Settings: remove repetitive Firewall and Update descriptions. Version changes to `1.0.0-beta.5` without tagging a stable release.
+
+**Not yet hardware-validated.** Use a disposable VM disk for recovery/initialization, test UFW confirmation/rollback over a recoverable VM session, and validate a Dynu domain with user-owned credentials. .NET 10 compilation and actual Web UI interaction still require the user's Windows + Ubuntu workflow.
+
 ## 1.0.0 BETA4 — Usability and safety fixes
 
 - New Folder follows the current directory; only the My Folders overview and filesystem Root offer a mounted-disk selector. Disk labels include actual mount locations. Extra-disk default mount paths are `/data`, `/backup`, or `/mnt/<partition>`.

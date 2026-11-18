@@ -67,7 +67,7 @@
         {
           <article class="yrm-disk-card">
             <div class="yrm-disk-title"><svg class="ui-icon"><use href="#i-harddrive"/></svg><div><strong>@disk.Name</strong><small>@disk.Path · @disk.Size @(disk.Removable ? "· Removable" : "")</small></div><span class="tag">@(disk.MountPoint.Length > 0 ? "Mounted" : "Detected")</span></div>
-            @foreach (var partition in Model.StorageDevices.Where(x => x.ParentPath == disk.Path).Prepend(disk).Where(x => (x.Type == "part" || x.Type == "disk") && (x != disk || x.FileSystem.Length > 0)))
+            @foreach (var partition in Model.StorageDevices.Where(x => x.ParentPath == disk.Path).Prepend(disk).Where(x => (x.Type == "part" || x.Type == "disk") && (x != disk || x.FileSystem.Length > 0) && !Model.IsSmallUnformatted(x)))
             {
               <div class="yrm-partition-card">
                 <div class="yrm-disk-title"><div><strong>@partition.Name · @(partition.Label.Length > 0 ? partition.Label : (partition.FileSystem.Length > 0 ? partition.FileSystem : "No filesystem"))</strong>
@@ -117,6 +117,13 @@
                 else
                 { <p class="muted">This filesystem is not eligible for automated mounting.</p> }
               </div>
+            }
+            @if (Model.StorageDevices.Any(x => x.ParentPath == disk.Path && Model.IsSmallUnformatted(x)))
+            {
+              <details class="yrm-small-partitions"><summary>System / reserved partitions</summary>
+                @foreach (var reserved in Model.StorageDevices.Where(x => x.ParentPath == disk.Path && Model.IsSmallUnformatted(x)))
+                { <p class="muted">@reserved.Name · @reserved.Size · No filesystem (reserved / unformatted)</p> }
+              </details>
             }
             @if (!Model.StorageDevices.Any(x => x.ParentPath == disk.Path) && disk.FileSystem.Length == 0)
             {
@@ -189,42 +196,86 @@
     }
     else if (activeTab == "ddns")
     {
-      <div class="settings-section-heading"><h2>Dynamic DNS</h2><p>Custom HTTPS API templates. Check public IPv4 or IPv6 and update only when it changes.</p></div>
-      <section class="v1-settings-panel">
-        <h3>DDNS Profiles</h3>
+      <div class="settings-section-heading"><h2>Dynamic DNS</h2><p>Detect your public IP, update your DNS provider, and verify the result.</p></div>
+      <section class="v1-settings-panel yrm-ddns-list">
+        <div class="settings-row-top"><h3>DDNS Profiles</h3><span class="muted">@Model.DdnsProfiles.Count configured</span></div>
         @foreach (var profile in Model.DdnsProfiles)
         {
-          <div class="v1-device-row">
-            <div class="v1-device-meta">
-              <strong>@profile.Name · @profile.Hostname (@profile.RecordType)</strong>
-              <small>@profile.LastStatus · Last IP: @(profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</small>
-              <small>Interval @profile.IntervalMinutes minutes · Token is never displayed</small>
+          <div class="yrm-ddns-profile">
+            <div class="yrm-ddns-profile-main">
+              <div class="yrm-ddns-heading"><strong>@profile.Name</strong><span class="tag">@(profile.Enabled ? "Active" : "Paused")</span></div>
+              <small>@profile.Hostname · @profile.RecordType · Every @profile.IntervalMinutes min</small>
+              <div class="yrm-ddns-status"><span>@profile.LastStatus</span>
+                <span>IP: @(profile.LastIp.Length > 0 ? profile.LastIp : "Not detected")</span>
+                @if (profile.VerifyDns) { <span>DNS: @profile.Verification @(profile.LastDnsIp.Length > 0 ? "· " + profile.LastDnsIp : "")</span> }
+              </div>
+              @if (profile.LastRun is { } last) { <small>Checked: @last.ToLocalTime().ToString("dd MMM yyyy HH:mm")</small> }
+              @if (profile.NextAttemptAt is { } next && next > DateTimeOffset.UtcNow)
+              { <small>Next retry after: @next.ToLocalTime().ToString("HH:mm")</small> }
             </div>
-            <div class="v1-row">
-              <form method="post" asp-page-handler="DdnsTest" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id" /><button class="button button-secondary">Update Now</button></form>
-              <form method="post" asp-page-handler="DdnsDelete" asp-route-tab="ddns" data-confirm="Delete this DDNS profile?"><input type="hidden" name="id" value="@profile.Id" /><button class="button button-secondary">Remove</button></form>
+            <div class="yrm-ddns-actions">
+              <form method="post" asp-page-handler="DdnsDetect" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Detect IP</button></form>
+              <form method="post" asp-page-handler="DdnsTest" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Update Now</button></form>
+              @if (profile.VerifyDns) { <form method="post" asp-page-handler="DdnsVerify" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Verify DNS</button></form> }
+              <form method="post" asp-page-handler="DdnsToggle" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">@(profile.Enabled ? "Pause" : "Resume")</button></form>
+              <form method="post" asp-page-handler="DdnsDelete" asp-route-tab="ddns" data-confirm="Remove this DDNS profile?"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Remove</button></form>
             </div>
           </div>
         }
-        @if (Model.DdnsProfiles.Count == 0) { <p>No DDNS profiles yet.</p> }
+        @if (Model.DdnsProfiles.Count == 0) { <p class="muted">No DDNS profiles yet.</p> }
       </section>
       <section class="v1-settings-panel">
         <details class="v1-new-provider"><summary class="button button-secondary">+ New Provider</summary>
-        <h3>Add Custom DDNS Provider</h3>
-        <form method="post" asp-page-handler="DdnsAdd" asp-route-tab="ddns">
-          <div class="v1-grid"><label>Profile name<input name="name" required maxlength="50" placeholder="Cloudflare A Record" /></label>
-            <label>Domain hostname<input name="hostname" required placeholder="nas.example.com" /></label></div>
-          <div class="v1-grid"><label>Record type<select name="recordType"><option>A</option><option>AAAA</option></select></label>
-            <label>HTTP method<select name="httpMethod"><option>GET</option><option>POST</option><option>PUT</option><option selected>PATCH</option></select></label></div>
-          <label>HTTPS API endpoint<input name="urlTemplate" type="url" required placeholder="https://api.example.com/records/RECORD_ID" /></label>
-          <div class="v1-grid"><label>Token header name<input name="headerName" value="Authorization" placeholder="Authorization" /></label>
-            <label>Header value / API token<input name="token" type="password" autocomplete="new-password" placeholder="Bearer ..." /></label></div>
-          <label>JSON request body<textarea rows="4" name="bodyTemplate" placeholder='{"type":"A","name":"{hostname}","content":"{ip}"}'></textarea></label>
-          <div class="v1-grid"><label>Optional success response text<input name="successContains" placeholder="success" /></label>
-            <label>Interval (minutes)<input name="intervalMinutes" type="number" min="5" max="1440" value="10" /></label></div>
-          <p>Variables: {ip}, {ipv4}, {ipv6}, {hostname}. Only public HTTPS endpoints are allowed. Templates should follow the provider's published API documentation.</p>
-          <div class="v1-row"><button class="button button-primary" type="submit">Save Profile</button></div>
-        </form>
+          <h3>Configure Dynamic DNS</h3>
+          <form method="post" asp-page-handler="DdnsAdd" asp-route-tab="ddns" id="yrm-ddns-new-form">
+            <label>Provider template
+              <select id="yrm-ddns-provider-preset"><option value="dynu4">Dynu · IPv4</option><option value="dynu6">Dynu · IPv6</option><option value="custom">Custom HTTPS API</option></select>
+            </label>
+            <div class="v1-grid">
+              <label>Profile name<input name="name" required maxlength="50" placeholder="Dynu IPv4" /></label>
+              <label>Hostname<input name="hostname" required placeholder="nas.example.com" /></label>
+            </div>
+            <div class="v1-grid">
+              <label>Record type<select name="recordType"><option>A</option><option>AAAA</option></select></label>
+              <label>Method<select name="httpMethod"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option></select></label>
+            </div>
+            <label>Provider HTTPS API URL<input name="urlTemplate" type="text" required placeholder="https://api.example.com/update?hostname={hostname}&amp;myip={ip}" spellcheck="false" /></label>
+            <div class="v1-grid">
+              <label>Authentication
+                <select name="authType" id="yrm-ddns-auth"><option value="basic">HTTP Basic</option><option value="bearer">Bearer token</option><option value="header">Custom header</option><option value="none">None</option></select>
+              </label>
+              <label data-ddns-auth="username">Username<input name="username" autocomplete="off" placeholder="Dynu username" /></label>
+            </div>
+            <div class="v1-grid">
+              <label data-ddns-auth="header">Header name<input name="headerName" value="Authorization" placeholder="Authorization" /></label>
+              <label>Credential / API token<input name="token" type="password" autocomplete="new-password" placeholder="Dynu IP Update Password" /></label>
+            </div>
+            <label>JSON body (optional)<textarea rows="3" name="bodyTemplate" placeholder='{"type":"A","name":"{hostname}","content":"{ip}"}'></textarea></label>
+            <details class="yrm-ddns-advanced"><summary>Detection &amp; response options</summary>
+              <label>Custom public IP detection URL (optional)
+                <input name="detectionUrl" type="url" placeholder="Automatic (two HTTPS detection sources)" spellcheck="false" />
+                <small>Leave empty to detect IPv4/IPv6 automatically. A custom URL must return only a public IP address.</small>
+              </label>
+              <label>Response validation
+                <select name="responseMode" id="yrm-ddns-response-mode"><option value="codes">Text response codes</option><option value="json">JSON property</option><option value="http">HTTP 2xx only</option></select>
+              </label>
+              <div data-ddns-response="codes" class="v1-grid">
+                <label>Success codes<input name="successCodes" value="good" placeholder="good" /></label>
+                <label>Unchanged codes<input name="unchangedCodes" value="nochg" placeholder="nochg" /></label>
+                <label>Error codes<input name="errorCodes" value="badauth,nohost,notfqdn,unknown,servererror,911" /></label>
+              </div>
+              <div data-ddns-response="json" class="v1-grid" hidden>
+                <label>JSON property path<input name="jsonProperty" value="success" placeholder="success" /></label>
+                <label>Expected value<input name="jsonExpected" value="true" placeholder="true" /></label>
+              </div>
+              <label class="v1-check"><input type="checkbox" name="verifyDns" value="true" checked /> Verify A / AAAA DNS record after updating</label>
+              <input type="hidden" name="verifyDns" value="false" />
+              <div class="v1-grid"><label>Update interval (minutes)<input name="intervalMinutes" type="number" min="5" max="1440" value="10" /></label></div>
+              <p class="muted">Variables: {hostname}, {ip}, {ipv4}, {ipv6}. DNS caches or proxies may temporarily show a different IP.</p>
+            </details>
+            <input type="hidden" name="successContains" value="" />
+            <div class="v1-row"><button class="button button-primary" type="submit">Save Profile</button></div>
+          </form>
         </details>
       </section>
     }
@@ -276,18 +327,48 @@
       @if (Model.SecuritySection == "firewall")
       {
       <section class="v1-settings-panel">
-        <div class="settings-row-top"><h3>Firewall</h3><span class="tag">@(Model.Firewall.Available ? "Detected" : "Unavailable")</span></div>
-        <p>Edit freely. Only Save &amp; Apply requests the Linux administrator password.</p>
-        <details><summary>Current UFW status</summary><pre class="v1-fw-status">@Model.Firewall.Status</pre></details>
-        <p>Host rules use UFW. Docker rules are supported only with a compatible iptables DOCKER-USER chain; the helper refuses unsupported backends. Docker filtering is IPv4-only in this build; IPv6 reachability must be checked separately.</p>
-        <form id="v1-firewall-form" method="post" asp-page-handler="Firewall" asp-route-tab="security" data-requires-admin="Save &amp; Apply firewall rule changes">
-          <div class="yrm-fw-header"><span>Scope</span><span>Action</span><span>Ports</span><span>Protocol</span><span>Source IP / CIDR</span><span></span></div>
-          <div id="v1-firewall-rules" data-initial="@(System.Text.Json.JsonSerializer.Serialize(Model.Firewall.Rules.Select(x=>new {scope=x.Scope,action=x.Action,port=x.Port,protocol=x.Protocol,source=x.Source})))"></div>
-          <input type="hidden" id="v1-fw-json" name="rulesJson" value="[]" />
-          <div class="v1-row"><button class="button button-secondary" data-fw-add type="button">+ Add Rule</button><span id="v1-fw-dirty" class="muted"></span></div>
-          <div class="v1-row"><button class="button button-primary" type="submit" disabled="@(!Model.Firewall.Available)">Save &amp; Apply</button></div>
-        </form>
-        <p class="muted">Ports: 80,443 or 20-442. Source: any, a single IP or CIDR (192.168.0.0/24). Host rules only take effect when UFW is active.</p>
+        <div class="settings-row-top"><h3>Firewall</h3>
+          @if (Model.Firewall.Available) { <span class="tag">@(Model.Firewall.Active ? "Active" : "Inactive")</span> }
+          else { <span class="tag">Unavailable</span> }
+        </div>
+        @if (!Model.Firewall.Available)
+        {
+          <p>UFW is unavailable. Install or repair UFW before editing firewall rules.</p>
+          <details><summary>Technical details</summary><pre class="v1-fw-status">@Model.Firewall.Status</pre></details>
+        }
+        else
+        {
+          @if (!string.IsNullOrWhiteSpace(Model.Firewall.PendingConfirmation))
+          {
+            <div class="yrm-firewall-pending">
+              <strong>Confirm the server is reachable</strong>
+              <p>UFW was enabled. Confirm within 120 seconds to prevent automatic rollback.</p>
+              <form method="post" asp-page-handler="FirewallConfirm" asp-route-tab="security" asp-route-section="firewall">
+                <input type="hidden" name="nonce" value="@Model.Firewall.PendingConfirmation" />
+                <button class="button button-primary" type="submit">Keep Firewall Enabled</button>
+              </form>
+            </div>
+          }
+          <form id="v1-firewall-form" method="post" asp-page-handler="Firewall" asp-route-tab="security" asp-route-section="firewall" data-requires-admin="Save &amp; Apply firewall rule changes">
+            <div class="yrm-fw-state">
+              <div><strong>Firewall status</strong><small>Host firewall (UFW)</small></div>
+              <select name="firewallEnabled" aria-label="Firewall status">
+                <option value="true" selected="@Model.Firewall.Active">Active</option>
+                <option value="false" selected="@(!Model.Firewall.Active)">Inactive</option>
+              </select>
+            </div>
+            <div class="yrm-fw-header"><span>Scope</span><span>Action</span><span>Ports</span><span>Protocol</span><span>Source IP / CIDR</span><span></span></div>
+            <div id="v1-firewall-rules" data-initial="@(System.Text.Json.JsonSerializer.Serialize(Model.Firewall.Rules.Select(x=>new {scope=x.Scope,action=x.Action,port=x.Port,protocol=x.Protocol,source=x.Source})))"></div>
+            <input type="hidden" id="v1-fw-json" name="rulesJson" value="[]" />
+            <div class="v1-row"><button class="button button-secondary" data-fw-add type="button">+ Add Rule</button><span id="v1-fw-dirty" class="muted"></span></div>
+            <div class="v1-row"><button class="button button-primary" type="submit">Save &amp; Apply</button></div>
+          </form>
+          <details class="yrm-firewall-advanced"><summary>Advanced details</summary>
+            <pre class="v1-fw-status">@Model.Firewall.Status</pre>
+            <p>Ports: 80,443 or 20-442. Source: any, a single IP or CIDR (192.168.0.0/24). Docker filtering currently supports IPv4 with compatible iptables only.</p>
+            <p>New UFW activation includes temporary remote-access protection and rolls back unless confirmed.</p>
+          </details>
+        }
       </section>
       }
       else
@@ -388,7 +469,7 @@
             else { <button class="button button-primary" disabled type="button" title="Check for updates first">Update Now</button> }
           }
         </div>
-        <p class="muted">Updates preserve user files, Docker data, Samba shares and your selected Linux account.</p>
+
       </section>
     }
   </div>

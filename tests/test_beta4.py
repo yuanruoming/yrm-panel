@@ -113,7 +113,7 @@ class FirewallPortSpec(TestCase):
 
 class UiIntegration(TestCase):
     def test_beta_version(self):
-        self.assertIn('<Version>1.0.0-beta.4</Version>',source('YrmPanel/YrmPanel.csproj'))
+        self.assertIn('<Version>1.0.0-beta.5</Version>',source('YrmPanel/YrmPanel.csproj'))
     def test_my_folders_root_only_disk_selector(self):
         files=source('YrmPanel/Pages/Files.cshtml')
         model=source('YrmPanel/Pages/Files.cshtml.cs')

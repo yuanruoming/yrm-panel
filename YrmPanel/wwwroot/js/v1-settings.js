@@ -121,6 +121,66 @@
   window.setInterval(()=>{if(!document.hidden && updateTracker())void pollUpdate()},1500);
   void pollUpdate();
 
+
+  // Dynu is an editable preset, not a separate HTTP implementation.
+  function updateDdnsFields(form) {
+    const auth=form.elements.namedItem('authType')?.value || 'header';
+    const mode=form.elements.namedItem('responseMode')?.value || 'codes';
+    form.querySelectorAll('[data-ddns-auth]').forEach(node => {
+      node.hidden = auth !== node.dataset.ddnsAuth;
+    });
+    form.querySelectorAll('[data-ddns-response]').forEach(node => {
+      node.hidden = mode !== node.dataset.ddnsResponse;
+    });
+  }
+  function applyDdnsPreset(form) {
+    const preset=$('yrm-ddns-provider-preset')?.value || 'custom';
+    const field=(key,val)=>{ const node=form.elements.namedItem(key); if(node) node.value=val; };
+    if (preset==='dynu4' || preset==='dynu6') {
+      const v6=preset==='dynu6';
+      field('name',v6?'Dynu IPv6':'Dynu IPv4');
+      field('recordType',v6?'AAAA':'A');
+      field('httpMethod','GET');
+      field('urlTemplate',v6
+        ?'https://api-ipv6.dynu.com/nic/update?hostname={hostname}&myip=no&myipv6={ip}'
+        :'https://api-ipv4.dynu.com/nic/update?hostname={hostname}&myip={ip}&myipv6=no');
+      field('authType','basic');
+      field('headerName','Authorization');
+      field('bodyTemplate','');
+      field('responseMode','codes');
+      field('successCodes','good');
+      field('unchangedCodes','nochg');
+      field('errorCodes','badauth,nohost,notfqdn,unknown,servererror,911');
+      field('detectionUrl','');
+    } else {
+      field('name','Custom DDNS');
+      field('httpMethod','PATCH');
+      field('urlTemplate','');
+      field('authType','header');
+      field('headerName','Authorization');
+      field('bodyTemplate','');
+      field('responseMode','json');
+      field('successCodes','');
+      field('unchangedCodes','');
+      field('errorCodes','');
+    }
+    updateDdnsFields(form);
+  }
+  document.addEventListener('change', event=>{
+    const target=event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const form=target.closest('#yrm-ddns-new-form');
+    if (!(form instanceof HTMLFormElement)) return;
+    if (target.id==='yrm-ddns-provider-preset') applyDdnsPreset(form);
+    if (target.id==='yrm-ddns-auth'||target.id==='yrm-ddns-response-mode') updateDdnsFields(form);
+  },true);
+  function initializeDdns() {
+    const form=$('yrm-ddns-new-form');
+    if (!(form instanceof HTMLFormElement) || form.dataset.initialized) return;
+    form.dataset.initialized='1';
+    applyDdnsPreset(form);
+  }
+
   const initializeDraft = () => {
     const draft=$('v1-firewall-rules');
     if (draft && !draft.dataset.initialized) {
@@ -130,6 +190,7 @@
     }
   };
   initializeDraft();
-  const observer = new MutationObserver(initializeDraft);
+  initializeDdns();
+  const observer = new MutationObserver(() => { initializeDraft(); initializeDdns(); });
   observer.observe(document.body,{childList:true,subtree:true});
 })();

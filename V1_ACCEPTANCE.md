@@ -29,9 +29,9 @@ This is a **candidate source overlay**, not a validated 1.0.0 Stable release. Th
 ## Known limitations that must not be misrepresented
 
 - Docker firewall editing supports **iptables / DOCKER-USER and IPv4** only. It does not secure Docker's IPv6 published ports or nftables backend. If a system has IPv6-published Docker ports, enforce the appropriate IPv6 policy separately; this candidate is not a complete Docker firewall.
-- Host UFW rule editing does **not automatically enable or reset UFW**. Existing active UFW rules work; adding rules to an inactive UFW does not make them effective. A future safe activation workflow needs remote-lockout rollback and explicit confirmation.
-- Storage only mounts supported **existing** local filesystems. It does not format, partition, change RAID/LVM, or alter ownership of existing disk data.
-- DDNS custom HTTP API templates work with single HTTPS requests and token headers, not multi-step OAuth or arbitrary shell scripts. Test with the intended provider.
+- BETA5 permits changing UFW Active/Inactive in the same Save & Apply draft. First activation requires a root-owned 120-second automatic rollback and a passwordless confirmation after reconnecting; this is not yet validated across VPNs or remote WAN access. No existing global policy is intentionally reset.
+- Storage mounts existing local filesystems and separately supports strictly confirmed empty-disk GPT/ext4 initialization and completion of an incomplete GPT-only setup. **These erase partitions** and must be tested only on disposable disks; RAID/LVM/ownership migration is not included.
+- DDNS uses single HTTPS requests with Dynu presets or a custom API template, optional Basic/Bearer/custom-header auth, public IP detection, explicit response rules, and DNS verification. It cannot infer multi-step OAuth or arbitrary scripting, and Cloudflare-proxied DNS may not resolve to the detected origin IP. Test with the intended provider.
 - Media support uses the browser's native codecs; no transcoding. Larger files are accepted up to 4 GiB per upload, but model binding may use local temporary disk space.
 - Let's Encrypt / ACME automation is not included. Default self-signed and manual PEM certificate import are available.
 

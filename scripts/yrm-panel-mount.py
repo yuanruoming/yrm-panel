@@ -53,7 +53,7 @@ def path_check(raw):
 def lookup(uuid):
     if not UUID_RE.fullmatch(uuid):
         raise ValueError('Invalid filesystem UUID.')
-    output = run(['/usr/bin/lsblk', '-J', '-p', '-o', 'PATH,TYPE,UUID,FSTYPE,MOUNTPOINTS,RO'])
+    output = run(['/usr/bin/lsblk', '-J', '--tree', '-p', '-o', 'PATH,TYPE,UUID,FSTYPE,MOUNTPOINTS,RO'])
     def walk(items):
         for item in items:
             if item.get('uuid') == uuid:
@@ -176,7 +176,7 @@ def identify_blank_disk(device):
         raise ValueError('Only an unambiguous whole-disk /dev path is supported.')
     if not pathlib.Path(device).exists() or not stat.S_ISBLK(os.stat(device).st_mode):
         raise ValueError('Selected disk is not a block device.')
-    output = run(['/usr/bin/lsblk', '-J', '-p', '-o',
+    output = run(['/usr/bin/lsblk', '-J', '--tree', '-p', '-o',
                   'PATH,TYPE,FSTYPE,UUID,MOUNTPOINTS,RO,RM,PTTYPE'])
     devices = json.loads(output).get('blockdevices', [])
     def walk(items):
@@ -217,7 +217,7 @@ def find_new_partition(device, attempts=30):
     if udevadm:
         subprocess.run([udevadm, 'settle', '--timeout=15'], capture_output=True, timeout=20, check=False)
     for attempt in range(attempts):
-        output = run(['/usr/bin/lsblk', '-J', '-p', '-o',
+        output = run(['/usr/bin/lsblk', '-J', '--tree', '-p', '-o',
                       'PATH,TYPE,FSTYPE,UUID,MOUNTPOINTS,RO,RM,PTTYPE'])
         def search(entries):
             for row in entries:
@@ -261,7 +261,7 @@ def identify_recoverable_partition(partition):
     path = pathlib.Path(partition)
     if not path.exists() or not stat.S_ISBLK(os.stat(partition).st_mode):
         raise ValueError('Selected partition is not a block device.')
-    rows = json.loads(run(['/usr/bin/lsblk', '-J', '-p', '-b', '-o',
+    rows = json.loads(run(['/usr/bin/lsblk', '-J', '--tree', '-p', '-b', '-o',
         'PATH,TYPE,FSTYPE,UUID,MOUNTPOINTS,RO,RM,PTTYPE,PARTLABEL,SIZE'])).get('blockdevices', [])
     selected = None
     def scan(entries):

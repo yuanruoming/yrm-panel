@@ -246,7 +246,7 @@ install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-firewall.
 # status action is available without a password; all inputs are validated by helper.
 cat >/etc/sudoers.d/yrm-panel <<SUDO
 $PANEL_USER ALL=(root) PASSWD: /usr/local/libexec/yrm-panel-storage *, /usr/local/libexec/yrm-panel-samba *, /usr/local/libexec/yrm-panel-power *, /usr/local/libexec/yrm-panel-update-trigger start, /usr/local/libexec/yrm-panel-mount *, /usr/local/libexec/yrm-panel-firewall apply
-$PANEL_USER ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba list, /usr/local/libexec/yrm-panel-firewall list
+$PANEL_USER ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba list, /usr/local/libexec/yrm-panel-firewall list, /usr/local/libexec/yrm-panel-firewall confirm *
 SUDO
 chmod 0440 /etc/sudoers.d/yrm-panel
 visudo -cf /etc/sudoers.d/yrm-panel >/dev/null

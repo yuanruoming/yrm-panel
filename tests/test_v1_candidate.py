@@ -115,7 +115,8 @@ class FirewallTests(TestCase):
     def test_host_draft_applies_and_tracks_only_owned_rules(self):
         calls=[]
         rule=dict(scope='host',action='allow',port=445,protocol='tcp',source='192.168.1.0/24')
-        with mock.patch.object(firewall,'run',side_effect=lambda args,**k: calls.append(args) or ''):
+        with mock.patch.object(firewall,'run',side_effect=lambda args,**k: calls.append(args) or ''), \
+             mock.patch.object(firewall,'ufw_status',return_value=(True,False,'Status: inactive')):
             message=firewall.apply(json.dumps([rule]))
         self.assertIn('applied',message)
         self.assertEqual(firewall.load(),[dict(rule,port='445')])

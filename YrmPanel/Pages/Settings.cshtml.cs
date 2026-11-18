@@ -85,6 +85,19 @@ public sealed class SettingsModel : PageModel
         !string.IsNullOrWhiteSpace(address) &&
         address.StartsWith("fe80:", StringComparison.OrdinalIgnoreCase);
 
+    public bool IsSmallUnformatted(StorageDevice item)
+    {
+        if (item.Type != "part" || item.FileSystem.Length > 0 || item.MountPoint.Length > 0)
+            return false;
+        var size = item.Size.Trim().ToUpperInvariant();
+        if (size.Length < 2) return false;
+        var unit = size[^1];
+        if (unit is not ('K' or 'M')) return false;
+        return double.TryParse(size[..^1], System.Globalization.NumberStyles.Float,
+                   System.Globalization.CultureInfo.InvariantCulture, out var amount)
+               && amount > 0 && (unit == 'K' || amount <= 16);
+    }
+
     public string SuggestedMountPath(StorageDevice partition)
     {
         var disks = StorageDevices.Where(x => x.Type == "disk").ToArray();
@@ -167,19 +180,32 @@ public sealed class SettingsModel : PageModel
         return RedirectToPage(new { tab = "storage" });
     }
 
-    public async Task<IActionResult> OnPostFirewallAsync(string? rulesJson, string? adminPassword)
+    public async Task<IActionResult> OnPostFirewallAsync(string? rulesJson, bool? firewallEnabled, string? adminPassword)
     {
-        var result = await _firewall.ApplyAsync(rulesJson,adminPassword,HttpContext.RequestAborted);
+        var result = await _firewall.ApplyAsync(rulesJson, firewallEnabled, adminPassword, HttpContext.RequestAborted);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
         return RedirectToPage(new { tab = "security", section = "firewall" });
     }
 
-    public async Task<IActionResult> OnPostDdnsAddAsync(string name,string hostname,string recordType,
-        string urlTemplate,string httpMethod,string headerName,string token,string bodyTemplate,
-        string successContains,int intervalMinutes)
+    public async Task<IActionResult> OnPostFirewallConfirmAsync(string nonce)
     {
-        Notice = await _ddns.AddAsync(name,hostname,recordType,urlTemplate,httpMethod,headerName,token,
-            bodyTemplate,successContains,intervalMinutes,HttpContext.RequestAborted);
+        var result = await _firewall.ConfirmAsync(nonce, HttpContext.RequestAborted);
+        Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        return RedirectToPage(new { tab = "security", section = "firewall" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsAddAsync(string name, string hostname, string recordType,
+        string urlTemplate, string httpMethod, string headerName, string token, string bodyTemplate,
+        string successContains, int intervalMinutes, string? detectionUrl, string? authType,
+        string? username, string? responseMode, string? successCodes, string? unchangedCodes,
+        string? errorCodes, string? jsonProperty, string? jsonExpected, bool verifyDns)
+    {
+        var options = new DdnsProfileOptions(
+            detectionUrl ?? "", authType ?? "header", username ?? "", responseMode ?? "codes",
+            successCodes ?? "", unchangedCodes ?? "", errorCodes ?? "",
+            jsonProperty ?? "success", jsonExpected ?? "true", verifyDns);
+        Notice = await _ddns.AddAsync(name, hostname, recordType, urlTemplate, httpMethod, headerName,
+            token, bodyTemplate, successContains, intervalMinutes, HttpContext.RequestAborted, options);
         return RedirectToPage(new { tab = "ddns" });
     }
 
@@ -191,7 +217,25 @@ public sealed class SettingsModel : PageModel
 
     public async Task<IActionResult> OnPostDdnsTestAsync(string id)
     {
-        Notice = await _ddns.UpdateAsync(id,true,HttpContext.RequestAborted);
+        Notice = await _ddns.UpdateAsync(id, true, HttpContext.RequestAborted);
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsDetectAsync(string id)
+    {
+        Notice = await _ddns.DetectAsync(id, HttpContext.RequestAborted);
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsVerifyAsync(string id)
+    {
+        Notice = await _ddns.VerifyAsync(id, HttpContext.RequestAborted);
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsToggleAsync(string id)
+    {
+        Notice = await _ddns.ToggleAsync(id, HttpContext.RequestAborted);
         return RedirectToPage(new { tab = "ddns" });
     }
 
