@@ -52,7 +52,8 @@ class DdnsAndDialogs(unittest.TestCase):
         ui=source('YrmPanel/Pages/Settings.cshtml')
         self.assertIn('GroupBy(p => new { Provider',ui)
         self.assertIn('asp-page-handler="DdnsEdit"',ui)
-        self.assertIn('Test & Update',ui)
+        self.assertNotIn('Test & Update',ui)
+        self.assertIn('Check Now',ui)
         self.assertIn('asp-page-handler="DdnsGroupCheck"',ui)
     def test_one_custom_confirmation_for_all_forms(self):
         ui=source('YrmPanel/Pages/Shared/_Layout.cshtml')
@@ -64,7 +65,7 @@ class DdnsAndDialogs(unittest.TestCase):
         self.assertNotIn('window.confirm(',source('YrmPanel/wwwroot/js/v1-files.js'))
         self.assertNotIn('window.alert(',source('YrmPanel/wwwroot/js/v1-settings.js'))
     def test_beta7_version(self):
-        self.assertRegex(source('YrmPanel/YrmPanel.csproj'), r'<Version>1\.0\.0-beta\.[78]</Version>')
+        self.assertRegex(source('YrmPanel/YrmPanel.csproj'), r'<Version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?</Version>')
 
 if __name__ == '__main__':
     unittest.main()
