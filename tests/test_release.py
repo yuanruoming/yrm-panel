@@ -1,6 +1,7 @@
 """RC4 static safety checks; no root or Ubuntu VM required."""
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 
 class ReleaseSafetyTests(unittest.TestCase):
@@ -29,9 +30,17 @@ class ReleaseSafetyTests(unittest.TestCase):
         s = (ROOT/'.github/workflows/dev-release.yml').read_text()
         self.assertIn('yrm-panel-update-trigger.sh', s)
         self.assertIn('yrm-panel-update-trigger.sh', (ROOT/'scripts/install.sh').read_text())
-    def test_services_moved(self):
-        s = (ROOT/'YrmPanel/Pages/Settings.cshtml').read_text()
-        self.assertIn('"services", "Services"', s)
-        self.assertNotIn('asp-page="/Services" class="launcher-app"',
-                         (ROOT/'YrmPanel/Pages/Shared/_Layout.cshtml').read_text())
+    def test_project_version_is_valid_semver(self):
+        # One version contract for all betas and stable releases; no hard-coded beta number.
+        project = ET.parse(ROOT / 'YrmPanel/YrmPanel.csproj')
+        version = project.findtext('.//Version') or ''
+        self.assertRegex(version, r'^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$')
+
+    def test_removed_settings_pages_are_not_exposed(self):
+        # BETA10 removes read-only Services and the duplicate File Sharing settings page.
+        settings = (ROOT / 'YrmPanel/Pages/Settings.cshtml').read_text()
+        self.assertNotIn('("services", "Services",', settings)
+        self.assertNotIn('("sharing", "File Sharing",', settings)
+        shell = (ROOT / 'YrmPanel/Pages/Shared/_Layout.cshtml').read_text()
+        self.assertNotIn('asp-page="/Services" class="launcher-app"', shell)
 if __name__ == '__main__': unittest.main()

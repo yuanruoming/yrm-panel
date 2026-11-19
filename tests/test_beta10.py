@@ -11,8 +11,6 @@ def source(path):
 
 
 class ProductContracts(unittest.TestCase):
-    def test_release_version(self):
-        self.assertIn('<Version>1.0.0-beta.10</Version>', source('YrmPanel/YrmPanel.csproj'))
 
     def test_settings_removes_readonly_service_and_duplicate_share_page(self):
         view = source('YrmPanel/Pages/Settings.cshtml')

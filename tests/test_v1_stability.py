@@ -45,10 +45,11 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('section = "certificates"',model)
         self.assertIn('section = "firewall"',model)
         self.assertEqual(view.count('{'),view.count('}'))
-    def test_ddns_new_profile_collapsed(self):
+    def test_ddns_add_provider_is_modal_not_inline_details(self):
         view=source('YrmPanel/Pages/Settings.cshtml')
-        self.assertIn('<details class="v1-new-provider">',view)
-        self.assertIn('<summary class="button button-secondary">+ New Provider</summary>',view)
+        self.assertIn('data-b9-ddns-add',view)
+        self.assertIn('<dialog id="yrm-b9-ddns-add"',view)
+        self.assertNotIn('<details class="v1-new-provider">',view)
     def test_files_nav_and_storage_selection(self):
         view=source('YrmPanel/Pages/Files.cshtml')
         model=source('YrmPanel/Pages/Files.cshtml.cs')
@@ -64,7 +65,7 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('string ParentPath = ""',service)
         self.assertIn('Collect(child, devices, Field(item, "name"))',service)
         self.assertIn('x.ParentPath == disk.Path',view)
-        self.assertIn('No filesystem detected',view)
+        self.assertIn('No filesystem',view)
         self.assertIn('Complete Incomplete Setup',view)
     def test_last_route_only_explicitly_allowed_pages(self):
         js=source('YrmPanel/wwwroot/js/v1-stability.js')

@@ -112,8 +112,6 @@ class FirewallPortSpec(TestCase):
         self.assertIn('80',calls[0]);self.assertIn('443',calls[1])
 
 class UiIntegration(TestCase):
-    def test_beta_version(self):
-        self.assertRegex(source('YrmPanel/YrmPanel.csproj'),r'<Version>1\.0\.0-beta\.[4-9][0-9]*</Version>')
     def test_my_folders_root_only_disk_selector(self):
         files=source('YrmPanel/Pages/Files.cshtml')
         model=source('YrmPanel/Pages/Files.cshtml.cs')

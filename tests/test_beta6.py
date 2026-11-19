@@ -119,7 +119,5 @@ class DdnsContracts(unittest.TestCase):
         self.assertIn("available?'Update Available'",js)
         self.assertIn('availability = updates.LastCheck',prog)
 
-    def test_beta6_version(self):
-        self.assertRegex(source('YrmPanel/YrmPanel.csproj'), r'<Version>\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?</Version>')
 
 if __name__ == '__main__':unittest.main()

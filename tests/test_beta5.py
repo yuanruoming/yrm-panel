@@ -139,8 +139,4 @@ class DdnsContracts(unittest.TestCase):
         self.assertIn('api-ipv6.dynu.com',script)
         self.assertIn('yrm-ddns-new-form',view)
 
-class ReleaseTests(unittest.TestCase):
-    def test_beta5_version(self):
-        self.assertRegex(src('YrmPanel/YrmPanel.csproj'),r'1\.0\.0-beta\.[5-9][0-9]*')
-
 if __name__=='__main__':unittest.main()
