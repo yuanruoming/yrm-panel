@@ -336,7 +336,13 @@ public sealed class FilesModel : PageModel
     }
 
     public async Task<IActionResult> OnPostUnshareAsync(string name, string? adminPassword)
-    { Notice = await _samba.DeleteAsync(name, adminPassword, HttpContext.RequestAborted); return Back(); }
+    {
+        var message = await _samba.DeleteAsync(name, adminPassword, HttpContext.RequestAborted);
+        // A removed share is already reflected by the next server-side listing.
+        // Keep failures visible; avoid the redundant green "removed" notification.
+        Notice = message.StartsWith("Error:", StringComparison.Ordinal) ? message : null;
+        return Back();
+    }
 
     private IActionResult Back() => RedirectToPage(new
     {

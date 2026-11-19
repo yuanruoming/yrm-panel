@@ -184,16 +184,55 @@ def create_mount(uuid, dest, automatic):
     emit(True, f'Mounted existing filesystem at {mount_point}.' + (' Empty volume is writable by the Panel user.' if owner_granted else ''))
 
 
-def unmount(dest):
+def describe_busy_volume(target):
+    """Read-only diagnosis using Linux psmisc fuser; never stop processes or lazy-unmount."""
+    fuser = shutil.which('fuser')
+    if not fuser:
+        return 'Volume is busy. Install psmisc to identify processes using it.'
+    try:
+        result = subprocess.run([fuser, '-m', target], capture_output=True, text=True, timeout=7)
+        pids = list(dict.fromkeys(re.findall(r'\b[1-9][0-9]*\b', result.stdout)))[:10]
+        if not pids:
+            return 'Volume is busy. Check open files, SMB connections and working directories.'
+        ps = shutil.which('ps')
+        if not ps:
+            return f'Volume is in use by process IDs: {", ".join(pids)}.'
+        names = subprocess.run([ps, '-o', 'pid=,comm=', '-p', ','.join(pids)],
+                               capture_output=True, text=True, timeout=6)
+        details = [line.strip()[:75] for line in names.stdout.splitlines() if line.strip()]
+        return ('Volume is in use by: ' + ', '.join(details[:8]) +
+                (', ...' if len(details) > 8 or len(pids) > 8 else '') + '.') if details else \
+               f'Volume is in use by process IDs: {", ".join(pids)}.'
+    except (OSError, subprocess.TimeoutExpired):
+        return 'Volume is busy. Check active services and open files.'
+
+
+def verify_mounted_uuid(target, expected_uuid):
+    if not UUID_RE.fullmatch(expected_uuid):
+        raise ValueError('Invalid or missing volume UUID. Refresh Storage and try again.')
+    found = subprocess.run(['/usr/bin/findmnt', '-n', '-o', 'UUID', '--mountpoint', target],
+                           capture_output=True, text=True, timeout=12)
+    if found.returncode != 0 or found.stdout.strip() != expected_uuid:
+        raise ValueError('Volume identity or mount location changed. Refresh Storage before unmounting.')
+
+
+def unmount(dest, uuid):
     path = path_check(dest)
     target = str(path)
+    verify_mounted_uuid(target, uuid)
     lines = fstab_lines()
     managed = [line for line in lines if MARKER in line and len(line.split()) >= 2 and line.split()[1] == target]
     # Refuse to unmount manually configured or OS-critical mounts.
     manual = manual_mounts()
     if not managed and target not in manual:
         raise ValueError('Only YRM Panel managed volumes can be unmounted from this page.')
-    run(['/usr/bin/umount', target])
+    # Do not remove fstab or Panel mount state until the kernel really unmounts it.
+    umount = subprocess.run(['/usr/bin/umount', target], capture_output=True, text=True, timeout=20)
+    if umount.returncode != 0:
+        message = (umount.stderr or '').strip()
+        if 'busy' in message.lower():
+            raise ValueError(describe_busy_volume(target))
+        raise ValueError('Unmount failed: ' + (message[:190] or 'check system logs.'))
     old = replace_fstab([line for line in lines if line not in managed]) if managed else None
     if target in manual: write_manual([x for x in manual if x != target])
     try:
@@ -420,8 +459,8 @@ if __name__ == '__main__':
         if os.geteuid() != 0: raise ValueError('Root helper is required.')
         if len(sys.argv) == 5 and sys.argv[1] == 'mount' and sys.argv[4] in ('auto', 'manual'):
             create_mount(sys.argv[2], sys.argv[3], sys.argv[4] == 'auto')
-        elif len(sys.argv) == 3 and sys.argv[1] == 'unmount':
-            unmount(sys.argv[2])
+        elif len(sys.argv) == 4 and sys.argv[1] == 'unmount':
+            unmount(sys.argv[2], sys.argv[3])
         elif len(sys.argv) == 4 and sys.argv[1] == 'initialize':
             initialize_blank_disk(sys.argv[2], sys.argv[3])
         elif len(sys.argv) == 4 and sys.argv[1] == 'complete':

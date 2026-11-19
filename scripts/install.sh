@@ -55,9 +55,9 @@ echo "Selected Linux user: $PANEL_USER (group: $PANEL_GROUP)"
 apt_updated=0
 apt_once() { if ((apt_updated==0)); then apt-get update; apt_updated=1; fi; }
 apt_install() { apt_once; DEBIAN_FRONTEND=noninteractive apt-get install -y "$@"; }
-for program in curl ca-certificates python3 sudo tar openssl pamtester setfacl; do
+for program in curl ca-certificates python3 sudo tar openssl pamtester setfacl fuser; do
   if ! command -v "$program" >/dev/null 2>&1; then
-    case "$program" in setfacl) apt_install acl;; *) apt_install "$program";; esac
+    case "$program" in setfacl) apt_install acl;; fuser) apt_install psmisc;; *) apt_install "$program";; esac
   fi
 done
 # Storage initialization requires standard, packaged Linux tools.
@@ -278,7 +278,21 @@ progress Restarting 'Restarting YRM PANEL service and checking health.'
 systemctl daemon-reload
 systemctl enable yrm-panel.service >/dev/null
 systemctl enable yrm-panel-firewall-restore.service >/dev/null
-if ! systemctl restart yrm-panel.service || ! (sleep 2; systemctl is-active --quiet yrm-panel.service); then
+# A live PID is not proof the new build can serve the login page. Ask the
+# actual local HTTPS endpoint before marking the update successful.
+health_ok=0
+if systemctl restart yrm-panel.service; then
+  for attempt in $(seq 1 25); do
+    if systemctl is-active --quiet yrm-panel.service; then
+      response=$(curl --insecure --silent --show-error --output /dev/null \
+        --write-out '%{http_code}' --connect-timeout 2 --max-time 4 \
+        "https://127.0.0.1:$HTTPS_PORT/Account/Login" 2>/dev/null || true)
+      case "$response" in 200|301|302|303|307|308) health_ok=1; break;; esac
+    fi
+    sleep 1
+  done
+fi
+if ((health_ok == 0)); then
   echo 'YRM Panel failed to start: journalctl -u yrm-panel -n 80' >&2
   systemctl stop yrm-panel.service 2>/dev/null || true
   if [[ -d /opt/yrm-panel.previous ]]; then

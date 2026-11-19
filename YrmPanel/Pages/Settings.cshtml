@@ -49,120 +49,120 @@
     }
     else if (activeTab == "storage")
     {
-      <div class="settings-section-heading"><h2>Storage</h2><p>Mounted filesystems and available capacity.</p></div>
-      <div class="settings-stack">
-        @foreach (var disk in snapshot.Disks)
-        {
-          <section class="surface-card settings-storage-card">
-            <div class="settings-row-top"><div><p class="eyebrow">@disk.Name</p><h3>@disk.Path</h3></div><span class="muted">@((disk.TotalBytes > 0 ? 100d * disk.UsedBytes / disk.TotalBytes : 0).ToString("0"))% used</span></div>
-            <div class="meter-track"><div class="meter-fill cpu" style="width:@(disk.TotalBytes > 0 ? (100.0 * disk.UsedBytes / disk.TotalBytes).ToString("0.0",System.Globalization.CultureInfo.InvariantCulture) : "0")%"></div></div>
-            <p class="muted">@((disk.UsedBytes / 1073741824d).ToString("0.0")) GiB used of @((disk.TotalBytes / 1073741824d).ToString("0.0")) GiB</p>
-          </section>
-        }
-        @if (snapshot.Disks.Count == 0) { <div class="empty-hint">No storage volumes detected.</div> }
-      </div>
-      <section class="v1-settings-panel yrm-storage-section">
-        <div class="settings-row-top"><div><h3>Disks &amp; Mounts</h3><p class="muted">Physical devices, volumes and mount locations. Create and share folders in Files.</p></div></div>
+      <div class="settings-section-heading"><h2>Storage</h2><p>Volumes and physical disks managed by Ubuntu Server.</p></div>
+      // Filesystem identity comes from lsblk UUID, while current mount data
+      // and capacity come from the host. Do not invent a parallel volume DB.
+        var volumes = Model.StorageDevices
+          .Where(d => d.FileSystem.Length > 0 && d.Uuid.Length > 0 &&
+              !d.MountPoint.StartsWith("/boot", StringComparison.Ordinal) &&
+              !d.MountPoint.StartsWith("/var/", StringComparison.Ordinal))
+          .GroupBy(d => d.Uuid, StringComparer.Ordinal).Select(g => g.First())
+          .OrderByDescending(d => d.MountPoint == "/")
+          .ThenBy(d => d.MountPoint.Length == 0)
+          .ThenBy(d => d.Path, StringComparer.Ordinal).ToArray();
+      var volumeNumber = 0;
+      <section class="v1-settings-panel yrm-storage-section yrm-b9-volume-section">
+        <div class="settings-row-top"><div><h3>Volumes</h3><p class="muted">Filesystem capacity and mount locations. Share individual folders in Files.</p></div></div>
+        <div class="yrm-b9-volume-grid">
+          @foreach (var volume in volumes)
+          {
+            volumeNumber++;
+            var capacity = snapshot.Disks.FirstOrDefault(d => d.Path == volume.MountPoint);
+            var isSystem = volume.MountPoint == "/";
+            <article class="yrm-b9-volume-card">
+              <div class="yrm-b9-volume-head"><div><small class="eyebrow">Volume @volumeNumber · @(isSystem ? "System" : "Storage")</small><h3>@(volume.MountPoint.Length > 0 ? volume.MountPoint : "Not mounted")</h3></div><span class="tag">@(volume.MountPoint.Length == 0 ? "Offline" : "Mounted")</span></div>
+              @if (capacity is not null && capacity.TotalBytes > 0)
+              {
+                <div class="meter-track"><div class="meter-fill cpu" style="width:@((100.0 * capacity.UsedBytes / capacity.TotalBytes).ToString("0.0",System.Globalization.CultureInfo.InvariantCulture))%"></div></div>
+                <p class="muted">@((capacity.UsedBytes / 1073741824d).ToString("0.0")) GiB used of @((capacity.TotalBytes / 1073741824d).ToString("0.0")) GiB</p>
+              }
+              else { <p class="muted">@volume.Size · @volume.FileSystem</p> }
+              <small class="yrm-b9-volume-meta">@volume.Name · @volume.FileSystem · UUID: @volume.Uuid</small>
+              @if (volume.MountPoint.Length == 0 && volume.CanMount)
+              {
+                <form method="post" asp-page-handler="Mount" asp-route-tab="storage" data-requires-admin="Mount existing Linux filesystem" class="yrm-mount-form">
+                  <input type="hidden" name="uuid" value="@volume.Uuid" />
+                  <label>Mount location<input name="mountPath" required value="@Model.SuggestedMountPath(volume)" /></label>
+                  <label class="v1-check"><input type="checkbox" name="automatic" value="true" checked /> Mount on startup</label>
+                  <button class="button button-primary" type="submit">Mount</button>
+                </form>
+              }
+              else if (volume.ManagedMount && !isSystem && volume.MountPoint.Length > 0)
+              {
+                <div class="yrm-b9-volume-action">
+                  @if (!Model.Sharing.Available)
+                  { <small class="muted">Cannot verify SMB sharing; unmount is unavailable.</small> }
+                  else if (Model.HasVolumeShares(volume.MountPoint))
+                  { <small class="muted">Stop sharing folders on this volume before unmounting.</small> }
+                  else
+                  {
+                    <form method="post" asp-page-handler="Unmount" asp-route-tab="storage" data-requires-admin="Unmount volume" data-confirm="Unmount @volume.MountPoint? Open files or active services may prevent this operation.">
+                      <input type="hidden" name="mountPath" value="@volume.MountPoint" />
+                      <input type="hidden" name="uuid" value="@volume.Uuid" />
+                      <button class="button button-secondary" type="submit">Unmount</button>
+                    </form>
+                  }
+                </div>
+              }
+              else if (!isSystem && volume.MountPoint.Length > 0)
+              { <small class="muted">Mount managed outside YRM Panel. Read-only status.</small> }
+            </article>
+          }
+        </div>
+        @if (volumes.Length == 0) { <p class="muted">No recognized filesystems found.</p> }
+      </section>
+      <section class="v1-settings-panel yrm-storage-section yrm-b9-physical-section">
+        <div class="settings-row-top"><div><h3>Physical Disks</h3><p class="muted">Physical devices, partitions and filesystem identification. No duplicate volume actions.</p></div></div>
         @foreach (var disk in Model.StorageDevices.Where(x => x.Type == "disk"))
         {
           <article class="yrm-disk-card">
-            <div class="yrm-disk-title"><svg class="ui-icon"><use href="#i-harddrive"/></svg><div><strong>@disk.Name</strong><small>@disk.Path · @disk.Size @(disk.Removable ? "· Removable" : "")</small></div><span class="tag">@(disk.MountPoint.Length > 0 ? "Mounted" : "Detected")</span></div>
-            @foreach (var partition in Model.StorageDevices.Where(x => x.ParentPath == disk.Path).Prepend(disk).Where(x => (x.Type == "part" || x.Type == "disk") && (x != disk || x.FileSystem.Length > 0) && !Model.IsSmallUnformatted(x)))
+            <div class="yrm-disk-title"><svg class="ui-icon"><use href="#i-harddrive"/></svg><div><strong>@disk.Name</strong><small>@disk.Path · @disk.Size @(disk.Removable ? "· Removable" : "")</small></div></div>
+            @foreach (var part in Model.StorageDevices.Where(x => x.ParentPath == disk.Path).Prepend(disk)
+                .Where(x => (x.Type == "part" || x.Type == "disk") && (x != disk || x.FileSystem.Length > 0) && !Model.IsSmallUnformatted(x)))
             {
-              <div class="yrm-partition-card">
-                <div class="yrm-disk-title"><div><strong>@partition.Name · @(partition.Label.Length > 0 ? partition.Label : (partition.FileSystem.Length > 0 ? partition.FileSystem : "No filesystem"))</strong>
-                  <small>@partition.Size · @(partition.MountPoint.Length > 0 ? "Mounted at " + partition.MountPoint : "Not mounted")</small>
-                  @if (partition.Uuid.Length > 0) { <small>UUID: @partition.Uuid</small> }
-                </div></div>
-                @if (partition.CanMount && partition.MountPoint.Length == 0)
+              <div class="yrm-partition-card yrm-b9-physical-partition">
+                <strong>@part.Name · @(part.Label.Length > 0 ? part.Label : (part.FileSystem.Length > 0 ? part.FileSystem : "No filesystem"))</strong>
+                <small>@part.Size · @(part.MountPoint.Length > 0 ? "Mounted at " + part.MountPoint : "Not mounted")</small>
+                @if (part.Uuid.Length > 0) { <small>UUID: @part.Uuid</small> }
+                @if (part.FileSystem.Length == 0 && part.Type == "part" && !part.ReadOnly && !part.Removable &&
+                     part.MountPoint.Length == 0 && part.Uuid.Length == 0 &&
+                     Model.StorageDevices.Count(x => x.ParentPath == disk.Path) == 1 &&
+                     disk.MountPoint.Length == 0 && !disk.ReadOnly && !disk.Removable)
                 {
-                  <form method="post" asp-page-handler="Mount" asp-route-tab="storage" data-requires-admin="Mount existing Linux filesystem" class="yrm-mount-form">
-                    <input type="hidden" name="uuid" value="@partition.Uuid" />
-                    <label>Mount location <input name="mountPath" required value="@Model.SuggestedMountPath(partition)" /></label>
-                    <label class="v1-check"><input type="checkbox" name="automatic" value="true" checked /> Mount on startup</label>
-                    <button class="button button-primary" type="submit">Mount</button>
-                  </form>
+                  <details class="yrm-disk-initialize"><summary class="button button-secondary">Complete Incomplete Setup</summary>
+                    <form method="post" asp-page-handler="CompleteDisk" asp-route-tab="storage"
+                          data-requires-admin="Format verified empty partition" data-confirm="This will FORMAT the selected empty partition. Continue?">
+                      <input type="hidden" name="partitionPath" value="@part.Path" />
+                      <p class="yrm-storage-warning">Formats only a verified blank partition. Existing filesystems are refused.</p>
+                      <label>Confirm exactly: <code>FORMAT @part.Path</code><input name="confirmation" required autocomplete="off" placeholder="FORMAT @part.Path" /></label>
+                      <button type="submit" class="button button-danger">Verify &amp; Complete Setup</button>
+                    </form>
+                  </details>
                 }
-                else if (partition.ManagedMount && partition.MountPoint.Length > 0)
-                {
-                  <div class="v1-row yrm-volume-actions">
-                    @if (!Model.Sharing.Available)
-                    {
-                      <button class="button button-secondary" disabled title="SMB status could not be verified">Unmount</button>
-                      <small class="muted">SMB status unavailable. Unmount is paused to avoid disrupting shares.</small>
-                    }
-                    else if (Model.HasVolumeShares(partition.MountPoint))
-                    {
-                      <button class="button button-secondary" disabled title="Stop SMB sharing first">Unmount</button>
-                      <small class="muted">Stop sharing folders in Files or File Sharing before unmounting.</small>
-                    }
-                    else
-                    {
-                      <form method="post" asp-page-handler="Unmount" asp-route-tab="storage" data-requires-admin="Unmount volume" data-confirm="Unmount this volume? Make sure no files are in use.">
-                        <input type="hidden" name="mountPath" value="@partition.MountPoint" /><button class="button button-secondary" type="submit">Unmount</button>
-                      </form>
-                    }
-                  </div>
-                }
-                else if (partition.MountPoint.Length > 0)
-                { <span class="muted">System / external mount · managed outside YRM PANEL</span> }
-                else if (partition.FileSystem.Length == 0)
-                {
-                  <p class="muted yrm-storage-warning">No filesystem detected. This partition cannot be mounted yet.</p>
-                  @if (partition.Type == "part" && !partition.ReadOnly && !partition.Removable &&
-                       partition.MountPoint.Length == 0 && partition.Uuid.Length == 0 &&
-                       Model.StorageDevices.Count(x => x.ParentPath == disk.Path) == 1 &&
-                       disk.MountPoint.Length == 0 && !disk.ReadOnly && !disk.Removable)
-                  {
-                    <details class="yrm-disk-initialize">
-                      <summary class="button button-secondary">Complete Incomplete Setup</summary>
-                      <form method="post" asp-page-handler="CompleteDisk" asp-route-tab="storage"
-                            data-requires-admin="Format verified empty partition" data-confirm="This will FORMAT the selected empty partition. Continue?">
-                        <input name="partitionPath" type="hidden" value="@partition.Path" />
-                        <p class="yrm-storage-warning">For an initialization that created a partition but stopped before formatting. Only a single, unmounted, signature-free GPT data partition is accepted. Existing filesystems are refused.</p>
-                        <label>Confirm exactly: <code>FORMAT @partition.Path</code>
-                          <input name="confirmation" required autocomplete="off" placeholder="FORMAT @partition.Path" />
-                        </label>
-                        <button type="submit" class="button button-danger">Verify &amp; Complete Setup</button>
-                      </form>
-                    </details>
-                  }
-                }
-                else
-                { <p class="muted">This filesystem is not eligible for automated mounting.</p> }
-
               </div>
             }
             @if (Model.StorageDevices.Any(x => x.ParentPath == disk.Path && Model.IsSmallUnformatted(x)))
-            {
-              <details class="yrm-small-partitions"><summary>System / reserved partitions</summary>
+            { <details class="yrm-small-partitions"><summary>System / reserved partitions</summary>
                 @foreach (var reserved in Model.StorageDevices.Where(x => x.ParentPath == disk.Path && Model.IsSmallUnformatted(x)))
-                { <p class="muted">@reserved.Name · @reserved.Size · No filesystem (reserved / unformatted)</p> }
-              </details>
-            }
-            @if (!Model.StorageDevices.Any(x => x.ParentPath == disk.Path) && disk.FileSystem.Length == 0)
+                { <p class="muted">@reserved.Name · @reserved.Size · Reserved / unformatted</p> }
+              </details> }
+            @if (!Model.StorageDevices.Any(x => x.ParentPath == disk.Path) && disk.FileSystem.Length == 0 &&
+                 !disk.ReadOnly && !disk.Removable && disk.MountPoint.Length == 0 && disk.Uuid.Length == 0)
             {
-              <p class="muted yrm-storage-warning">This disk has no identified partitions or filesystem. Mount is not available yet.</p>
-              @if (!disk.ReadOnly && !disk.Removable && disk.MountPoint.Length == 0 && disk.Uuid.Length == 0)
-              {
-                <details class="yrm-disk-initialize">
-                  <summary class="button button-secondary">Initialize Empty Disk</summary>
-                  <form method="post" asp-page-handler="InitializeDisk" asp-route-tab="storage"
-                        data-requires-admin="Permanently erase selected blank disk" data-confirm="This will erase the selected disk and cannot be undone. Continue?">
-                    <input type="hidden" name="diskPath" value="@disk.Path" />
-                    <p class="yrm-storage-warning"><strong>Destructive operation:</strong> Creates a GPT partition and formats it as ext4. All data on <code>@disk.Path</code> will be lost. No existing partitions or signatures are permitted.</p>
-                    <label>Confirm exactly: <code>ERASE @disk.Path</code>
-                      <input name="confirmation" aria-label="Confirm disk erase" required autocomplete="off" placeholder="ERASE @disk.Path" pattern="ERASE @disk.Path" />
-                    </label>
-                    <button type="submit" class="button button-danger">Erase &amp; Initialize</button>
-                  </form>
-                </details>
-              }
+              <details class="yrm-disk-initialize"><summary class="button button-secondary">Initialize Empty Disk</summary>
+                <form method="post" asp-page-handler="InitializeDisk" asp-route-tab="storage"
+                      data-requires-admin="Permanently erase selected blank disk" data-confirm="This will erase the selected disk and cannot be undone. Continue?">
+                  <input type="hidden" name="diskPath" value="@disk.Path" />
+                  <p class="yrm-storage-warning"><strong>Destructive:</strong> Creates GPT and ext4 only on a verified empty disk. Existing signatures are refused.</p>
+                  <label>Confirm exactly: <code>ERASE @disk.Path</code><input name="confirmation" required autocomplete="off" placeholder="ERASE @disk.Path" /></label>
+                  <button type="submit" class="button button-danger">Erase &amp; Initialize</button>
+                </form>
+              </details>
             }
           </article>
         }
         @if (!Model.StorageDevices.Any(x => x.Type == "disk")) { <p class="muted">No physical disks reported by lsblk.</p> }
-        <p class="muted yrm-storage-note">Mount requires an existing filesystem and an empty destination folder. Initialization is a separate destructive operation for verified blank disks only. It never runs automatically.</p>
+        <p class="muted yrm-storage-note">Ubuntu retains the actual filesystems and /etc/fstab entries even when the Panel is removed.</p>
       </section>
     }
     else if (activeTab == "network")
@@ -213,50 +213,42 @@
     {
       <div class="settings-section-heading"><h2>Dynamic DNS</h2><p>Automatically keep your hostnames in sync.</p></div>
       <section class="v1-settings-panel yrm-ddns-list">
-        <div class="settings-row-top"><h3>DDNS Profiles</h3><span class="muted">@(Model.DdnsProfiles.Select(x => x.Provider + "|" + x.Hostname.ToLowerInvariant()).Distinct().Count()) configured</span></div>
+        <div class="settings-row-top"><h3>DDNS Profiles</h3><div class="yrm-b9-ddns-heading-actions"><span class="muted">@(Model.DdnsProfiles.Select(x => x.Provider + "|" + x.Hostname.ToLowerInvariant()).Distinct().Count()) configured</span><button class="button button-primary" type="button" data-b9-ddns-add>+ Add Provider</button></div></div>
         @foreach (var group in Model.DdnsProfiles.GroupBy(p => new { Provider = p.Provider.ToLowerInvariant(), Hostname = p.Hostname.ToLowerInvariant() }))
         {
           var active = group.Any(p => p.Enabled && p.IpSource != "disabled");
           var failed = group.Any(p => p.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase));
           var warning = group.Any(p => p.VerifyDns && (p.Verification == "DNS lookup unavailable" || p.Verification.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase)));
-          var groupStatus = !active ? "Paused" : failed ? "Failed" : warning ? "DNS unverified" : group.Any(p => p.LastStatus is "Updated" or "Unchanged" or "IP unchanged") ? "Normal" : "Not checked";
-          <div class="yrm-ddns-group">
+          var groupStatus = !active ? "Disabled" : failed ? "Failed" : warning ? "DNS unverified" : group.Any(p => p.LastStatus is "Updated" or "Unchanged" or "IP unchanged") ? "Normal" : "Not checked";
+          <div class="yrm-ddns-group" data-b9-ddns-provider="@group.Key.Provider" data-b9-ddns-hostname="@group.Key.Hostname">
             <div class="yrm-ddns-group-head">
               <div><strong>@(char.ToUpperInvariant(group.Key.Provider[0]) + group.Key.Provider.Substring(1))</strong><div class="muted">@group.Key.Hostname</div></div>
-              <span class="tag">@groupStatus</span>
+              <span class="tag" data-b9-ddns-status>@groupStatus</span>
             </div>
             <div class="yrm-ddns-records">
               @foreach (var profile in group.OrderBy(p => p.RecordType == "A" ? 0 : 1))
               {
-                <div class="yrm-ddns-record">
+                <div class="yrm-ddns-record" data-b9-ddns-record="@profile.Id">
                   <div>
-                    <strong>@(profile.RecordType == "A" ? "IPv4" : "IPv6") · @(profile.Enabled && profile.IpSource != "disabled" ? "Automatic monitoring" : "Paused")</strong>
-                    <div class="muted">@(profile.IpSource == "disabled" ? "Disabled" : profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</div>
-                    @if (profile.LastRun is { } last) { <small class="muted">Checked @last.ToLocalTime().ToString("dd MMM yyyy HH:mm")</small> }
-                    @if (profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase))
-                    { <small class="yrm-inline-error">@profile.LastStatus</small> }
-                    else if (profile.VerifyDns && profile.Verification == "DNS lookup unavailable")
-                    { <small class="muted">DNS verification unavailable; provider update is independent</small> }
+                    <strong>@(profile.RecordType == "A" ? "IPv4" : "IPv6") · @(profile.Enabled && profile.IpSource != "disabled" ? "Automatic monitoring" : "Disabled")</strong>
+                    <div class="muted" data-b9-ddns-ip>@(profile.IpSource == "disabled" ? "Disabled" : profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</div>
+                    <small class="muted" data-b9-ddns-checked>@(profile.LastRun is { } last ? "Checked " + last.ToLocalTime().ToString("dd MMM yyyy HH:mm") : "Not checked yet")</small>
+                    <small class="yrm-inline-error" data-b9-ddns-error hidden="@(!profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase))">@(profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase) ? profile.LastStatus : "")</small>
                   </div>
                   <div class="yrm-ddns-record-actions">
                     <button type="button" class="button button-secondary" data-yrm-ddns-edit="yrm-ddns-edit-@profile.Id">Edit</button>
-                    <form method="post" asp-page-handler="DdnsConnection" asp-route-tab="ddns" data-confirm="@(profile.Provider == "cloudflare" ? "" : "This test sends an update request to the DDNS provider. Continue?")">
-                      <input type="hidden" name="id" value="@profile.Id" />
-                      <button type="submit" class="button button-secondary">@(profile.Provider == "cloudflare" ? "Test" : "Test & Update")</button>
-                    </form>
-                    <form method="post" asp-page-handler="DdnsToggle" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">@(profile.Enabled ? "Pause" : "Resume")</button></form>
                     <form method="post" asp-page-handler="DdnsDelete" asp-route-tab="ddns" data-confirm="Remove this DDNS profile? Your provider's DNS record will remain unchanged."><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Remove</button></form>
                   </div>
                 </div>
               }
             </div>
             <div class="v1-row">
-              <form method="post" asp-page-handler="DdnsGroupCheck" asp-route-tab="ddns">
+              <form method="post" asp-page-handler="DdnsGroupCheck" asp-route-tab="ddns" data-b9-ddns-check>
                 <input type="hidden" name="hostname" value="@group.Key.Hostname"/>
                 <input type="hidden" name="provider" value="@group.Key.Provider"/>
                 <button class="button button-secondary" type="submit">Check Now</button>
               </form>
-              <small class="muted">Hybrid monitoring · Every @(group.Min(p => p.IntervalMinutes)) min</small>
+              <small class="muted">Every @(group.Min(p => p.IntervalMinutes)) min</small>
             </div>
           </div>
         }
@@ -274,7 +266,7 @@
             { <label>Dynu username<input name="username" value="@profile.Username" required autocomplete="off" /></label> }
             else { <input type="hidden" name="username" value="@profile.Username"/> }
             <label>@(profile.Provider == "cloudflare" ? "Cloudflare API Token" : profile.Provider == "dynu" ? "IP Update Password" : "API credential")
-              <input name="token" type="password" value="" autocomplete="new-password" placeholder="Leave blank to keep existing credential" />
+              <input name="token" type="password" value="" autocomplete="new-password" placeholder="Leave blank to keep existing credential" /><button type="button" class="yrm-b9-secret-toggle" data-b9-secret-toggle>Show</button>
               <small>Existing credentials are retained when this field is empty.</small>
             </label>
             <label>IP address source
@@ -331,9 +323,8 @@
           </form>
         </dialog>
       }
-      <section class="v1-settings-panel">
-        <details class="v1-new-provider"><summary class="button button-secondary">+ New Provider</summary>
-          <h3>Configure Dynamic DNS</h3>
+      <dialog id="yrm-b9-ddns-add" class="yrm-ddns-editor yrm-b9-ddns-dialog" aria-label="Add DDNS provider">
+        <div class="panel-modal-head"><strong>Add DDNS Provider</strong><button type="button" data-b9-ddns-cancel aria-label="Close">×</button></div>
           <form method="post" asp-page-handler="DdnsAdd" asp-route-tab="ddns" id="yrm-ddns-new-form">
             <label>Provider template
               <select id="yrm-ddns-provider-preset"><option value="dynu4">Dynu · IPv4</option><option value="dynu6">Dynu · IPv6</option><option value="cloudflare4">Cloudflare · IPv4</option><option value="cloudflare6">Cloudflare · IPv6</option><option value="custom">Custom HTTPS API</option></select>
@@ -356,7 +347,7 @@
             </div>
             <div class="v1-grid">
               <label data-ddns-auth="header">Header name<input name="headerName" value="Authorization" placeholder="Authorization" /></label>
-              <label><span id="yrm-ddns-secret-label">Credential / API token</span><input name="token" type="password" autocomplete="new-password" placeholder="" /></label>
+              <label><span id="yrm-ddns-secret-label">Credential / API token</span><input name="token" type="password" autocomplete="new-password" placeholder="" /><button type="button" class="yrm-b9-secret-toggle" data-b9-secret-toggle>Show</button></label>
             </div>
             <label data-ddns-technical>JSON body (optional)<textarea rows="3" name="bodyTemplate" placeholder='{"type":"A","name":"{hostname}","content":"{ip}"}'></textarea></label>
             <details class="yrm-ddns-advanced"><summary>Advanced settings</summary>
@@ -383,10 +374,9 @@
             </details>
             <input type="hidden" name="provider" id="yrm-ddns-provider" value="dynu" />
             <input type="hidden" name="successContains" value="" />
-            <div class="v1-row"><button class="button button-primary" type="submit">Save Profile</button></div>
+            <div class="panel-modal-actions"><button class="button button-secondary" type="button" data-b9-ddns-cancel>Cancel</button><button class="button button-primary" type="submit">Save Provider</button></div>
           </form>
-        </details>
-      </section>
+      </dialog>
     }
     else if (activeTab == "sharing")
     {
@@ -556,6 +546,11 @@
           <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@(Model.UpdateStatus.State == "running" ? "Updating" : Model.LastUpdateCheck?.HasUpdate == true ? "Update Available" : Model.UpdateStatus.State == "failed" ? "Update Failed" : Model.LastUpdateCheck?.Available == true ? "Up to Date" : "Not Checked")</strong><span id="yrm-update-percent"></span></div>
           <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress" hidden><span id="yrm-update-bar-fill"></span></div>
           <p id="yrm-update-message" class="muted">@(Model.UpdateStatus.State == "running" ? "Updating YRM PANEL." : Model.LastUpdateCheck?.HasUpdate == true ? Model.LastUpdateCheck.Message : Model.LastUpdateCheck?.Available == true ? "Your installed build is up to date." : Model.UpdateStatus.Message)</p>
+          <ol id="yrm-b9-update-stages" class="yrm-b9-update-stages" aria-label="Update stages" hidden>
+            @foreach (var stage in new[] { "Checking", "Downloading", "Verifying", "Installing", "Restarting", "Completed" })
+            { <li data-b9-update-stage="@stage">@stage</li> }
+          </ol>
+          <p id="yrm-b9-update-detail" class="muted" hidden></p>
           <p id="yrm-update-time" class="yrm-update-time muted"></p>
           <button type="button" id="yrm-update-reload" class="button button-primary" hidden>Reload Panel</button>
         </div>

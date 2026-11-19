@@ -86,8 +86,8 @@ public sealed class StorageDeviceService
     public Task<PrivilegedResult> MountAsync(string uuid, string mountPath, bool automatic,
         string? password, CancellationToken ct) =>
         _privileged.RunAsync("mount", "mount", [uuid, mountPath, automatic ? "auto" : "manual"], password, null, ct);
-    public Task<PrivilegedResult> UnmountAsync(string mountPath, string? password,
-        CancellationToken ct) => _privileged.RunAsync("mount", "unmount", [mountPath], password, null, ct);
+    public Task<PrivilegedResult> UnmountAsync(string mountPath, string uuid, string? password,
+        CancellationToken ct) => _privileged.RunAsync("mount", "unmount", [mountPath, uuid], password, null, ct);
 
     public Task<PrivilegedResult> CompleteAsync(string partitionPath, string confirmation,
         string? password, CancellationToken ct)

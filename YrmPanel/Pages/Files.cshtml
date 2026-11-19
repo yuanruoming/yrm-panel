@@ -85,7 +85,7 @@
                     {
                       @if (matching is not null && matching.Managed)
                       {
-                        <form method="post" asp-page-handler="Unshare" asp-route-path="@("@folders")" data-requires-admin="Remove SMB share" data-confirm="Stop sharing @name? Your files will be preserved.">
+                        <form method="post" asp-page-handler="Unshare" asp-route-path="@("@folders")" data-requires-admin="Remove SMB share">
                           <input type="hidden" name="name" value="@matching.Name"/><button type="submit">Stop sharing</button>
                         </form>
                       }
@@ -171,7 +171,7 @@
                       {
                         @if (matching is not null && matching.Managed)
                         {
-                          <form method="post" asp-page-handler="Unshare" asp-route-path="@currentRoute" data-requires-admin="Remove SMB share" data-confirm="Stop sharing @item.Name? Files are preserved.">
+                          <form method="post" asp-page-handler="Unshare" asp-route-path="@currentRoute" data-requires-admin="Remove SMB share">
                             <input type="hidden" name="name" value="@matching.Name"/><button type="submit">Stop sharing</button>
                           </form>
                         }

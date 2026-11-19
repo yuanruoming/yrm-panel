@@ -167,7 +167,7 @@ public sealed class SettingsModel : PageModel
         return RedirectToPage(new { tab = "storage" });
     }
 
-    public async Task<IActionResult> OnPostUnmountAsync(string mountPath, string? adminPassword)
+    public async Task<IActionResult> OnPostUnmountAsync(string mountPath, string uuid, string? adminPassword)
     {
         // Stop before unmounting a volume that still backs SMB shares.
         // Never silently redirect a share to an empty mountpoint directory.
@@ -185,7 +185,16 @@ public sealed class SettingsModel : PageModel
             Notice = "Error: This volume still contains an SMB share. Stop sharing its folders in Files or Settings > Sharing before unmounting.";
             return RedirectToPage(new { tab = "storage" });
         }
-        var result = await _devices.UnmountAsync(root, adminPassword, ct);
+        // The UUID must still identify the selected mounted filesystem. Avoid acting
+        // on an old /backup or /volume2 form after an external Linux change.
+        var current = await _devices.ListAsync(ct);
+        if (string.IsNullOrWhiteSpace(uuid) || !current.Any(v =>
+            v.Uuid == uuid && v.MountPoint == root && v.ManagedMount))
+        {
+            Notice = "Error: This volume changed or is no longer managed. Refresh Storage and try again.";
+            return RedirectToPage(new { tab = "storage" });
+        }
+        var result = await _devices.UnmountAsync(root, uuid, adminPassword, ct);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
         return RedirectToPage(new { tab = "storage" });
     }
@@ -259,15 +268,29 @@ public sealed class SettingsModel : PageModel
         else
         {
             var results = new List<string>();
-            foreach (var item in matches.Where(p => p.Enabled && p.IpSource != "disabled"))
+            foreach (var item in matches.Where(p => p.IpSource != "disabled"))
             {
                 var state = await _ddns.UpdateAsync(item.Id, true, HttpContext.RequestAborted);
                 results.Add($"{item.RecordType}: {state}");
             }
-            Notice = results.Any(x => x.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+            Notice = results.Count == 0 ? "Error: No enabled IP source exists for this hostname. Edit the provider first." :
+                results.Any(x => x.Contains("Failed", StringComparison.OrdinalIgnoreCase)
                 || x.Contains("Error:", StringComparison.OrdinalIgnoreCase))
                 ? "Error: " + string.Join("; ", results)
                 : "DDNS check completed. Provider states are shown below.";
+        }
+        if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+        {
+            var refreshed = (await _ddns.ListAsync(HttpContext.RequestAborted))
+                .Where(p => p.Hostname.Equals(hostname, StringComparison.OrdinalIgnoreCase)
+                    && p.Provider.Equals(provider, StringComparison.OrdinalIgnoreCase))
+                .Select(p => new { id = p.Id, ip = p.LastIp, status = p.LastStatus,
+                    lastRun = p.LastRun?.ToLocalTime().ToString("dd MMM yyyy HH:mm"),
+                    verification = p.Verification, enabled = p.Enabled, ipSource = p.IpSource }).ToArray();
+            var message = Notice ?? "DDNS check completed.";
+            Notice = null; // JSON action must not leave a stale TempData toast for later GETs.
+            return new JsonResult(new { ok = !message.StartsWith("Error:", StringComparison.Ordinal),
+                message, records = refreshed });
         }
         return RedirectToPage(new { tab = "ddns" });
     }
