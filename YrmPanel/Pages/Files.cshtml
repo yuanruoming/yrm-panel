@@ -15,7 +15,7 @@
 <section class="surface-card fm-explorer">
   <div class="fm-columns">
     <aside class="fm-locations" aria-label="File locations">
-      <div class="fm-locations-heading">LIBRARY</div>
+      <div class="fm-locations-heading">MY FILES</div>
       <a class="fm-location-link @(Model.IsMyFolders ? "is-active" : "")" asp-page="/Files" asp-route-path="@("@folders")">
         <svg class="ui-icon"><use href="#i-folder"/></svg> My Folders
       </a>
@@ -28,6 +28,22 @@
           <svg class="ui-icon"><use href="#i-folder"/></svg><span>@displayName</span>
         </a>
       }
+      <div class="yrm-b10-nav-divider"></div>
+      <div class="fm-locations-heading yrm-b10-quick-label">QUICK ACCESS</div>
+      <div class="yrm-b10-quick-links">
+        @foreach (var pinnedPath in Model.QuickAccess)
+        {
+          var relative = pinnedPath.TrimStart('/');
+          <div class="yrm-b10-quick-item">
+            <a class="fm-location-link @(Model.Path == relative ? "is-active" : "")" asp-page="/Files" asp-route-path="@relative" title="@pinnedPath">
+              <svg class="ui-icon"><use href="#i-folder"/></svg><span>@System.IO.Path.GetFileName(pinnedPath)</span>
+            </a>
+            <form method="post" asp-page-handler="UnpinFolder" asp-route-path="@currentRoute"><input type="hidden" name="folderPath" value="@pinnedPath"/><button type="submit" class="yrm-b10-unpin" title="Unpin shortcut" aria-label="Unpin @System.IO.Path.GetFileName(pinnedPath)">×</button></form>
+          </div>
+        }
+        @if (Model.QuickAccess.Count == 0) { <small class="muted yrm-b10-quick-empty">Pin folders from More.</small> }
+      </div>
+      <div class="yrm-b10-nav-divider"></div>
       <details class="fm-system-nav" data-persist-disclosure="yrm-panel:system-files-open">
         <summary><svg class="ui-icon"><use href="#i-harddrive"/></svg> System Files</summary>
         <a class="fm-location-link @(!Model.IsMyFolders && Model.Path == "" ? "is-active" : "")"
@@ -69,7 +85,7 @@
               var name = System.IO.Path.GetFileName(folderPath);
               var exists = System.IO.Directory.Exists(folderPath);
               var matching = shared.FirstOrDefault(x => string.Equals(x.Path, folderPath, StringComparison.Ordinal));
-              <div class="fm-library-row">
+              <div class="fm-library-row yrm-b10-library-row">
                 <span class="fm-folder-symbol"><svg class="ui-icon"><use href="#i-folder"/></svg></span>
                 <div class="fm-library-meta">
                   @if (exists)
@@ -92,9 +108,31 @@
                       else if (matching is null && FileAccess.IsManaged(folderPath))
                       { <button type="button" data-share-folder="@name" data-share-absolute="@folderPath">Share</button> }
                     }
-                    <form method="post" asp-page-handler="RemoveManaged" asp-route-path="@("@folders")" data-confirm="Remove @name from My Folders? Files will not be deleted.">
-                      <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Remove from My Folders</button>
-                    </form>
+                    @if (exists && !Model.QuickAccess.Contains(folderPath, StringComparer.Ordinal))
+                    {
+                      <form method="post" asp-page-handler="PinFolder" asp-route-path="@("@folders")">
+                        <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Pin to Quick Access</button>
+                      </form>
+                    }
+                    else if (Model.QuickAccess.Contains(folderPath, StringComparer.Ordinal))
+                    {
+                      <form method="post" asp-page-handler="UnpinFolder" asp-route-path="@("@folders")">
+                        <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Unpin shortcut</button>
+                      </form>
+                    }
+                    @if (exists)
+                    {
+                      <form method="post" asp-page-handler="DeleteLibrary" asp-route-path="@("@folders")"
+                            data-confirm="Permanently delete @name and everything inside? This cannot be undone.">
+                        <input type="hidden" name="folderPath" value="@folderPath"/><button class="danger" type="submit">Delete folder</button>
+                      </form>
+                    }
+                    else
+                    {
+                      <form method="post" asp-page-handler="RemoveMissingLibrary" asp-route-path="@("@folders")">
+                        <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Remove unavailable entry</button>
+                      </form>
+                    }
                   </div>
                 </details>
               </div>
@@ -134,6 +172,13 @@
         @if (!Model.View.Available) { <div class="empty-hint">@Model.View.Error</div> }
         else
         {
+          <div class="yrm-b10-file-selection" id="yrm-b10-file-selection" hidden>
+            <span id="yrm-b10-selected-name">1 selected</span>
+            <button type="button" class="button button-secondary" data-b10-file-rename>Rename</button>
+            <button type="button" class="button button-secondary" data-b10-file-move>Move</button>
+            <button type="button" class="button button-danger" data-b10-file-delete>Delete</button>
+            <button type="button" class="mini-button" data-b10-file-clear aria-label="Clear selection">×</button>
+          </div>
           <div class="responsive-table"><table class="data-table explorer-table">
             <thead><tr><th>File name</th><th>Modified</th><th>Type</th><th>Size</th><th aria-label="Actions"></th></tr></thead>
             <tbody>
@@ -144,7 +189,7 @@
               var matching = shared.FirstOrDefault(x => string.Equals(x.Path, absolute, StringComparison.Ordinal));
               var canShare = item.IsDirectory && FileAccess.IsManaged(absolute);
               var canEnable = item.IsDirectory && FileAccess.CanEnable(absolute) && !canShare;
-              <tr>
+              <tr data-b10-file-row data-b10-filename="@item.Name">
                 <td class="explorer-name">
                   @if (item.IsDirectory)
                   { <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
@@ -163,10 +208,24 @@
                       {
                         <button type="button" data-rename-item="@item.Name">Rename</button>
                         <button type="button" data-move-item="@item.Name">Move</button>
-                        <form method="post" asp-page-handler="Delete" asp-route-path="@currentRoute" data-confirm="Remove @item.Name? Non-empty folders cannot be deleted.">
+                        <form method="post" asp-page-handler="Delete" asp-route-path="@currentRoute" data-b10-row-delete data-confirm="Permanently delete @item.Name and its contents? This cannot be undone.">
                           <input type="hidden" name="name" value="@item.Name"/><button type="submit" class="danger">Delete</button>
                         </form>
                       }
+                      @if (item.IsDirectory && !Model.QuickAccess.Contains(absolute, StringComparer.Ordinal) && FileAccess.IsManaged(absolute))
+                      {
+                        <form method="post" asp-page-handler="PinFolder" asp-route-path="@currentRoute">
+                          <input type="hidden" name="folderPath" value="@absolute"/><button type="submit">Pin to Quick Access</button>
+                        </form>
+                      }
+                      else if (item.IsDirectory && Model.QuickAccess.Contains(absolute, StringComparer.Ordinal))
+                      {
+                        <form method="post" asp-page-handler="UnpinFolder" asp-route-path="@currentRoute">
+                          <input type="hidden" name="folderPath" value="@absolute"/><button type="submit">Unpin shortcut</button>
+                        </form>
+                      }
+                      @if (!Model.View.CanWrite)
+                      { <button type="button" data-b10-copy-path="@absolute">Copy path</button> }
                       @if (item.IsDirectory)
                       {
                         @if (matching is not null && matching.Managed)

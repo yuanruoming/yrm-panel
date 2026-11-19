@@ -51,9 +51,9 @@ class DdnsAndDialogs(unittest.TestCase):
     def test_current_domain_groups_and_edit(self):
         ui=source('YrmPanel/Pages/Settings.cshtml')
         self.assertIn('GroupBy(p => new { Provider',ui)
-        self.assertIn('asp-page-handler="DdnsEdit"',ui)
+        self.assertIn('asp-page-handler="DdnsEditGroup"',ui)
         self.assertNotIn('Test & Update',ui)
-        self.assertIn('Check Now',ui)
+        self.assertIn('Update Now',ui)
         self.assertIn('asp-page-handler="DdnsGroupCheck"',ui)
     def test_one_custom_confirmation_for_all_forms(self):
         ui=source('YrmPanel/Pages/Shared/_Layout.cshtml')

@@ -51,6 +51,38 @@ public sealed class StorageDeviceService
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { }
+            // Root mounts can be reported as /var/tmp first on systems that
+            // bind the root device at several locations. findmnt reflects the
+            // actual system root and avoids hiding Disk 1 from Storage Spaces.
+            if (!all.Any(d => d.MountPoint == "/"))
+            {
+                try
+                {
+                    var rootStart = new ProcessStartInfo("/usr/bin/findmnt")
+                    { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+                    foreach (var arg in new[] { "-n", "-o", "SOURCE", "--target", "/" })
+                        rootStart.ArgumentList.Add(arg);
+                    using var findRoot = Process.Start(rootStart);
+                    if (findRoot is not null)
+                    {
+                        var sourceTask = findRoot.StandardOutput.ReadToEndAsync(ct);
+                        var errorTask = findRoot.StandardError.ReadToEndAsync(ct);
+                        await findRoot.WaitForExitAsync(ct);
+                        _ = await errorTask;
+                        if (findRoot.ExitCode == 0)
+                        {
+                            var sourceText = (await sourceTask).Trim();
+                            var bracket = sourceText.IndexOf('[');
+                            var source = bracket >= 0 ? sourceText[..bracket] : sourceText;
+                            all = all.Select(d => d.Path == source
+                                ? d with { MountPoint = "/" } : d).ToList();
+                        }
+                    }
+                }
+                catch (Exception ex) when (ex is IOException or InvalidOperationException or
+                    System.ComponentModel.Win32Exception or OperationCanceledException)
+                { _logger.LogDebug(ex, "Unable to find Linux root mount"); }
+            }
             return all.Select(d => d with { ManagedMount = managed.Contains(d.MountPoint) }).ToArray();
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or JsonException
@@ -69,8 +101,15 @@ public sealed class StorageDeviceService
         var type = Field(item, "type");
         var mount = "";
         if (item.TryGetProperty("mountpoints", out var mounts) && mounts.ValueKind == JsonValueKind.Array)
-            mount = mounts.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String)
-                .Select(x => x.GetString() ?? "").FirstOrDefault(x => x.Length > 0) ?? "";
+        {
+            var points = mounts.EnumerateArray().Where(x => x.ValueKind == JsonValueKind.String)
+                .Select(x => x.GetString() ?? "").Where(x => x.Length > 0).ToArray();
+            // lsblk may list /var/tmp before /. The system volume must be
+            // classified by its root mount, not by an arbitrary first entry.
+            mount = points.Contains("/", StringComparer.Ordinal) ? "/" :
+                points.FirstOrDefault(x => !x.StartsWith("/var/", StringComparison.Ordinal)) ??
+                points.FirstOrDefault() ?? "";
+        }
         var fs = Field(item, "fstype");
         var uuid = Field(item, "uuid");
         var allowed = new[] { "ext4", "xfs", "btrfs", "vfat", "exfat", "ntfs" };

@@ -245,6 +245,177 @@ public sealed class SettingsModel : PageModel
         return RedirectToPage(new { tab = "ddns" });
     }
 
+    public async Task<IActionResult> OnPostDdnsAddGroupAsync(string name, string hostname, string recordType,
+        string urlTemplate, string httpMethod, string headerName, string token, string bodyTemplate,
+        string successContains, int intervalMinutes, string? detectionUrl, string? authType,
+        string? username, string? responseMode, string? successCodes, string? unchangedCodes,
+        string? errorCodes, string? jsonProperty, string? jsonExpected, bool verifyDns, string? provider,
+        bool ipv4Enabled, bool ipv6Enabled)
+    {
+        var ct = HttpContext.RequestAborted;
+        provider = (provider ?? "custom").Trim().ToLowerInvariant();
+        var families = provider == "custom"
+            ? new[] { recordType == "AAAA" ? "AAAA" : "A" }
+            : new[] { ipv4Enabled ? "A" : "", ipv6Enabled ? "AAAA" : "" }.Where(x => x.Length > 0).ToArray();
+        if (families.Length == 0)
+        {
+            Notice = "Error: Enable IPv4, IPv6 or both.";
+            return RedirectToPage(new { tab = "ddns" });
+        }
+        var before = await _ddns.ListAsync(ct);
+        if (before.Any(p => p.Provider.Equals(provider, StringComparison.OrdinalIgnoreCase) &&
+            p.Hostname.Equals(hostname?.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            Notice = "Error: This hostname already has a provider configuration. Use Edit instead.";
+            return RedirectToPage(new { tab = "ddns" });
+        }
+        var options = new DdnsProfileOptions(detectionUrl ?? "", authType ?? "header", username ?? "",
+            responseMode ?? "codes", successCodes ?? "", unchangedCodes ?? "", errorCodes ?? "",
+            jsonProperty ?? "success", jsonExpected ?? "true", verifyDns, provider);
+        foreach (var type in families)
+        {
+            var apiUrl = provider == "dynu" ? (type == "AAAA"
+                ? "https://api-ipv6.dynu.com/nic/update?hostname={hostname}&myip=no&myipv6={ip}"
+                : "https://api-ipv4.dynu.com/nic/update?hostname={hostname}&myip={ip}&myipv6=no")
+                : urlTemplate;
+            var result = await _ddns.AddAsync(name, hostname, type, apiUrl, httpMethod, headerName,
+                token, bodyTemplate, successContains, intervalMinutes, ct, options);
+            if (!result.StartsWith("Error:", StringComparison.Ordinal)) continue;
+            // Roll back only records this request added; a two-record form must
+            // not silently leave a half-created provider if the second fails.
+            var created = (await _ddns.ListAsync(ct)).Where(p => !before.Any(b => b.Id == p.Id) &&
+                p.Provider == provider && p.Hostname.Equals(hostname, StringComparison.OrdinalIgnoreCase)).ToArray();
+            foreach (var p in created) await _ddns.RemoveAsync(p.Id, ct);
+            Notice = result;
+            return RedirectToPage(new { tab = "ddns" });
+        }
+        Notice = null;
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsEditGroupAsync(string provider, string originalHostname,
+        string name, string hostname, string? username, string? token,
+        bool ipv4Enabled, bool ipv6Enabled, string? ipSource4, string? ipSource6,
+        string? manualIp4, string? manualIp6, string? interfaceName4, string? interfaceName6,
+        int intervalMinutes, bool enabled, string? apiUrl, string? httpMethod,
+        string? authType, string? headerName, string? bodyTemplate, string? responseMode,
+        string? successCodes, string? unchangedCodes, string? errorCodes,
+        string? jsonProperty, string? jsonExpected)
+    {
+        var ct = HttpContext.RequestAborted;
+        var all = await _ddns.ListAsync(ct);
+        var group = all.Where(p => p.Provider.Equals(provider, StringComparison.OrdinalIgnoreCase) &&
+            p.Hostname.Equals(originalHostname, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (group.Length == 0 || all.Any(p => !group.Any(x => x.Id == p.Id) &&
+            p.Provider.Equals(provider, StringComparison.OrdinalIgnoreCase) &&
+            p.Hostname.Equals(hostname, StringComparison.OrdinalIgnoreCase)))
+        {
+            Notice = "Error: Provider is missing or hostname already belongs to another configuration.";
+            return RedirectToPage(new { tab = "ddns" });
+        }
+        // Validate each family's options before changing either record so a
+        // bad IPv6 manual IP cannot leave IPv4 saved and IPv6 rejected.
+        foreach (var family in new[] {
+            (on: ipv4Enabled, src: ipSource4, ip: manualIp4, iface: interfaceName4,
+             addressFamily: System.Net.Sockets.AddressFamily.InterNetwork),
+            (on: ipv6Enabled, src: ipSource6, ip: manualIp6, iface: interfaceName6,
+             addressFamily: System.Net.Sockets.AddressFamily.InterNetworkV6) })
+        {
+            if (!family.on) continue;
+            var source = family.src ?? "public";
+            if (source is not ("public" or "manual" or "interface"))
+            { Notice = "Error: Invalid IP source."; return RedirectToPage(new { tab = "ddns" }); }
+            if (source == "manual" && (!System.Net.IPAddress.TryParse(family.ip, out var parsed) ||
+                parsed.AddressFamily != family.addressFamily))
+            { Notice = "Error: Invalid IPv4 or IPv6 manual address."; return RedirectToPage(new { tab = "ddns" }); }
+            if (source == "interface" && (string.IsNullOrWhiteSpace(family.iface) ||
+                !DdnsNetworkInterfaces.Contains(family.iface, StringComparer.Ordinal)))
+            { Notice = "Error: Select an existing network interface."; return RedirectToPage(new { tab = "ddns" }); }
+        }
+        var missing = new[] { (type: "A", on: ipv4Enabled), (type: "AAAA", on: ipv6Enabled) }
+            .Where(x => x.on && !group.Any(p => p.RecordType == x.type)).ToArray();
+        if (missing.Length > 0 && (string.IsNullOrWhiteSpace(token) || provider == "custom"))
+        {
+            Notice = "Error: To enable a new IP record, enter the provider credential again. Custom APIs require a separate record template.";
+            return RedirectToPage(new { tab = "ddns" });
+        }
+        foreach (var item in group)
+        {
+            var isV4 = item.RecordType == "A";
+            var on = isV4 ? ipv4Enabled : ipv6Enabled;
+            var source = on ? (isV4 ? ipSource4 : ipSource6) ?? "public" : "disabled";
+            var manual = isV4 ? manualIp4 : manualIp6;
+            var iface = isV4 ? interfaceName4 : interfaceName6;
+            var result = await _ddns.EditAsync(item.Id, name, hostname, username ?? "", token ?? "",
+                source, manual ?? "", iface ?? "", intervalMinutes, enabled, ct,
+                apiUrl, httpMethod, authType, headerName, bodyTemplate, responseMode,
+                successCodes, unchangedCodes, errorCodes, jsonProperty, jsonExpected);
+            if (result.StartsWith("Error:", StringComparison.Ordinal))
+            {
+                Notice = result;
+                return RedirectToPage(new { tab = "ddns" });
+            }
+        }
+        if (missing.Length > 0)
+        {
+            var sample = group[0];
+            var opts = new DdnsProfileOptions(sample.DetectionUrl, sample.AuthType,
+                username ?? sample.Username, sample.ResponseMode, sample.SuccessCodes,
+                sample.UnchangedCodes, sample.ErrorCodes, sample.JsonProperty,
+                sample.JsonExpected, sample.VerifyDns, sample.Provider);
+            foreach (var item in missing)
+            {
+                var url = provider == "dynu" ? (item.type == "AAAA"
+                    ? "https://api-ipv6.dynu.com/nic/update?hostname={hostname}&myip=no&myipv6={ip}"
+                    : "https://api-ipv4.dynu.com/nic/update?hostname={hostname}&myip={ip}&myipv6=no")
+                    : sample.UrlTemplate;
+                var result = await _ddns.AddAsync(name, hostname, item.type, url, sample.HttpMethod,
+                    sample.HeaderName, token ?? "", sample.BodyTemplate, sample.SuccessContains,
+                    intervalMinutes, ct, opts);
+                if (result.StartsWith("Error:", StringComparison.Ordinal))
+                {
+                    Notice = result;
+                    return RedirectToPage(new { tab = "ddns" });
+                }
+                var added = (await _ddns.ListAsync(ct)).FirstOrDefault(p =>
+                    p.Provider == provider && p.Hostname.Equals(hostname, StringComparison.OrdinalIgnoreCase)
+                    && p.RecordType == item.type && !all.Any(old => old.Id == p.Id));
+                if (added is not null)
+                {
+                    var v4 = item.type == "A";
+                    var changed = await _ddns.EditAsync(added.Id, name, hostname, username ?? "", "",
+                        (v4 ? ipSource4 : ipSource6) ?? "public",
+                        (v4 ? manualIp4 : manualIp6) ?? "",
+                        (v4 ? interfaceName4 : interfaceName6) ?? "",
+                        intervalMinutes, enabled, ct);
+                    if (changed.StartsWith("Error:", StringComparison.Ordinal))
+                    { Notice = changed; return RedirectToPage(new { tab = "ddns" }); }
+                }
+            }
+        }
+        Notice = null;
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsDeleteGroupAsync(string provider, string hostname)
+    {
+        var ct = HttpContext.RequestAborted;
+        var matches = (await _ddns.ListAsync(ct)).Where(p =>
+            p.Provider.Equals(provider, StringComparison.OrdinalIgnoreCase) &&
+            p.Hostname.Equals(hostname, StringComparison.OrdinalIgnoreCase)).ToArray();
+        foreach (var item in matches)
+        {
+            var status = await _ddns.RemoveAsync(item.Id, ct);
+            if (status.StartsWith("Error:", StringComparison.Ordinal))
+            {
+                Notice = status;
+                return RedirectToPage(new { tab = "ddns" });
+            }
+        }
+        Notice = null;
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
     public async Task<IActionResult> OnPostDdnsEditAsync(string id, string name, string hostname,
         string? username, string? token, string? ipSource, string? manualIp,
         string? interfaceName, int intervalMinutes, bool enabled,

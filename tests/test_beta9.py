@@ -58,7 +58,7 @@ class UnmountSafety(unittest.TestCase):
 class ProductContracts(unittest.TestCase):
     def test_disks_and_volumes_are_distinct(self):
         ui=source('YrmPanel/Pages/Settings.cshtml')
-        self.assertIn('>Volumes</h3>',ui)
+        self.assertIn('>Storage Spaces</h3>',ui)
         self.assertIn('>Physical Disks</h3>',ui)
         self.assertIn('name="uuid" value="@volume.Uuid"',ui)
         self.assertEqual(ui.count('asp-page-handler="Unmount"'),1)

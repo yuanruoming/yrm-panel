@@ -114,8 +114,62 @@ public sealed class FileManagerService
         _ = ResolveWritable(root, relative);
         var target = Resolve(root, Combine(relative, name), true);
         if (File.Exists(target)) File.Delete(target);
-        else if (Directory.Exists(target)) Directory.Delete(target, recursive: false);
+        else if (Directory.Exists(target)) SafeRecursiveDelete(target);
         else throw new IOException("Item not found.");
+    }
+
+    // Permanent folder deletion. Never cross a Linux mount, traverse a symbolic
+    // link, delete the actual home/root, or operate on a stale unmounted volume.
+    public void DeleteLibraryFolder(string absolutePath)
+    {
+        var normalized = MyFoldersStore.Normalize(absolutePath);
+        var home = Path.TrimEndingDirectorySeparator(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        if (normalized is "/home" or "/mnt" or "/media" or "/tmp" or "/backup" ||
+            normalized == home || normalized == "/volume2" || normalized == "/volume3")
+            throw new UnauthorizedAccessException("Cannot delete a system or volume root directory.");
+        var path = Resolve("system", normalized.TrimStart('/'), true);
+        if (!Directory.Exists(path)) throw new IOException("Folder no longer exists.");
+        var parent = Path.GetDirectoryName(path) ?? "/";
+        if (!Writeable(parent)) throw new UnauthorizedAccessException("Linux user cannot delete items here.");
+        if (path.StartsWith("/backup/", StringComparison.Ordinal) && !BackupMounted())
+            throw new IOException("Backup volume is not mounted.");
+        SafeRecursiveDelete(path);
+    }
+
+    private static void SafeRecursiveDelete(string target)
+    {
+        var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(target));
+        if (path == "/" || path == "/home" || path == "/var" ||
+            File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint))
+            throw new UnauthorizedAccessException("Protected or symbolic-link folder cannot be deleted.");
+        // mountinfo is authoritative even when mounts have been changed outside
+        // YRM Panel. Refuse both mount roots and any nested mountpoints.
+        foreach (var line in File.ReadLines("/proc/self/mountinfo"))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 5) continue;
+            var mount = parts[4].Replace("\\040", " ").Replace("\\011", "\t")
+                .Replace("\\012", "\n").Replace("\\134", "\\");
+            if (mount == path || mount.StartsWith(path + "/", StringComparison.Ordinal))
+                throw new IOException("Folder is a mount point or contains another mounted filesystem.");
+        }
+        var count = 0;
+        var stack = new Stack<string>();
+        stack.Push(path);
+        while (stack.Count > 0)
+        {
+            var item = stack.Pop();
+            foreach (var child in Directory.EnumerateFileSystemEntries(item))
+            {
+                if (++count > 100000)
+                    throw new IOException("Folder contains too many items for this operation.");
+                var attrs = File.GetAttributes(child);
+                if (attrs.HasFlag(FileAttributes.ReparsePoint))
+                    throw new IOException("Folder contains symbolic links; remove them separately.");
+                if (attrs.HasFlag(FileAttributes.Directory)) stack.Push(child);
+            }
+        }
+        Directory.Delete(path, recursive: true);
     }
 
     public void Move(string root, string? relative, string name, string destinationRelative)

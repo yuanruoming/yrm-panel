@@ -9,12 +9,14 @@ namespace YrmPanel.Services;
 public sealed class MyFoldersStore
 {
     private readonly string _file;
+    private readonly string _pinsFile;
     private readonly object _sync = new();
 
     public MyFoldersStore(PanelDataPaths paths)
     {
         Directory.CreateDirectory(paths.Root);
         _file = Path.Combine(paths.Root, "my-folders.json");
+        _pinsFile = Path.Combine(paths.Root, "quick-access.json");
     }
 
     public IReadOnlyList<string> List()
@@ -47,6 +49,50 @@ public sealed class MyFoldersStore
         }
     }
 
+    // Quick Access contains bookmarks only; it never changes the Linux filesystem.
+    public IReadOnlyList<string> ListPins()
+    {
+        lock (_sync) return ReadFileUnsafe(_pinsFile);
+    }
+
+    public void Pin(string absolutePath)
+    {
+        var path = Normalize(absolutePath);
+        lock (_sync)
+        {
+            var items = ReadFileUnsafe(_pinsFile);
+            if (!items.Contains(path, StringComparer.Ordinal))
+            {
+                items.Add(path);
+                SaveFileUnsafe(_pinsFile, items);
+            }
+        }
+    }
+
+    public void Unpin(string absolutePath)
+    {
+        var path = Normalize(absolutePath);
+        lock (_sync)
+        {
+            var items = ReadFileUnsafe(_pinsFile);
+            if (items.RemoveAll(x => x == path) > 0) SaveFileUnsafe(_pinsFile, items);
+        }
+    }
+
+    public void ForgetDeletedTree(string absolutePath)
+    {
+        var path = Normalize(absolutePath);
+        lock (_sync)
+        {
+            foreach (var filename in new[] { _file, _pinsFile })
+            {
+                var items = ReadFileUnsafe(filename);
+                if (items.RemoveAll(x => x == path || x.StartsWith(path + "/", StringComparison.Ordinal)) > 0)
+                    SaveFileUnsafe(filename, items);
+            }
+        }
+    }
+
     public static string Normalize(string path)
     {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path) ||
@@ -62,12 +108,14 @@ public sealed class MyFoldersStore
         return normalized;
     }
 
-    private List<string> ReadUnsafe()
+    private List<string> ReadUnsafe() => ReadFileUnsafe(_file);
+
+    private List<string> ReadFileUnsafe(string filename)
     {
         try
         {
-            if (!File.Exists(_file)) return [];
-            var data = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(_file)) ?? [];
+            if (!File.Exists(filename)) return [];
+            var data = JsonSerializer.Deserialize<List<string>>(File.ReadAllText(filename)) ?? [];
             return data.Where(path => !string.IsNullOrWhiteSpace(path))
                 .Distinct(StringComparer.Ordinal).Take(256).ToList();
         }
@@ -77,15 +125,17 @@ public sealed class MyFoldersStore
         }
     }
 
-    private void SaveUnsafe(List<string> folders)
+    private void SaveUnsafe(List<string> folders) => SaveFileUnsafe(_file, folders);
+
+    private void SaveFileUnsafe(string filename, List<string> folders)
     {
-        var temp = _file + ".tmp";
+        var temp = filename + ".tmp";
         try
         {
             File.WriteAllText(temp, JsonSerializer.Serialize(folders, new JsonSerializerOptions { WriteIndented = true }));
             if (OperatingSystem.IsLinux())
                 File.SetUnixFileMode(temp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            File.Move(temp, _file, true);
+            File.Move(temp, filename, true);
         }
         finally
         {

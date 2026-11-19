@@ -29,6 +29,7 @@ public sealed class FilesModel : PageModel
     private string CurrentRelative => Path == "/" ? "" : Path;
     public FileView View { get; private set; } = new("system", "", false, "Not loaded", []);
     public IReadOnlyList<string> MyFolders { get; private set; } = [];
+    public IReadOnlyList<string> QuickAccess { get; private set; } = [];
     public IReadOnlyList<StorageDevice> MountedVolumes { get; private set; } = [];
     public IReadOnlyList<StorageDevice> PhysicalDisks { get; private set; } = [];
     public bool CanSelectStorage => IsMyFolders || string.IsNullOrEmpty(Path);
@@ -57,10 +58,11 @@ public sealed class FilesModel : PageModel
         if (!Request.Query.ContainsKey("path")) Path = FolderHome;
         if (Path == "/") Path = "";
         MyFolders = _folders.List();
+        QuickAccess = _folders.ListPins();
         var discovered = await _devices.ListAsync(HttpContext.RequestAborted);
         PhysicalDisks = discovered.Where(d => d.Type == "disk").ToArray();
         MountedVolumes = discovered
-            .Where(device => device.MountPoint.Length > 0 && device.FileSystem.Length > 0 &&
+            .Where(device => device.MountPoint.Length > 0 && device.CanMount &&
                 device.MountPoint != "/" &&
                 !device.MountPoint.StartsWith("/var/", StringComparison.Ordinal) &&
                 !device.MountPoint.StartsWith("/boot", StringComparison.Ordinal) &&
@@ -124,18 +126,72 @@ public sealed class FilesModel : PageModel
         return Back();
     }
 
-    public IActionResult OnPostRemoveManaged(string folderPath)
+    public IActionResult OnPostRemoveMissingLibrary(string folderPath)
     {
         Path = FolderHome;
         try
         {
-            _folders.Remove(folderPath);
-            Notice = "Folder removed from My Folders. Files and SMB shares were preserved.";
+            var absolute = MyFoldersStore.Normalize(folderPath);
+            if (Directory.Exists(absolute))
+                throw new IOException("Folder exists. Use Delete Folder to remove the real directory.");
+            _folders.Remove(absolute);
+            _folders.Unpin(absolute);
+            Notice = null;
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-                                      or ArgumentException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         { Notice = "Error: " + FileManagerService.SafeError(ex); }
         return Back();
+    }
+
+    public IActionResult OnPostPinFolder(string folderPath)
+    {
+        try
+        {
+            var path = MyFoldersStore.Normalize(folderPath);
+            if (!Directory.Exists(path) || !_files.Browse("system", path.TrimStart('/')).Available)
+                throw new IOException("Folder is not accessible.");
+            _folders.Pin(path);
+            Notice = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { Notice = "Error: " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
+
+    public IActionResult OnPostUnpinFolder(string folderPath)
+    {
+        try { _folders.Unpin(folderPath); Notice = null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        { Notice = "Error: " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
+
+    // A My Folders deletion is the same real filesystem deletion as in Files.
+    // Quick Access uses Unpin instead, never deleting real data.
+    public async Task<IActionResult> OnPostDeleteLibraryAsync(string folderPath)
+    {
+        Path = FolderHome;
+        try
+        {
+            var absolute = MyFoldersStore.Normalize(folderPath);
+            if (!_folders.List().Contains(absolute, StringComparer.Ordinal))
+                throw new UnauthorizedAccessException("Folder is not in My Folders.");
+            await AssertNoSharesAsync(absolute);
+            _files.DeleteLibraryFolder(absolute);
+            _folders.ForgetDeletedTree(absolute);
+            Notice = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { Notice = "Error: " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
+
+    private async Task AssertNoSharesAsync(string absolute)
+    {
+        var smb = await _samba.ListAsync(HttpContext.RequestAborted);
+        if (!smb.Available) throw new IOException("Cannot verify SMB shares. Deletion was cancelled.");
+        if (smb.Shares.Any(x => x.Path == absolute || x.Path.StartsWith(absolute + "/", StringComparison.Ordinal)))
+            throw new IOException("Stop sharing this folder before deleting it.");
     }
 
     public async Task<IActionResult> OnPostCreateAsync(
@@ -220,8 +276,21 @@ public sealed class FilesModel : PageModel
     public IActionResult OnPostRename(string name, string newName)
     { Notice = Act(() => _files.Rename("system", CurrentRelative, name, newName), "Renamed."); return Back(); }
 
-    public IActionResult OnPostDelete(string name)
-    { Notice = Act(() => _files.Delete("system", CurrentRelative, name), "Removed."); return Back(); }
+    public async Task<IActionResult> OnPostDeleteAsync(string name)
+    {
+        try
+        {
+            var absolute = FileManagerService.Absolute(string.IsNullOrEmpty(CurrentRelative)
+                ? name : CurrentRelative.Trim('/') + "/" + name);
+            await AssertNoSharesAsync(absolute);
+            _files.Delete("system", CurrentRelative, name);
+            _folders.ForgetDeletedTree(absolute);
+            Notice = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { Notice = "Error: " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
 
     public IActionResult OnPostMove(string name, string destination)
     { Notice = Act(() => _files.Move("system", CurrentRelative, name, destination), "Moved."); return Back(); }

@@ -121,6 +121,108 @@
   });
   menuObserver.observe(document.body,{childList:true,subtree:true});
 
+  // Single styled provider picker. The real select remains the source of
+  // truth, so BETA9 preset logic and non-JS form fallback are preserved.
+  document.documentElement.classList.add('b10-js-ready');
+  function closeProviderPicker(){
+    document.querySelectorAll('[data-b10-provider-options]').forEach(el=>el.hidden=true);
+    document.querySelectorAll('[data-b10-provider-toggle]').forEach(el=>el.setAttribute('aria-expanded','false'));
+  }
+  document.addEventListener('click',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    if (!node)return;
+    const picker=node.closest('[data-b10-provider-picker]');
+    const trigger=node.closest('[data-b10-provider-toggle]');
+    if (trigger && picker){
+      const menu=picker.querySelector('[data-b10-provider-options]');
+      const open=Boolean(menu?.hidden);
+      closeProviderPicker();
+      if(menu)menu.hidden=!open;
+      trigger.setAttribute('aria-expanded',String(open));
+      return;
+    }
+    const option=node.closest('[data-b10-provider-option]');
+    if(option && picker){
+      const select=picker.querySelector('#yrm-ddns-provider-preset');
+      if(select){
+        select.value=option.dataset.b10ProviderOption;
+        select.dispatchEvent(new Event('change',{bubbles:true}));
+      }
+      picker.querySelector('[data-b10-provider-toggle]').firstChild.textContent=option.textContent+' ';
+      picker.querySelectorAll('[data-b10-provider-option]').forEach(el=>
+        el.setAttribute('aria-selected',String(el===option)));
+      closeProviderPicker();
+      return;
+    }
+    if(!picker)closeProviderPicker();
+  },true);
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')closeProviderPicker();});
+  // IPv4 and IPv6 source controls live inside a single provider editor.
+  document.addEventListener('change',event=>{
+    const node=event.target;
+    if (!(node instanceof Element))return;
+    const family=node.closest('[data-b10-family]');
+    if (family && node.matches('[data-b10-source-select]')) {
+      const source=node.value;
+      family.querySelectorAll('[data-b10-source-field]').forEach(field=>{
+        field.hidden=field.dataset.b10SourceField!==source;
+      });
+    }
+    if (node.id==='yrm-ddns-provider-preset') {
+      const form=node.closest('form');
+      const choices=form?.querySelector('.yrm-b10-add-families');
+      if (choices)choices.hidden=node.value==='custom';
+      const name=form?.elements.namedItem('name');
+      if (name instanceof HTMLInputElement && /^(Dynu IPv4|Cloudflare IPv4|Custom DDNS)$/.test(name.value))
+        name.value=node.value==='dynu4'?'Dynu':node.value==='cloudflare4'?'Cloudflare':'Custom DDNS';
+    }
+  },true);
+  // fnOS-style file selection: selecting a row exposes existing validated
+  // Rename/Move/Delete handlers. This is only UI; server authorization stays.
+  let selectedFileRow=null;
+  function setFileSelection(row){
+    if (selectedFileRow && selectedFileRow!==row)selectedFileRow.classList.remove('is-selected');
+    selectedFileRow=row?.isConnected?row:null;
+    selectedFileRow?.classList.add('is-selected');
+    const toolbar=document.getElementById('yrm-b10-file-selection');
+    if (!toolbar)return;
+    toolbar.hidden=!selectedFileRow;
+    const label=document.getElementById('yrm-b10-selected-name');
+    if (label)label.textContent=selectedFileRow?.dataset.b10Filename||'1 selected';
+    const canWrite=Boolean(selectedFileRow?.querySelector('[data-b10-row-delete]'));
+    for(const attr of ['data-b10-file-delete','data-b10-file-move','data-b10-file-rename']){
+      const button=toolbar.querySelector(`[${attr}]`);
+      if (button)button.disabled=!canWrite;
+    }
+  }
+  document.addEventListener('click',event=>{
+    const target=event.target;
+    if (!(target instanceof Element))return;
+    const row=target.closest('[data-b10-file-row]');
+    if (row && !target.closest('button,a,form,details,summary,input')) {
+      setFileSelection(selectedFileRow===row?null:row);
+      return;
+    }
+    if (target.closest('[data-b10-file-clear]')) {setFileSelection(null);return;}
+    const action=target.closest('[data-b10-file-rename],[data-b10-file-move],[data-b10-file-delete]');
+    if (!action || !selectedFileRow?.isConnected)return;
+    if (action.matches('[data-b10-file-rename]'))selectedFileRow.querySelector('[data-rename-item]')?.click();
+    if (action.matches('[data-b10-file-move]'))selectedFileRow.querySelector('[data-move-item]')?.click();
+    if (action.matches('[data-b10-file-delete]'))selectedFileRow.querySelector('[data-b10-row-delete]')?.requestSubmit();
+  },true);
+  const selectionObserver=new MutationObserver(()=>{
+    if (selectedFileRow && !selectedFileRow.isConnected)setFileSelection(null);
+  });
+  selectionObserver.observe(document.body,{childList:true,subtree:true});
+
+  // Read-only folders still expose More; copying a path requires no sudo.
+  document.addEventListener('click',event=>{
+    const button=event.target instanceof Element ? event.target.closest('[data-b10-copy-path]') : null;
+    if (!button)return;
+    const path=button.dataset.b10CopyPath||'';
+    if (path)void navigator.clipboard?.writeText(path).catch(()=>{});
+  },true);
+
   /* DDNS: Add/Edit stays in the current desktop window; passwords remain
      empty on edit and are never read back from the backend. */
   document.addEventListener('click',event=>{
@@ -128,7 +230,12 @@
     if (!(node instanceof Element))return;
     if (node.closest('[data-b9-ddns-add]')) {
       const dialog=get('yrm-b9-ddns-add');
-      if (dialog instanceof HTMLDialogElement && !dialog.open) dialog.showModal();
+      if (dialog instanceof HTMLDialogElement && !dialog.open){
+        dialog.showModal();
+        const form=dialog.querySelector('#yrm-ddns-new-form');
+        const name=form?.elements.namedItem('name');
+        if (name instanceof HTMLInputElement && name.value==='Dynu IPv4')name.value='Dynu';
+      }
     }
     if (node.closest('[data-b9-ddns-cancel]')) {
       const dialog=get('yrm-b9-ddns-add');
@@ -154,12 +261,12 @@
     if (form.dataset.b9Busy==='1') return;
     form.dataset.b9Busy='1';
     const button=form.querySelector('button[type="submit"]');
-    const previous=button?.textContent||'Check Now';
-    if (button) { button.disabled=true;button.textContent='Checking…'; }
+    const previous=button?.textContent||'Update Now';
+    if (button) { button.disabled=true;button.textContent='Updating…'; }
     const group=form.closest('[data-b9-ddns-provider]');
     const status=group?.querySelector('[data-b9-ddns-status]');
     let info=group?.querySelector('[data-b9-ddns-result]');
-    if (status) status.textContent='Checking';
+    if (status) {status.textContent='Updating';status.dataset.b10State='updating';}
     if (!info && group) {
       info=document.createElement('p');
       info.dataset.b9DdnsResult='1';
@@ -192,10 +299,10 @@
             error.textContent=failed?record.status:'';
           }
         }
-        if (status)status.textContent=data.ok?'Normal':'Failed';
-        if (!data.ok && info) {info.hidden=false;info.textContent=data.message||'DDNS check failed.';}
+        if (status) {status.textContent=data.ok?'Normal':'Failed';status.dataset.b10State=data.ok?'normal':'failed';}
+        if (!data.ok && info) {info.hidden=false;info.textContent=data.message||'DDNS update failed.';}
       } catch (err) {
-        if (status)status.textContent='Unavailable';
+        if (status) {status.textContent='Unavailable';status.dataset.b10State='unavailable';}
         if (info) {info.hidden=false;info.textContent=String(err.message||err);}
       } finally {
         delete form.dataset.b9Busy;
@@ -218,6 +325,8 @@
       const state=String(progress?.state||'idle').toLowerCase();
       const phase=String(progress?.phase||'').toLowerCase();
       stages.hidden=state!=='running' && state!=='completed' && state!=='failed';
+      const detailPanel=get('yrm-b10-update-details');
+      if (detailPanel) detailPanel.hidden=state!=='running' && state!=='failed';
       if (stages.hidden)return;
       const order=['checking','downloading','verifying','installing','restarting','completed'];
       let index=order.indexOf(phase);
@@ -240,6 +349,33 @@
     } catch { // Expected while the Panel service restarts; poll after recovery.
     } finally {b9UpdatePending=false;}
   }
+  // Storage tabs: instant switch in the existing Settings page, no roundtrip.
+  document.addEventListener('click',event=>{
+    const tab=event.target instanceof Element ? event.target.closest('[data-b10-storage-tab]') : null;
+    if (!(tab instanceof HTMLElement))return;
+    const host=tab.closest('.server-settings-content');
+    if (!host)return;
+    const value=tab.dataset.b10StorageTab;
+    host.querySelectorAll('[data-b10-storage-tab]').forEach(button=>{
+      const active=button.dataset.b10StorageTab===value;
+      button.classList.toggle('is-active',active);
+      button.setAttribute('aria-pressed',String(active));
+    });
+    host.querySelectorAll('[data-b10-storage-panel]').forEach(panel=>panel.hidden=panel.dataset.b10StoragePanel!==value);
+    try {sessionStorage.setItem('yrm:storage-view',value);}catch{}
+  },true);
+  function restoreStorageTab(){
+    const host=document.querySelector('.server-settings-content');
+    const tab=host?.querySelector('[data-b10-storage-tab]');
+    if (!tab || host.dataset.b10StorageRestored==='1')return;
+    host.dataset.b10StorageRestored='1';
+    let value='volumes';try{value=sessionStorage.getItem('yrm:storage-view')||value;}catch{}
+    const target=host.querySelector(`[data-b10-storage-tab="${value==='disks'?'disks':'volumes'}"]`);
+    if (target && value==='disks')target.click();
+  }
+  const storageTabObserver=new MutationObserver(restoreStorageTab);
+  storageTabObserver.observe(document.body,{childList:true,subtree:true});
+  restoreStorageTab();
   window.setInterval(()=>void showUpdateStages(),2200);
   void showUpdateStages();
 })();
