@@ -191,3 +191,18 @@
 
 .yrm-ddns-editor input:-webkit-autofill,
 #yrm-ddns-new-form input:-webkit-autofill{-webkit-text-fill-color:var(--text,#e8eef5);-webkit-box-shadow:0 0 0 1000px #141d2a inset;caret-color:var(--text,#e8eef5)}
+
+/* BETA8 follow-up: fixed desktop geometry for New Folder, regardless of location. */
+#new-folder-dialog.explorer-dialog {width:min(860px,calc(100vw - 32px));max-width:860px;min-height:min(540px,calc(100dvh - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;}
+#new-folder-dialog .explorer-create-form {display:flex;flex-direction:column;min-height:min(460px,calc(100dvh - 114px));}
+#new-folder-dialog .explorer-dialog-grid {flex:1;min-height:330px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+#new-folder-dialog .explorer-folder-chooser {min-height:300px;max-height:340px;overflow:auto;}
+#new-folder-dialog .explorer-folder-fields {min-width:0;}
+#new-folder-dialog .explorer-folder-current {display:flex;flex-direction:column;gap:12px;}
+#new-folder-dialog .yrm-current-path {overflow-wrap:anywhere;color:#89bdd9;margin-top:12px;font-size:13px;}
+#new-folder-dialog .yrm-parent-location {display:grid;gap:7px;margin-top:2px;font-size:12px;color:#a8bfce;}
+#new-folder-dialog .yrm-parent-location strong {display:block;font-size:13px;font-weight:500;color:#d5e7f9;overflow-wrap:anywhere;padding:9px 0;}
+#new-folder-dialog #new-folder-full-path {display:block;margin-top:2px;}
+.yrm-volume-actions {display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;}
+.yrm-volume-actions form {margin:0;}
+@media(max-width:620px){#new-folder-dialog .explorer-dialog-grid{grid-template-columns:1fr;min-height:auto}#new-folder-dialog .explorer-folder-chooser{min-height:130px;max-height:180px}#new-folder-dialog.explorer-dialog{min-height:0}}

@@ -62,7 +62,7 @@
         @if (snapshot.Disks.Count == 0) { <div class="empty-hint">No storage volumes detected.</div> }
       </div>
       <section class="v1-settings-panel yrm-storage-section">
-        <div class="settings-row-top"><div><h3>Disks &amp; Mounts</h3><p class="muted">Physical devices, partitions and actual mount locations.</p></div></div>
+        <div class="settings-row-top"><div><h3>Disks &amp; Mounts</h3><p class="muted">Physical devices, volumes and mount locations. Create and share folders in Files.</p></div></div>
         @foreach (var disk in Model.StorageDevices.Where(x => x.Type == "disk"))
         {
           <article class="yrm-disk-card">
@@ -85,10 +85,24 @@
                 }
                 else if (partition.ManagedMount && partition.MountPoint.Length > 0)
                 {
-                  <div class="v1-row"><a class="button button-secondary" asp-page="/Files" asp-route-path="@partition.MountPoint.TrimStart('/')">Open Files</a>
-                    <form method="post" asp-page-handler="Unmount" asp-route-tab="storage" data-requires-admin="Unmount disk" data-confirm="Unmount this disk? Make sure no files are in use.">
-                      <input type="hidden" name="mountPath" value="@partition.MountPoint" /><button class="button button-secondary" type="submit">Unmount</button>
-                    </form></div>
+                  <div class="v1-row yrm-volume-actions">
+                    @if (!Model.Sharing.Available)
+                    {
+                      <button class="button button-secondary" disabled title="SMB status could not be verified">Unmount</button>
+                      <small class="muted">SMB status unavailable. Unmount is paused to avoid disrupting shares.</small>
+                    }
+                    else if (Model.HasVolumeShares(partition.MountPoint))
+                    {
+                      <button class="button button-secondary" disabled title="Stop SMB sharing first">Unmount</button>
+                      <small class="muted">Stop sharing folders in Files or File Sharing before unmounting.</small>
+                    }
+                    else
+                    {
+                      <form method="post" asp-page-handler="Unmount" asp-route-tab="storage" data-requires-admin="Unmount volume" data-confirm="Unmount this volume? Make sure no files are in use.">
+                        <input type="hidden" name="mountPath" value="@partition.MountPoint" /><button class="button button-secondary" type="submit">Unmount</button>
+                      </form>
+                    }
+                  </div>
                 }
                 else if (partition.MountPoint.Length > 0)
                 { <span class="muted">System / external mount · managed outside YRM PANEL</span> }
@@ -116,48 +130,7 @@
                 }
                 else
                 { <p class="muted">This filesystem is not eligible for automated mounting.</p> }
-                @if (Model.Sharing.Available && Model.IsShareableVolume(partition))
-                {
-                  var currentShare = Model.Sharing.Shares.FirstOrDefault(s =>
-                      string.Equals(s.Path, partition.MountPoint, StringComparison.Ordinal));
-                  @if (currentShare is null)
-                  {
-                    <details class="yrm-disk-initialize">
-                      <summary class="button button-secondary">Share whole volume via SMB</summary>
-                      <form method="post" asp-page-handler="ShareVolume" asp-route-tab="storage"
-                            data-requires-admin="Share mounted volume" class="fm-dialog-form">
-                        <input type="hidden" name="mountPath" value="@partition.MountPoint" />
-                        <label>Share name
-                          <input name="shareName" required maxlength="32"
-                                 value="@System.IO.Path.GetFileName(partition.MountPoint)" />
-                        </label>
-                        <label class="v1-check"><input name="readOnly" type="checkbox" value="true" /> Read-only</label>
-                        @if (!Model.Sharing.AccountConfigured)
-                        {
-                          <label>First-time SMB password
-                            <input name="smbPassword" type="password" required minlength="12" maxlength="256"
-                                   autocomplete="new-password" />
-                          </label>
-                        }
-                        <button class="button button-primary" type="submit">Share</button>
-                      </form>
-                    </details>
-                  }
-                  else
-                  {
-                    <div class="v1-row"><span class="tag">SMB: @currentShare.Name</span>
-                      @if (currentShare.Managed)
-                      {
-                        <form method="post" asp-page-handler="UnshareVolume" asp-route-tab="storage"
-                              data-requires-admin="Stop sharing mounted volume"
-                              data-confirm="Stop sharing @currentShare.Name? Your files will be preserved.">
-                          <input type="hidden" name="name" value="@currentShare.Name" />
-                          <button class="button button-secondary" type="submit">Stop sharing</button>
-                        </form>
-                      }
-                    </div>
-                  }
-                }
+
               </div>
             }
             @if (Model.StorageDevices.Any(x => x.ParentPath == disk.Path && Model.IsSmallUnformatted(x)))

@@ -32,50 +32,6 @@
   },true);
   restoreDisclosure();
 
-  async function drawFolderTree(relative,tree) {
-    if (!tree) return;
-    try {
-      const params = new URLSearchParams({handler:'Tree',path:relative});
-      const response = await fetch(`/Files?${params}`,{credentials:'same-origin',cache:'no-store'});
-      if (!response.ok) throw new Error('Cannot browse the selected location.');
-      const data = await response.json();
-      tree.replaceChildren();
-      function button(label,path) {
-        const node = document.createElement('button');node.type='button';node.className='explorer-tree-item';
-        node.textContent=label;
-        node.addEventListener('click',()=>{chooseParent(path);void drawFolderTree(path,tree);});
-        tree.append(node);
-      }
-      if (data.path) button('↰  ..', data.path.split('/').slice(0,-1).join('/'));
-      for (const folder of data.folders || [])
-        button(`📁  ${folder}`, data.path ? `${data.path}/${folder}` : folder);
-      if (!data.folders?.length) tree.append(document.createTextNode('No subfolders.'));
-    } catch (error) { tree.replaceChildren(document.createTextNode(error.message)); }
-  }
-  function chooseParent(path) {
-    const parent=get('new-folder-parent'),tree=get('new-folder-tree');
-    if (!(parent instanceof HTMLInputElement)) return;
-    parent.value=path;
-    if (tree) tree.dataset.initialFolder=path;
-    const name=document.querySelector('#new-folder-dialog input[name="name"]');
-    const display=get('new-folder-full-path');
-    if (display) display.textContent=`/${path ? `${path}/` : ''}${name?.value || ''}`;
-    const volume=get('yrm-folder-volume');
-    if (volume instanceof HTMLSelectElement) {
-      const known=Array.from(volume.options).filter(o=>o.value && (path===o.value||path.startsWith(o.value+'/')));
-      known.sort((a,b)=>b.value.length-a.value.length);
-      if (known.length) volume.value=known[0].value;
-      else if (!path) volume.selectedIndex=0;
-      else volume.selectedIndex=-1;
-    }
-  }
-  document.addEventListener('change',event => {
-    const node=event.target;
-    if (!(node instanceof HTMLSelectElement) || node.id!=='yrm-folder-volume') return;
-    chooseParent(node.value);
-    void drawFolderTree(node.value,get('new-folder-tree'));
-  },true);
-
   const observer = new MutationObserver(restoreDisclosure);
   observer.observe(document.body,{childList:true,subtree:true});
 

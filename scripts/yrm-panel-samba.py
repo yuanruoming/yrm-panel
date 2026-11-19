@@ -272,6 +272,9 @@ def save_share(name, path, readonly):
         'read only': 'yes' if readonly else 'no',
         'create mask': '0660',
         'directory mask': '0770',
+        # Windows Explorer hides this ext4-maintenance directory by default.
+        # It is never deleted and its Unix permissions are not modified.
+        'hide files': '/lost+found/',
     }
     for key, value in values.items():
         config.set(name, key, value)

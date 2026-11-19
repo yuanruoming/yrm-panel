@@ -123,14 +123,16 @@ class HostSambaTests(unittest.TestCase):
         self.assertNotIn('Add the folder to My Folders before sharing it.', text)
         self.assertIn('_files.IsManaged(full)', text)
 
-    def test_storage_volume_share_has_server_side_discovery(self):
+    def test_storage_shares_only_folders_in_files(self):
         model = (ROOT/'YrmPanel/Pages/Settings.cshtml.cs').read_text()
         view = (ROOT/'YrmPanel/Pages/Settings.cshtml').read_text()
-        self.assertIn('OnPostShareVolumeAsync(', model)
-        self.assertIn('IsShareableVolume(item)', model)
-        self.assertIn('OnPostUnshareVolumeAsync(', model)
-        self.assertIn('asp-page-handler="ShareVolume"', view)
-        self.assertIn('asp-page-handler="UnshareVolume"', view)
+        files = (ROOT/'YrmPanel/Pages/Files.cshtml').read_text()
+        self.assertNotIn('asp-page-handler="ShareVolume"', view)
+        self.assertNotIn('asp-page-handler="UnshareVolume"', view)
+        self.assertNotIn('Share whole volume via SMB', view)
+        self.assertNotIn('OnPostShareVolumeAsync(', model)
+        self.assertIn('asp-page-handler="Share"', files)
+        self.assertIn('This volume still contains an SMB share.', model)
 
     def test_testparm_must_include_requested_share(self):
         with tempfile.TemporaryDirectory() as folder:

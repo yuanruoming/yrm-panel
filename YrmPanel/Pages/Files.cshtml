@@ -112,15 +112,6 @@
         </div>
         <div class="explorer-toolbar fm-compact-toolbar">
           <button type="button" class="button button-secondary" data-open-new-folder>＋ New Folder</button>
-          @if (Model.View.Available && Model.MountedVolumes.Any(v =>
-              string.Equals(v.MountPoint, Model.Absolute, StringComparison.Ordinal)) &&
-              FileAccess.IsManaged(Model.Absolute) &&
-              !shared.Any(s => string.Equals(s.Path, Model.Absolute, StringComparison.Ordinal)))
-          {
-            <button type="button" class="button button-secondary"
-                    data-share-folder="@System.IO.Path.GetFileName(Model.Absolute)"
-                    data-share-absolute="@Model.Absolute">Share this volume via SMB</button>
-          }
           @if (Model.View.Available && Model.View.CanWrite)
           {
             <form method="post" asp-page-handler="Upload" asp-route-path="@currentRoute" enctype="multipart/form-data" class="explorer-upload fm-upload-form">
@@ -162,7 +153,7 @@
                 </td>
                 <td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
                 <td class="muted">@(item.IsDirectory ? "Folder" : "File")</td>
-                <td class="muted">@(item.IsDirectory ? "—" : $"{item.Size:N0} B")</td>
+                <td class="muted" title="@(item.IsDirectory ? "Folder" : $"{item.Size:N0} bytes")">@(item.IsDirectory ? "—" : Model.FormatSize(item.Size))</td>
                 <td class="explorer-menu-cell">
                   <details class="explorer-item-menu"><summary aria-label="File actions" title="Actions">⋯</summary>
                     <div class="explorer-actions-popover">
@@ -217,14 +208,21 @@
   <div id="file-preview-body" class="fm-preview-body"></div>
   <div class="panel-modal-actions"><a id="file-preview-download" class="button button-secondary" data-native-download href="#">Download</a><button type="button" class="button button-secondary" data-close-dialog="file-preview-dialog">Close</button></div>
 </dialog>
-<dialog id="new-folder-dialog" class="panel-modal explorer-dialog" aria-labelledby="new-folder-title">
+<dialog id="new-folder-dialog" class="panel-modal explorer-dialog" aria-labelledby="new-folder-title" data-current-volume-root="@(Model.MountedVolumes.Any(v => v.MountPoint == Model.Absolute) ? "true" : "false")">
   <div class="panel-modal-head"><strong id="new-folder-title">New Folder</strong><button type="button" data-close-dialog="new-folder-dialog" aria-label="Close">×</button></div>
   <form method="post" asp-page-handler="Create" class="explorer-create-form">
     <input type="hidden" name="returnTo" value="@currentRoute"/>
-    <div class="explorer-dialog-grid @(Model.CanSelectStorage ? "" : "yrm-fixed-location")">
+    <div class="explorer-dialog-grid">
       @if (Model.CanSelectStorage)
       {
         <div class="explorer-folder-chooser"><strong>Folder location</strong><div id="new-folder-tree" class="explorer-tree" data-initial-folder="@Model.DefaultCreateParent"></div></div>
+      }
+      else
+      {
+        <div class="explorer-folder-chooser explorer-folder-current"><strong>Current location</strong>
+          <p class="muted">This folder will be created inside the current directory.</p>
+          <p class="yrm-current-path">@Model.Absolute</p>
+        </div>
       }
       <div class="explorer-folder-fields">
         @if (Model.CanSelectStorage)
@@ -246,7 +244,8 @@
           <p class="muted yrm-fixed-storage-note">This folder will be created in the current location. The existing Linux mount determines which disk stores it.</p>
         }
         <label>Folder name<input name="name" required maxlength="64" autocomplete="off" placeholder="New Folder"/></label>
-        <label>Parent path<input name="parent" id="new-folder-parent" value="@Model.DefaultCreateParent" readonly/></label>
+        <input type="hidden" name="parent" id="new-folder-parent" value="@Model.DefaultCreateParent" />
+        <div class="yrm-parent-location"><span>Parent location</span><strong id="new-folder-parent-text">/@Model.DefaultCreateParent</strong></div>
         <small id="new-folder-full-path">/@Model.DefaultCreateParent</small><p class="muted" id="new-folder-rights"></p>
       </div>
     </div>

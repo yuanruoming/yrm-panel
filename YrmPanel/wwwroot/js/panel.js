@@ -249,8 +249,8 @@
   // App dialogs and file dialogs are delegated because Razor content is loaded via Fetch.
   async function listFolders(path) {
     const tree = document.querySelector("#new-folder-tree");
-    if (!tree) return;
-    tree.replaceChildren();
+    if (!document.querySelector("#new-folder-dialog")) return;
+    if (tree) tree.replaceChildren();
     const folderPath = (path || "").replace(/^\/+|\/+$/g, "");
     try {
       const response = await fetch(`/Files?handler=Tree&path=${encodeURIComponent(folderPath)}`, {credentials:"same-origin", cache:"no-store"});
@@ -258,23 +258,44 @@
       if (!response.ok) throw new Error(data.error || "Cannot read this folder.");
       const parentInput = document.querySelector("#new-folder-parent");
       if (parentInput) parentInput.value = data.path;
+      const parentText = document.querySelector("#new-folder-parent-text");
+      if (parentText) parentText.textContent = data.absolute;
+      const volume = document.querySelector("#yrm-folder-volume");
+      let volumeRoot = !volume && document.querySelector("#new-folder-dialog")?.dataset.currentVolumeRoot === "true";
+      if (volume instanceof HTMLSelectElement) {
+        const options = Array.from(volume.options).filter(o => o.value &&
+          (data.path === o.value || data.path.startsWith(o.value + "/")));
+        options.sort((a,b) => b.value.length - a.value.length);
+        if (options.length) volume.value = options[0].value;
+        volumeRoot = options.some(o => o.value === data.path && o.value !== "");
+      }
       const nameInput = document.querySelector("#new-folder-dialog input[name=name]");
       const preview = document.querySelector("#new-folder-full-path");
       const rights = document.querySelector("#new-folder-rights");
       const submit = document.querySelector("#new-folder-dialog button[type=submit]");
       if (preview) preview.textContent = data.absolute + (nameInput?.value ? (data.path ? "/" : "") + nameInput.value : "");
-      if (rights) rights.textContent = data.canManage || data.path === "" ? "" : "This folder is read-only. Enable its management in Files first.";
-      if (submit) submit.disabled = !(data.canManage || data.path === "");
+      const canCreate = data.canManage || data.path === "" || (data.canEnable && volumeRoot);
+      if (rights) rights.textContent = data.canManage || data.path === "" ? "" :
+        (data.canEnable && volumeRoot ? "Linux authorization will enable this volume and create the folder." :
+          "This folder is read-only. Enable management from Files first.");
+      if (submit) submit.disabled = !canCreate;
+      const form = document.querySelector("#new-folder-dialog .explorer-create-form");
+      if (form) {
+        if (data.canEnable && volumeRoot) form.dataset.requiresAdmin = "Enable volume access and create folder";
+        else delete form.dataset.requiresAdmin;
+      }
       const makeItem = (name, nextPath, icon) => {
         const b = document.createElement("button"); b.type="button"; b.className="explorer-tree-item";
         b.textContent = `${icon}  ${name}`;
         b.addEventListener("click", () => void listFolders(nextPath));
         return b;
       };
-      if (data.path) tree.append(makeItem("..", data.path.split("/").slice(0,-1).join("/"), "↰"));
-      for (const name of data.folders || []) tree.append(makeItem(name, data.path ? `${data.path}/${name}` : name,"📁"));
-      if (!data.folders?.length) tree.append(document.createTextNode("No subfolders."));
-    } catch (error) { tree.textContent = error.message; }
+      if (tree) {
+        if (data.path) tree.append(makeItem("..", data.path.split("/").slice(0,-1).join("/"), "↰"));
+        for (const name of data.folders || []) tree.append(makeItem(name, data.path ? `${data.path}/${name}` : name,"📁"));
+        if (!data.folders?.length) tree.append(document.createTextNode("No subfolders."));
+      }
+    } catch (error) { if (tree) tree.textContent = error.message; }
   }
   function openDialog(id) { const node = $(id); if (node && !node.open) node.showModal(); }
   document.addEventListener("click", (event) => {
@@ -322,6 +343,9 @@
       if (editing) $("application-delete-index").value = button.dataset.editAppIndex;
       openDialog("application-editor-dialog");
     }
+  });
+  document.addEventListener("change", event => {
+    if (event.target.id === "yrm-folder-volume") void listFolders(event.target.value);
   });
   document.addEventListener("input", event => {
     if (event.target.matches?.("#new-folder-dialog input[name=name]")) {
@@ -479,7 +503,7 @@
     const action = new URL(form.action, location.href);
     if (action.origin !== location.origin || !internalUrl(action.href)) return;
     event.preventDefault();
-    if (form.dataset.confirm && !window.confirm(form.dataset.confirm)) return;
+    // Confirmation is handled once by v1-confirm.js before sudo authorization.
     if (actionPending) return; // Avoid overlapping state-changing POST requests from this shell.
     actionPending = true;
     const submittedUrl = activeUrl;
@@ -516,6 +540,13 @@
       for (const node of Array.from(remotePage.childNodes)) fragment.append(document.importNode(node, true));
       page.replaceChildren(fragment);
       harvestNotices(page);
+      // Refresh Files on next opening after any disk mount-state change.
+      if (canonicalPath(submittedUrl.split("?")[0]) === "/Settings" &&
+          /^(Mount|Unmount|InitializeDisk|CompleteDisk)$/.test(action.searchParams.get("handler") || "")) {
+        for (const [url, tab] of tabs) {
+          if (canonicalPath(url.split("?")[0]) === "/Files") tab.fragment = null;
+        }
+      }
       if (["/Settings","/Applications"].includes(canonicalPath(submittedUrl.split("?")[0]))) void refreshDesktop();
       windowScroll.scrollTop = 0;
       const title = doc.body.dataset.initialTitle || "Application";
@@ -530,12 +561,6 @@
       if (button?.isConnected) button.disabled = false;
     }
   });
-
-  document.addEventListener("submit", (event) => {
-    const form = event.target;
-    if (!(form instanceof HTMLFormElement) || !form.dataset.confirm || form.closest("#window-page")) return;
-    if (!window.confirm(form.dataset.confirm)) event.preventDefault();
-  }, true);
 
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;

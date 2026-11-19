@@ -21,7 +21,7 @@ MANUAL = pathlib.Path('/etc/yrm-panel/manual-mounts.json')
 MARKER = '# yrm-panel-managed:'
 UUID_RE = re.compile(r'^[A-Za-z0-9-]{4,80}$')
 ALLOWED = {'ext4', 'xfs', 'btrfs', 'vfat', 'exfat', 'ntfs'}
-PROTECTED = {'/', '/boot', '/boot/efi', '/etc', '/usr', '/var', '/opt', '/root', '/proc', '/sys', '/dev', '/run'}
+PROTECTED = {'/', '/boot', '/boot/efi', '/etc', '/usr', '/var', '/opt', '/root', '/proc', '/sys', '/dev', '/run', '/home'}
 
 
 def emit(ok, message):
@@ -39,7 +39,7 @@ def path_check(raw):
     if not raw.startswith('/') or any(x in ('.', '..') for x in raw.split('/')) or '\\' in raw or '\x00' in raw:
         raise ValueError('A normal absolute mount path is required.')
     path = pathlib.Path(os.path.normpath(raw))
-    if str(path) in PROTECTED or any(str(path).startswith(p + '/') for p in ('/etc','/usr','/var','/opt','/root','/proc','/sys','/dev','/run','/boot')):
+    if str(path) in PROTECTED or any(str(path).startswith(p + '/') for p in ('/etc','/usr','/var','/opt','/root','/proc','/sys','/dev','/run','/boot','/home')):
         raise ValueError('Cannot mount over protected system locations.')
     if any(char.isspace() for char in raw):
         raise ValueError('Mount paths containing whitespace are not supported yet.')
@@ -113,7 +113,13 @@ def grant_owner_for_new_empty_volume(path, info):
     Never recursively chown files or change an existing populated volume. Keep
     Linux's lost+found directory intact. A missing user means no ownership change.
     """
-    if info.get('fstype') != 'ext4' or str(path) not in ('/data', '/backup'):
+    # Use the actual selected path. Never assume an extra disk must be /data
+    # or /backup; /volume2 and other user-selected mount locations work too.
+    # This call is made only after create_mount has validated the destination.
+    mount_path = str(path)
+    if (info.get('fstype') != 'ext4' or mount_path in PROTECTED or
+            any(mount_path.startswith(p + '/') for p in
+                ('/boot', '/etc', '/usr', '/var', '/opt', '/root', '/proc', '/sys', '/dev', '/run', '/home'))):
         return False
     if any(name != 'lost+found' for name in os.listdir(path)):
         return False
@@ -129,6 +135,8 @@ def grant_owner_for_new_empty_volume(path, info):
     except KeyError:
         return False
     os.chown(path, account.pw_uid, account.pw_gid)
+    # Only the filesystem root is changed, never the existing contents.
+    os.chmod(path, 0o2770)
     return True
 
 

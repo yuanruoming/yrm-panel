@@ -32,6 +32,7 @@ public sealed class FilesModel : PageModel
     public IReadOnlyList<StorageDevice> MountedVolumes { get; private set; } = [];
     public IReadOnlyList<StorageDevice> PhysicalDisks { get; private set; } = [];
     public bool CanSelectStorage => IsMyFolders || string.IsNullOrEmpty(Path);
+    public string FormatSize(long size) => FileManagerService.FormatSize(size);
     public string StorageLabel(StorageDevice volume)
     {
         var number = 0;
@@ -154,6 +155,32 @@ public sealed class FilesModel : PageModel
         }
         else
         {
+            var absoluteParent = FileManagerService.Absolute(normalizedParent);
+            if (!_files.IsManaged(absoluteParent))
+            {
+                // The selected mountpoint is not yet writable. For a real mounted
+                // data volume only, request one sudo authorization and grant its
+                // root directory ACL; never recursively alter existing files.
+                var volumes = await _devices.ListAsync(HttpContext.RequestAborted);
+                var volume = volumes.FirstOrDefault(v =>
+                    v.MountPoint == absoluteParent && v.FileSystem.Length > 0 && !v.ReadOnly &&
+                    v.MountPoint != "/" && !v.MountPoint.StartsWith("/home/", StringComparison.Ordinal) &&
+                    !v.MountPoint.StartsWith("/boot", StringComparison.Ordinal) &&
+                    !v.MountPoint.StartsWith("/var/", StringComparison.Ordinal));
+                if (volume is not null && !string.IsNullOrEmpty(adminPassword) &&
+                    !string.IsNullOrWhiteSpace(name) && name is not ("." or "..") &&
+                    !name.Contains('/') && !name.Contains('\\') && !name.Contains('\0') &&
+                    !name.Any(char.IsControl))
+                {
+                    var granted = await _storage.RunAsync("grant", absoluteParent, adminPassword,
+                        HttpContext.RequestAborted);
+                    if (granted.StartsWith("Error:", StringComparison.Ordinal))
+                    {
+                        Notice = granted;
+                        return Back();
+                    }
+                }
+            }
             Notice = Act(() => _files.CreateFolder("system", normalizedParent, name), "Folder created.");
         }
         if (!Notice.StartsWith("Error:", StringComparison.Ordinal) &&

@@ -54,10 +54,17 @@
     targetSubmitter = null;
     modal.close();
     form.dataset.adminAuthorized = "1";
-    if (submitter instanceof HTMLButtonElement && submitter.isConnected)
-      form.requestSubmit(submitter);
-    else
-      form.requestSubmit();
+    // This is the second phase of one already-confirmed action. Do not send
+    // it through the destructive-action warning a second time.
+    form.dataset.yrmConfirmed = "1";
+    try {
+      if (submitter instanceof HTMLButtonElement && submitter.isConnected)
+        form.requestSubmit(submitter);
+      else
+        form.requestSubmit();
+    } finally {
+      delete form.dataset.yrmConfirmed;
+    }
     window.setTimeout(() => {
       if (hidden && hidden.isConnected) { hidden.value = ""; hidden.remove(); }
       delete form.dataset.adminAuthorized;

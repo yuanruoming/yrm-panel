@@ -18,6 +18,16 @@ public sealed class FileManagerService
     private static bool Writeable(string path) =>
         OperatingSystem.IsLinux() && Directory.Exists(path) && LinuxAccess(path, 3) == 0;
 
+    public static string FormatSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes:N0} B";
+        string[] units = ["KB", "MB", "GB", "TB", "PB"];
+        double size = bytes;
+        var unit = -1;
+        do { size /= 1024d; unit++; } while (size >= 1024 && unit < units.Length - 1);
+        return size.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + " " + units[unit];
+    }
+
     public string DisplayRoot(string root) => root == "system" ? "/" : "Unavailable";
     public static string Absolute(string? relative) => string.IsNullOrEmpty(relative) ? "/" : "/" + relative.Trim('/');
     public static string ParentOf(string? relative)
@@ -35,7 +45,10 @@ public sealed class FileManagerService
             var items = new List<FileItem>();
             foreach (var path in Directory.EnumerateFileSystemEntries(directory).Take(3000))
             {
-                if (!showHidden && Path.GetFileName(path).StartsWith('.')) continue;
+                var entryName = Path.GetFileName(path);
+                // ext4 filesystem housekeeping must not clutter ordinary NAS browsing.
+                // Never delete or modify the actual lost+found directory.
+                if (entryName == "lost+found" || (!showHidden && entryName.StartsWith('.'))) continue;
                 try
                 {
                     var attrs = File.GetAttributes(path);
