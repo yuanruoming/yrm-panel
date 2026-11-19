@@ -134,6 +134,11 @@
       <div class="panel-modal-actions"><button id="admin-password-cancel-bottom" type="button" class="button button-secondary">Cancel</button><button type="submit" class="button button-primary">Authorize</button></div>
     </form>
   </dialog>
+  <dialog id="yrm-action-confirm" class="panel-modal yrm-confirm-modal" aria-labelledby="yrm-confirm-title">
+    <div class="panel-modal-head"><strong id="yrm-confirm-title">Confirm action</strong><button type="button" data-yrm-confirm-cancel aria-label="Close">×</button></div>
+    <p id="yrm-confirm-message"></p>
+    <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-yrm-confirm-cancel>Cancel</button><button type="button" class="button button-primary" id="yrm-confirm-accept">Continue</button></div>
+  </dialog>
   <div id="toast-host" class="toast-host" aria-live="polite" aria-atomic="true"></div>
   <script asp-append-version="true" src="~/js/rc41-ui.js" defer></script>
   <script asp-append-version="true" src="~/js/panel.js" defer></script>
@@ -141,6 +146,8 @@
   <script asp-append-version="true" src="~/js/v1-stability.js" defer></script>
   <script asp-append-version="true" src="~/js/rc4-admin.js" defer></script>
   <script asp-append-version="true" src="~/js/rc4-monitor.js" defer></script>
+  <script asp-append-version="true" src="~/js/v1-confirm.js" defer></script>
+  <script asp-append-version="true" src="~/js/v1-ddns-edit.js" defer></script>
   <script asp-append-version="true" src="~/js/v1-files.js" defer></script>
   @await RenderSectionAsync("Scripts", required: false)
 </body>

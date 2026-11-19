@@ -10,6 +10,7 @@ import time
 import shutil
 import os
 import pathlib
+import pwd
 import re
 import subprocess
 import sys
@@ -106,6 +107,31 @@ def write_manual(mounts):
         if os.path.exists(temp): os.unlink(temp)
 
 
+def grant_owner_for_new_empty_volume(path, info):
+    """Only a fresh, empty ext4 data volume gets a writable root for panel user.
+
+    Never recursively chown files or change an existing populated volume. Keep
+    Linux's lost+found directory intact. A missing user means no ownership change.
+    """
+    if info.get('fstype') != 'ext4' or str(path) not in ('/data', '/backup'):
+        return False
+    if any(name != 'lost+found' for name in os.listdir(path)):
+        return False
+    result = subprocess.run(['/usr/bin/systemctl', 'show', '-P', 'User', 'yrm-panel.service'],
+                            text=True, capture_output=True, timeout=12)
+    if result.returncode != 0:
+        return False
+    name = result.stdout.strip()
+    if not name or name == 'root':
+        return False
+    try:
+        account = pwd.getpwnam(name)
+    except KeyError:
+        return False
+    os.chown(path, account.pw_uid, account.pw_gid)
+    return True
+
+
 def create_mount(uuid, dest, automatic):
     info = lookup(uuid)
     path = path_check(dest)
@@ -117,14 +143,19 @@ def create_mount(uuid, dest, automatic):
             raise ValueError('Create the parent folder first in Files.')
         path.mkdir(mode=0o755)
     mount_point = str(path)
-    if run(['/usr/bin/findmnt', '-n', '-o', 'TARGET', '--target', mount_point]) == mount_point:
+    found = subprocess.run(['/usr/bin/findmnt', '-n', '-o', 'TARGET', '--mountpoint', mount_point],
+                           capture_output=True, text=True, timeout=12)
+    if found.returncode == 0:
         raise ValueError('This location is already a mount point.')
+    if found.returncode != 1:
+        raise ValueError('Could not verify the destination mount state.')
     if any(mount_point == line.split()[1] for line in fstab_lines() if len(line.split()) >= 2 and not line.lstrip().startswith('#')):
         raise ValueError('The target already exists in fstab.')
     created_fstab = False
     old_fstab = None
     try:
         run(['/usr/bin/mount', '-t', info['fstype'], '-U', uuid, mount_point])
+        owner_granted = grant_owner_for_new_empty_volume(path, info)
         if automatic:
             old = fstab_lines()
             options = 'defaults,nofail,x-systemd.device-timeout=10s'
@@ -142,7 +173,7 @@ def create_mount(uuid, dest, automatic):
         subprocess.run(['/usr/bin/umount', mount_point], capture_output=True)
         raise
     # No chmod/chown on a mounted filesystem: preserve real filesystem ownership.
-    emit(True, f'Mounted existing filesystem at {mount_point}.')
+    emit(True, f'Mounted existing filesystem at {mount_point}.' + (' Empty volume is writable by the Panel user.' if owner_granted else ''))
 
 
 def unmount(dest):
@@ -338,8 +369,46 @@ def initialize_blank_disk(device, confirmation):
     emit(True, f'Initialized {device} as ext4 (UUID {uuid}). Mount the new filesystem in Storage.')
 
 
+def dispatch_in_host_mount_namespace():
+    """Root-only transfer to PID 1's systemd service manager (host mount namespace).
+
+    The web service is sandboxed with ProtectSystem, so sudo subprocesses inherit
+    /etc read-only and mount namespace isolation. Never silently fall back to the
+    web namespace, as that can report success for a host-invisible mount.
+    """
+    if os.environ.get('YRM_PANEL_HOST_MOUNT_HELPER') == '1':
+        return
+    if os.geteuid() != 0:
+        raise ValueError('Root helper is required.')
+    runner = shutil.which('systemd-run')
+    if not runner or not pathlib.Path('/run/systemd/system').exists():
+        raise ValueError('Host systemd manager is required for storage operations.')
+    worker = '/usr/local/libexec/yrm-panel-mount'
+    cmd = [runner, '--system', '--quiet', '--wait', '--pipe', '--collect',
+           '--service-type=exec', '--setenv=YRM_PANEL_HOST_MOUNT_HELPER=1',
+           '--', worker, *sys.argv[1:]]
+    try:
+        finished = subprocess.run(cmd, text=True, capture_output=True, timeout=210)
+    except subprocess.TimeoutExpired:
+        emit(False, 'Host storage helper timed out; inspect actual mount state before retrying.')
+        raise SystemExit(1)
+    # The worker prints one JSON message; systemd-run might print diagnostics to stderr.
+    output = finished.stdout.strip()
+    if output:
+        try:
+            payload = json.loads(output.splitlines()[-1])
+            if isinstance(payload, dict) and isinstance(payload.get('ok'), bool):
+                print(json.dumps(payload))
+                raise SystemExit(0 if finished.returncode == 0 and payload['ok'] else 1)
+        except json.JSONDecodeError:
+            pass
+    emit(False, 'Host storage operation failed. Check systemd logs for the mount worker.')
+    raise SystemExit(1)
+
+
 if __name__ == '__main__':
     try:
+        dispatch_in_host_mount_namespace()
         if os.geteuid() != 0: raise ValueError('Root helper is required.')
         if len(sys.argv) == 5 and sys.argv[1] == 'mount' and sys.argv[4] in ('auto', 'manual'):
             create_mount(sys.argv[2], sys.argv[3], sys.argv[4] == 'auto')

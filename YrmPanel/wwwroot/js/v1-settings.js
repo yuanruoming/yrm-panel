@@ -50,7 +50,10 @@
       const get=name=>row.querySelector(`[data-fw="${name}"]`)?.value||'';
       const port=get('port').replace(/\s+/g,'');
       if (!/^\d{1,5}(?:-\d{1,5})?(?:,\d{1,5}(?:-\d{1,5})?)*$/.test(port)) {
-        e.preventDefault(); e.stopImmediatePropagation(); window.alert('Ports: use 80, 80,443, or 20-442.'); return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        let note=e.target.querySelector('.yrm-inline-error');
+        if (!note) {note=document.createElement('div');note.className='yrm-inline-error';e.target.append(note);}
+        note.textContent='Use a valid port, list (80,443) or range (20-442).';return;
       }
       draft.push({scope:get('scope'),action:get('action'),port,protocol:get('protocol'),source:get('source')||'any'});
     }

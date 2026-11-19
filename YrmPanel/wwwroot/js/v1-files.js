@@ -177,7 +177,9 @@
           {credentials:'same-origin',cache:'no-store'});
         if (!check.ok) throw new Error('Could not verify whether the destination file exists.');
         const conflict = (await check.json()).exists;
-        const replace = conflict && window.confirm(`“${file.name}” already exists.\n\nOK = Replace existing file\nCancel = Skip (do not rename)`);
+        const replace = conflict && await window.yrmConfirm({title:'Replace existing file?',
+          message:`${file.name} already exists. Replace it with the uploaded file? Cancel will skip this file.`,
+          destructive:true,accept:'Replace'});
         if (conflict && !replace) { status(`${file.name}: skipped`); continue; }
         status(`Uploading ${file.name}: 0%`);
         await new Promise((resolve,reject) => {

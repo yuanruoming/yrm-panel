@@ -196,34 +196,126 @@
     }
     else if (activeTab == "ddns")
     {
-      <div class="settings-section-heading"><h2>Dynamic DNS</h2><p>Detect your public IP, update your DNS provider, and verify the result.</p></div>
+      <div class="settings-section-heading"><h2>Dynamic DNS</h2><p>Automatically keep your hostnames in sync.</p></div>
       <section class="v1-settings-panel yrm-ddns-list">
-        <div class="settings-row-top"><h3>DDNS Profiles</h3><span class="muted">@Model.DdnsProfiles.Count configured</span></div>
-        @foreach (var profile in Model.DdnsProfiles)
+        <div class="settings-row-top"><h3>DDNS Profiles</h3><span class="muted">@(Model.DdnsProfiles.Select(x => x.Provider + "|" + x.Hostname.ToLowerInvariant()).Distinct().Count()) configured</span></div>
+        @foreach (var group in Model.DdnsProfiles.GroupBy(p => new { Provider = p.Provider.ToLowerInvariant(), Hostname = p.Hostname.ToLowerInvariant() }))
         {
-          <div class="yrm-ddns-profile">
-            <div class="yrm-ddns-profile-main">
-              <div class="yrm-ddns-heading"><strong>@profile.Name</strong><span class="tag">@(profile.Enabled ? "Active" : "Paused")</span></div>
-              <small>@profile.Hostname · @profile.RecordType · @profile.Provider · Hybrid check every @profile.IntervalMinutes min</small>
-              <div class="yrm-ddns-status"><span>@profile.LastStatus</span>
-                <span>IP: @(profile.LastIp.Length > 0 ? profile.LastIp : "Not detected")</span>
-                @if (profile.VerifyDns) { <span>DNS: @profile.Verification @(profile.LastDnsIp.Length > 0 ? "· " + profile.LastDnsIp : "")</span> }
-              </div>
-              @if (profile.LastRun is { } last) { <small>Checked: @last.ToLocalTime().ToString("dd MMM yyyy HH:mm")</small> }
-              @if (profile.NextAttemptAt is { } next && next > DateTimeOffset.UtcNow)
-              { <small>Next retry after: @next.ToLocalTime().ToString("HH:mm")</small> }
+          var active = group.Any(p => p.Enabled && p.IpSource != "disabled");
+          var failed = group.Any(p => p.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase));
+          var warning = group.Any(p => p.VerifyDns && (p.Verification == "DNS lookup unavailable" || p.Verification.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase)));
+          var groupStatus = !active ? "Paused" : failed ? "Failed" : warning ? "DNS unverified" : group.Any(p => p.LastStatus is "Updated" or "Unchanged" or "IP unchanged") ? "Normal" : "Not checked";
+          <div class="yrm-ddns-group">
+            <div class="yrm-ddns-group-head">
+              <div><strong>@(char.ToUpperInvariant(group.Key.Provider[0]) + group.Key.Provider.Substring(1))</strong><div class="muted">@group.Key.Hostname</div></div>
+              <span class="tag">@groupStatus</span>
             </div>
-            <div class="yrm-ddns-actions">
-              <form method="post" asp-page-handler="DdnsDetect" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Detect IP</button></form>
-              <form method="post" asp-page-handler="DdnsTest" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Update Now</button></form>
-              @if (profile.VerifyDns) { <form method="post" asp-page-handler="DdnsVerify" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Verify DNS</button></form> }
-              <form method="post" asp-page-handler="DdnsToggle" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">@(profile.Enabled ? "Pause" : "Resume")</button></form>
-              <form method="post" asp-page-handler="DdnsDelete" asp-route-tab="ddns" data-confirm="Remove this DDNS profile?"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Remove</button></form>
+            <div class="yrm-ddns-records">
+              @foreach (var profile in group.OrderBy(p => p.RecordType == "A" ? 0 : 1))
+              {
+                <div class="yrm-ddns-record">
+                  <div>
+                    <strong>@(profile.RecordType == "A" ? "IPv4" : "IPv6") · @(profile.Enabled && profile.IpSource != "disabled" ? "Automatic monitoring" : "Paused")</strong>
+                    <div class="muted">@(profile.IpSource == "disabled" ? "Disabled" : profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</div>
+                    @if (profile.LastRun is { } last) { <small class="muted">Checked @last.ToLocalTime().ToString("dd MMM yyyy HH:mm")</small> }
+                    @if (profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase))
+                    { <small class="yrm-inline-error">@profile.LastStatus</small> }
+                    else if (profile.VerifyDns && profile.Verification == "DNS lookup unavailable")
+                    { <small class="muted">DNS verification unavailable; provider update is independent</small> }
+                  </div>
+                  <div class="yrm-ddns-record-actions">
+                    <button type="button" class="button button-secondary" data-yrm-ddns-edit="yrm-ddns-edit-@profile.Id">Edit</button>
+                    <form method="post" asp-page-handler="DdnsConnection" asp-route-tab="ddns" data-confirm="@(profile.Provider == "cloudflare" ? "" : "This test sends an update request to the DDNS provider. Continue?")">
+                      <input type="hidden" name="id" value="@profile.Id" />
+                      <button type="submit" class="button button-secondary">@(profile.Provider == "cloudflare" ? "Test" : "Test & Update")</button>
+                    </form>
+                    <form method="post" asp-page-handler="DdnsToggle" asp-route-tab="ddns"><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">@(profile.Enabled ? "Pause" : "Resume")</button></form>
+                    <form method="post" asp-page-handler="DdnsDelete" asp-route-tab="ddns" data-confirm="Remove this DDNS profile? Your provider's DNS record will remain unchanged."><input type="hidden" name="id" value="@profile.Id"/><button class="button button-secondary">Remove</button></form>
+                  </div>
+                </div>
+              }
+            </div>
+            <div class="v1-row">
+              <form method="post" asp-page-handler="DdnsGroupCheck" asp-route-tab="ddns">
+                <input type="hidden" name="hostname" value="@group.Key.Hostname"/>
+                <input type="hidden" name="provider" value="@group.Key.Provider"/>
+                <button class="button button-secondary" type="submit">Check Now</button>
+              </form>
+              <small class="muted">Hybrid monitoring · Every @(group.Min(p => p.IntervalMinutes)) min</small>
             </div>
           </div>
         }
         @if (Model.DdnsProfiles.Count == 0) { <p class="muted">No DDNS profiles yet.</p> }
       </section>
+      @foreach (var profile in Model.DdnsProfiles)
+      {
+        <dialog id="yrm-ddns-edit-@profile.Id" class="yrm-ddns-editor" aria-label="Edit DDNS profile">
+          <form method="post" asp-page-handler="DdnsEdit" asp-route-tab="ddns" autocomplete="off">
+            <h3>Edit @(profile.RecordType == "A" ? "IPv4" : "IPv6") · @profile.Provider</h3>
+            <input type="hidden" name="id" value="@profile.Id" />
+            <label>Profile name<input name="name" required maxlength="50" value="@profile.Name" autocomplete="off" /></label>
+            <label>Hostname<input name="hostname" required value="@profile.Hostname" autocomplete="off" /></label>
+            @if (profile.Provider == "dynu")
+            { <label>Dynu username<input name="username" value="@profile.Username" required autocomplete="off" /></label> }
+            else { <input type="hidden" name="username" value="@profile.Username"/> }
+            <label>@(profile.Provider == "cloudflare" ? "Cloudflare API Token" : profile.Provider == "dynu" ? "IP Update Password" : "API credential")
+              <input name="token" type="password" value="" autocomplete="new-password" placeholder="Leave blank to keep existing credential" />
+              <small>Existing credentials are retained when this field is empty.</small>
+            </label>
+            <label>IP address source
+              <select name="ipSource" data-yrm-ip-source>
+                <option value="public" selected="@(profile.IpSource == "public")">Automatic public IP</option>
+                <option value="interface" selected="@(profile.IpSource == "interface")">Network interface IP</option>
+                <option value="manual" selected="@(profile.IpSource == "manual")">Manual IP</option>
+                <option value="disabled" selected="@(profile.IpSource == "disabled")">Disabled</option>
+              </select>
+            </label>
+            <label data-yrm-source="manual" hidden="@(profile.IpSource != "manual")">Manual IP
+              <input name="manualIp" value="@profile.ManualIp" placeholder="IPv4 or IPv6 address" autocomplete="off" />
+            </label>
+            <label data-yrm-source="interface" hidden="@(profile.IpSource != "interface")">Network interface
+              <select name="interfaceName">
+                <option value="">Select interface</option>
+                @foreach (var item in Model.DdnsNetworkInterfaces)
+                { <option value="@item" selected="@(profile.InterfaceName == item)">@item</option> }
+              </select>
+              <small>This uses the interface's own IP, not its router's external IP.</small>
+            </label>
+            @if (profile.Provider == "custom")
+            {
+              <details>
+                <summary>Custom API settings</summary>
+                <label>HTTPS URL<input name="apiUrl" required value="@profile.UrlTemplate" autocomplete="off" /></label>
+                <label>HTTP method<select name="httpMethod">
+                    @foreach (var item in new[] { "GET", "POST", "PUT", "PATCH" })
+                    { <option value="@item" selected="@(profile.HttpMethod == item)">@item</option> }
+                </select></label>
+                <label>Authentication<select name="authType">
+                    @foreach (var item in new[] { "none", "basic", "bearer", "header" })
+                    { <option value="@item" selected="@(profile.AuthType == item)">@item</option> }
+                </select></label>
+                <label>Header name<input name="headerName" value="@profile.HeaderName" /></label>
+                <label>JSON body<textarea name="bodyTemplate" rows="3">@profile.BodyTemplate</textarea></label>
+                <label>Response mode<select name="responseMode">
+                    @foreach (var item in new[] { "codes", "json", "http" })
+                    { <option value="@item" selected="@(profile.ResponseMode == item)">@item</option> }
+                </select></label>
+                <label>Success codes<input name="successCodes" value="@profile.SuccessCodes" /></label>
+                <label>Unchanged codes<input name="unchangedCodes" value="@profile.UnchangedCodes" /></label>
+                <label>Error codes<input name="errorCodes" value="@profile.ErrorCodes" /></label>
+                <label>JSON property<input name="jsonProperty" value="@profile.JsonProperty" /></label>
+                <label>Expected JSON value<input name="jsonExpected" value="@profile.JsonExpected" /></label>
+              </details>
+            }
+            <label>Check interval (minutes)<input type="number" name="intervalMinutes" min="5" max="1440" required value="@profile.IntervalMinutes" /></label>
+            <label class="v1-check"><input name="enabled" type="checkbox" value="true" checked="@profile.Enabled" /> Enable automatic updates</label>
+            <div class="panel-modal-actions">
+              <button class="button button-secondary" type="button" data-yrm-ddns-edit-close>Cancel</button>
+              <button class="button button-primary" type="submit">Save Changes</button>
+            </div>
+          </form>
+        </dialog>
+      }
       <section class="v1-settings-panel">
         <details class="v1-new-provider"><summary class="button button-secondary">+ New Provider</summary>
           <h3>Configure Dynamic DNS</h3>
@@ -245,11 +337,11 @@
               <label>Authentication
                 <select name="authType" id="yrm-ddns-auth"><option value="basic">HTTP Basic</option><option value="bearer">Bearer token</option><option value="header">Custom header</option><option value="none">None</option></select>
               </label>
-              <label data-ddns-auth="basic">Username<input name="username" autocomplete="off" placeholder="Dynu username" /></label>
+              <label data-ddns-auth="basic">Username<input name="username" autocomplete="new-password" placeholder="Dynu username" /></label>
             </div>
             <div class="v1-grid">
               <label data-ddns-auth="header">Header name<input name="headerName" value="Authorization" placeholder="Authorization" /></label>
-              <label><span id="yrm-ddns-secret-label">Credential / API token</span><input name="token" type="password" autocomplete="new-password" placeholder="Dynu IP Update Password" /></label>
+              <label><span id="yrm-ddns-secret-label">Credential / API token</span><input name="token" type="password" autocomplete="new-password" placeholder="" /></label>
             </div>
             <label data-ddns-technical>JSON body (optional)<textarea rows="3" name="bodyTemplate" placeholder='{"type":"A","name":"{hostname}","content":"{ip}"}'></textarea></label>
             <details class="yrm-ddns-advanced"><summary>Advanced settings</summary>

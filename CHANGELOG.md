@@ -1,3 +1,11 @@
+## v1.0.0 BETA7 — Host mount operations, DDNS management, dialogs
+
+- Storage root operations now run through host systemd transient units rather than inheriting the web service mount namespace and read-only `/etc`. Existing UUID, mount-path, filesystem and privilege checks remain enforced. A fresh empty ext4 `/data` or `/backup` may grant nonrecursive ownership of its mount root to the configured Panel Linux user; populated volumes are never chowned.
+- Custom native-browser confirm/alert replacements with one YRM-styled dialog and inline firewall input validation. Existing authenticated form submission and administrator credential prompts stay intact.
+- Group DDNS IPv4/IPv6 records by provider/hostname; add Edit with protected existing credentials, public/manual/interface/disabled address choice, grouped Check Now and provider-aware Test. Cloudflare test is read-only; Dynu/Custom Test & Update sends a real request.
+- No No-IP/DynDNS/DuckDNS adapters and no mobile app in 1.0.0. Mobile is reserved for future 4.0 planning.
+- Unit/mock checks and static scripts completed; Ubuntu host mount, Windows .NET 10 build, and real DDNS endpoint testing remain user VM acceptance tasks. **BETA, not Stable.**
+
 ## v1.0.0 BETA6 — Hybrid DDNS, Cloudflare, and recovery fixes
 
 - Cloudflare A/AAAA preset with zone/record lookup, exact-record update, protected token, API-based verification; preserves existing DNS settings.

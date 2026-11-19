@@ -21,7 +21,7 @@ public sealed record DdnsProfile(
     string ErrorCodes = "", string JsonProperty = "", string JsonExpected = "true",
     bool VerifyDns = true, string LastDnsIp = "", string Verification = "Not checked",
     DateTimeOffset? NextAttemptAt = null, int ConsecutiveFailures = 0,
-    string Provider = "custom");
+    string Provider = "custom", string IpSource = "public", string ManualIp = "", string InterfaceName = "");
 
 public sealed record DdnsProfileView(
     string Id, string Name, string Hostname, string RecordType, string UrlTemplate,
@@ -31,7 +31,7 @@ public sealed record DdnsProfileView(
     string ResponseMode, string SuccessCodes, string UnchangedCodes,
     string ErrorCodes, string JsonProperty, string JsonExpected,
     bool VerifyDns, string LastDnsIp, string Verification, DateTimeOffset? NextAttemptAt,
-    string Provider);
+    string Provider, string Username, string IpSource, string ManualIp, string InterfaceName);
 
 public sealed record DdnsProfileOptions(
     string DetectionUrl = "", string AuthType = "header", string Username = "",
@@ -151,7 +151,7 @@ public sealed class DdnsService : BackgroundService
                 p.Enabled, p.LastIp, p.LastStatus, p.LastRun, p.DetectionUrl, p.AuthType,
                 p.ResponseMode, p.SuccessCodes, p.UnchangedCodes, p.ErrorCodes,
                 p.JsonProperty, p.JsonExpected, p.VerifyDns, p.LastDnsIp,
-                p.Verification, p.NextAttemptAt, p.Provider)).ToArray();
+                p.Verification, p.NextAttemptAt, p.Provider, p.Username, p.IpSource, p.ManualIp, p.InterfaceName)).ToArray();
         }
         finally { _gate.Release(); }
     }
@@ -233,6 +233,124 @@ public sealed class DdnsService : BackgroundService
                 && !string.IsNullOrWhiteSpace(options.JsonExpected)));
     }
 
+    public async Task<string> EditAsync(string id, string name, string hostname,
+        string username, string newToken, string ipSource, string manualIp, string interfaceName,
+        int interval, bool enabled, CancellationToken ct,
+        string? apiUrl = null, string? method = null, string? authType = null,
+        string? header = null, string? body = null, string? responseMode = null,
+        string? successCodes = null, string? unchangedCodes = null,
+        string? errorCodes = null, string? jsonProperty = null, string? jsonExpected = null)
+    {
+        name = (name ?? "").Trim(); hostname = (hostname ?? "").Trim().ToLowerInvariant();
+        username = (username ?? "").Trim(); newToken ??= "";
+        ipSource = (ipSource ?? "public").Trim().ToLowerInvariant();
+        manualIp = (manualIp ?? "").Trim(); interfaceName = (interfaceName ?? "").Trim();
+        if (name.Length is < 1 or > 50) return "Error: Profile name must contain 1–50 characters.";
+        if (!HostPattern.IsMatch(hostname) || !hostname.Contains('.')) return "Error: Enter a valid complete DNS hostname.";
+        if (interval is < 5 or > 1440) return "Error: DDNS check interval must be 5–1440 minutes.";
+        if (username.Length > 120 || newToken.Length > 2048) return "Error: DDNS credential is too long.";
+        if (ipSource is not ("public" or "manual" or "interface" or "disabled"))
+            return "Error: Invalid address source.";
+        await _gate.WaitAsync(ct);
+        try
+        {
+            var profiles = ReadUnsafe();
+            var index = profiles.FindIndex(x => x.Id == id);
+            if (index < 0) return "Error: DDNS profile no longer exists.";
+            var old = profiles[index];
+            if (old.Provider == "dynu" && string.IsNullOrWhiteSpace(username))
+                return "Error: Dynu username is required.";
+            if (ipSource == "manual")
+            {
+                if (!IPAddress.TryParse(manualIp, out var manual) ||
+                    manual.AddressFamily != (old.RecordType == "AAAA" ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork))
+                    return "Error: Enter a valid manual IP address for this record type.";
+            }
+            if (ipSource == "interface")
+            {
+                if (interfaceName.Length == 0 || interfaceName.Length > 90 ||
+                    !NetworkInterface.GetAllNetworkInterfaces().Any(n => n.Name == interfaceName))
+                    return "Error: Select an available network interface.";
+            }
+            if (old.Provider == "custom")
+            {
+                var url = (apiUrl ?? "").Trim();
+                var requestMethod = (method ?? "").Trim().ToUpperInvariant();
+                var auth = (authType ?? "").Trim().ToLowerInvariant();
+                var mode = (responseMode ?? "").Trim().ToLowerInvariant();
+                var opts = new DdnsProfileOptions(ResponseMode: mode,
+                    SuccessCodes: successCodes ?? "", UnchangedCodes: unchangedCodes ?? "",
+                    ErrorCodes: errorCodes ?? "", JsonProperty: jsonProperty ?? "",
+                    JsonExpected: jsonExpected ?? "");
+                if (!ValidPublicHttps(url) || requestMethod is not ("GET" or "POST" or "PUT" or "PATCH")
+                    || auth is not ("none" or "header" or "basic" or "bearer")
+                    || mode is not ("codes" or "json" or "http") || !ValidResponseOptions(opts)
+                    || (header?.Length ?? 0) > 80 || !Regex.IsMatch(header ?? "Authorization", @"^[A-Za-z0-9-]{1,80}$")
+                    || (body?.Length ?? 0) > 8000)
+                    return "Error: Invalid Custom HTTPS API settings.";
+                if (auth == "basic" && string.IsNullOrWhiteSpace(username))
+                    return "Error: HTTP Basic needs a username.";
+                if (auth != "none" && string.IsNullOrEmpty(newToken) && string.IsNullOrEmpty(old.Token))
+                    return "Error: Enter a Custom API credential.";
+                // Settings below are stored with the profile and do not change the selected provider.
+                profiles[index] = old with {
+                    UrlTemplate = url, HttpMethod = requestMethod, AuthType = auth,
+                    HeaderName = header ?? "Authorization", BodyTemplate = body ?? "",
+                    ResponseMode = mode, SuccessCodes = successCodes ?? "",
+                    UnchangedCodes = unchangedCodes ?? "", ErrorCodes = errorCodes ?? "",
+                    JsonProperty = jsonProperty ?? "", JsonExpected = jsonExpected ?? ""
+                };
+            }
+            var changed = !old.Hostname.Equals(hostname, StringComparison.OrdinalIgnoreCase)
+                || old.IpSource != ipSource || old.ManualIp != manualIp || old.InterfaceName != interfaceName
+                || newToken.Length > 0 || old.Username != username
+                || (old.Provider == "custom" && (old.UrlTemplate != apiUrl || old.HttpMethod != method
+                    || old.AuthType != authType || old.HeaderName != header || old.BodyTemplate != body
+                    || old.ResponseMode != responseMode || old.SuccessCodes != successCodes
+                    || old.UnchangedCodes != unchangedCodes || old.ErrorCodes != errorCodes));
+            profiles[index] = profiles[index] with
+            {
+                Name = name, Hostname = hostname, Username = old.Provider == "cloudflare" ? old.Username : username,
+                Token = newToken.Length > 0 ? newToken : old.Token,
+                IntervalMinutes = interval, Enabled = enabled,
+                IpSource = ipSource, ManualIp = ipSource == "manual" ? manualIp : "",
+                InterfaceName = ipSource == "interface" ? interfaceName : "",
+                LastIp = changed ? "" : old.LastIp,
+                LastDnsIp = changed ? "" : old.LastDnsIp,
+                LastStatus = changed ? "Never updated" : old.LastStatus,
+                Verification = changed ? "Not checked" : old.Verification,
+                LastRun = changed ? null : old.LastRun,
+                ConsecutiveFailures = changed ? 0 : old.ConsecutiveFailures,
+                NextAttemptAt = changed ? null : old.NextAttemptAt
+            };
+            WriteUnsafe(profiles);
+            return "DDNS settings saved.";
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task<string> TestConnectionAsync(string id, CancellationToken ct)
+    {
+        DdnsProfile? profile;
+        await _gate.WaitAsync(ct);
+        try { profile = ReadUnsafe().FirstOrDefault(p => p.Id == id); }
+        finally { _gate.Release(); }
+        if (profile is null) return "Error: DDNS profile was not found.";
+        if (profile.Provider != "cloudflare")
+            return await UpdateAsync(id, true, ct); // Dynu/Custom: an authenticated test may update the record.
+        try
+        {
+            var record = await _cloudflare.ReadRecordAsync(profile, ct);
+            return $"Cloudflare connection verified. {record.Type} record exists (read-only test).";
+        }
+        catch (Exception ex) when (ex is IOException or HttpRequestException or TaskCanceledException
+            or JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            if (ct.IsCancellationRequested) throw;
+            return "Error: Cloudflare connection test failed. " + ex.Message[..Math.Min(ex.Message.Length, 120)];
+        }
+    }
+
     public async Task<string> ToggleAsync(string id, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
@@ -299,6 +417,27 @@ public sealed class DdnsService : BackgroundService
 
     private async Task<string> DetectIpAsync(DdnsProfile profile, CancellationToken ct)
     {
+        if (profile.IpSource == "disabled")
+            throw new IOException("Address family disabled for this profile.");
+        if (profile.IpSource == "manual")
+        {
+            if (!IPAddress.TryParse(profile.ManualIp, out var manual) ||
+                manual.AddressFamily != (profile.RecordType == "AAAA" ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork))
+                throw new IOException("Manual address is not valid for the selected DNS record type.");
+            return manual.ToString();
+        }
+        if (profile.IpSource == "interface")
+        {
+            var adapter = NetworkInterface.GetAllNetworkInterfaces().FirstOrDefault(n =>
+                n.Name.Equals(profile.InterfaceName, StringComparison.Ordinal));
+            if (adapter is null) throw new IOException("Selected network interface is unavailable.");
+            var family = profile.RecordType == "AAAA" ? AddressFamily.InterNetworkV6 : AddressFamily.InterNetwork;
+            var candidates = adapter.GetIPProperties().UnicastAddresses.Select(a => a.Address)
+                .Where(a => a.AddressFamily == family && !IPAddress.IsLoopback(a)
+                    && !a.IsIPv6LinkLocal && !a.IsIPv6Multicast).ToArray();
+            if (candidates.Length != 1) throw new IOException("Network interface must have exactly one eligible address for this record type.");
+            return candidates[0].ToString();
+        }
         var urls = !string.IsNullOrWhiteSpace(profile.DetectionUrl)
             ? new[] { profile.DetectionUrl }
             : profile.RecordType == "AAAA"
@@ -437,6 +576,7 @@ public sealed class DdnsService : BackgroundService
             if (force && profile.NextAttemptAt is { } cooldown && DateTimeOffset.UtcNow < cooldown
                 && profile.LastStatus.Contains("911", StringComparison.Ordinal))
                 return "Provider requested a temporary cooldown; retry later.";
+            if (profile.IpSource == "disabled") return "IP family disabled.";
             if (!force && (!profile.Enabled
                 || (profile.NextAttemptAt is { } next && DateTimeOffset.UtcNow < next)
                 || (!networkTriggered && profile.LastRun is { } last &&

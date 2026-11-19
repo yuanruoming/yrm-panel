@@ -63,6 +63,11 @@ public sealed class SettingsModel : PageModel
     public IReadOnlyList<StorageDevice> StorageDevices { get; private set; } = [];
     public FirewallOverview Firewall { get; private set; } = new(false, "Not checked.", false, [], "Unavailable.");
     public IReadOnlyList<DdnsProfileView> DdnsProfiles { get; private set; } = [];
+    public IReadOnlyList<string> DdnsNetworkInterfaces => OperatingSystem.IsLinux()
+        ? System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.NetworkInterfaceType != System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
+            .Select(n => n.Name).OrderBy(n => n).ToArray()
+        : [];
     public PanelCertificateInfo Certificate => _certificates.Info();
     [TempData] public string? Notice { get; set; }
 
@@ -206,6 +211,48 @@ public sealed class SettingsModel : PageModel
             jsonProperty ?? "success", jsonExpected ?? "true", verifyDns, provider ?? "custom");
         Notice = await _ddns.AddAsync(name, hostname, recordType, urlTemplate, httpMethod, headerName,
             token, bodyTemplate, successContains, intervalMinutes, HttpContext.RequestAborted, options);
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsEditAsync(string id, string name, string hostname,
+        string? username, string? token, string? ipSource, string? manualIp,
+        string? interfaceName, int intervalMinutes, bool enabled,
+        string? apiUrl, string? httpMethod, string? authType, string? headerName,
+        string? bodyTemplate, string? responseMode, string? successCodes,
+        string? unchangedCodes, string? errorCodes, string? jsonProperty, string? jsonExpected)
+    {
+        Notice = await _ddns.EditAsync(id, name, hostname, username ?? "", token ?? "",
+            ipSource ?? "public", manualIp ?? "", interfaceName ?? "", intervalMinutes, enabled,
+            HttpContext.RequestAborted, apiUrl, httpMethod, authType, headerName, bodyTemplate,
+            responseMode, successCodes, unchangedCodes, errorCodes, jsonProperty, jsonExpected);
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsGroupCheckAsync(string hostname, string provider)
+    {
+        var profiles = await _ddns.ListAsync(HttpContext.RequestAborted);
+        var matches = profiles.Where(p => p.Hostname.Equals(hostname, StringComparison.OrdinalIgnoreCase)
+            && p.Provider.Equals(provider, StringComparison.OrdinalIgnoreCase)).Take(4).ToArray();
+        if (matches.Length == 0) Notice = "Error: No matching DDNS profiles.";
+        else
+        {
+            var results = new List<string>();
+            foreach (var item in matches.Where(p => p.Enabled && p.IpSource != "disabled"))
+            {
+                var state = await _ddns.UpdateAsync(item.Id, true, HttpContext.RequestAborted);
+                results.Add($"{item.RecordType}: {state}");
+            }
+            Notice = results.Any(x => x.Contains("Failed", StringComparison.OrdinalIgnoreCase)
+                || x.Contains("Error:", StringComparison.OrdinalIgnoreCase))
+                ? "Error: " + string.Join("; ", results)
+                : "DDNS check completed. Provider states are shown below.";
+        }
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
+    public async Task<IActionResult> OnPostDdnsConnectionAsync(string id)
+    {
+        Notice = await _ddns.TestConnectionAsync(id, HttpContext.RequestAborted);
         return RedirectToPage(new { tab = "ddns" });
     }
 

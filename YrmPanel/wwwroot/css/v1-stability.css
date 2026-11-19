@@ -161,3 +161,33 @@
 #yrm-ddns-new-form [hidden],#yrm-ddns-new-form [data-ddns-auth][hidden],
 #yrm-ddns-new-form [data-ddns-response][hidden]{display:none!important}
 #yrm-ddns-new-form label small{color:#a7bad0;font-size:11px}
+
+/* BETA7: app-owned confirmations and DDNS unified list. */
+.yrm-confirm-modal{width:min(460px,calc(100vw - 32px));max-width:460px;padding:22px;background:var(--surface,#242a33);color:inherit;border:1px solid var(--border,#3b4656);border-radius:14px;box-shadow:0 18px 54px #0009}
+.yrm-confirm-modal::backdrop{background:#0009;backdrop-filter:blur(3px)}
+.yrm-confirm-modal p{line-height:1.55;white-space:pre-line;overflow-wrap:anywhere}
+.yrm-confirm-modal .panel-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:22px}
+.yrm-confirm-modal .yrm-confirm-danger{background:#b63b48;border-color:#b63b48;color:white}
+.yrm-inline-error{font-size:12px;color:#f19ca2;padding:8px 0}
+.yrm-ddns-group{padding:20px 0;border-bottom:1px solid var(--border,#374151);display:grid;gap:14px}
+.yrm-ddns-group:last-child{border-bottom:0}
+.yrm-ddns-group-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.yrm-ddns-records{display:grid;gap:10px}
+.yrm-ddns-record{border:1px solid var(--border,#3b4656);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center}
+.yrm-ddns-record strong{display:block;margin-bottom:4px}
+.yrm-ddns-record .muted{overflow-wrap:anywhere}
+.yrm-ddns-record-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.yrm-ddns-record-actions form{margin:0}
+.yrm-ddns-editor{max-width:min(520px,calc(100vw - 24px));max-height:calc(100dvh - 38px);overflow:auto;width:520px;padding:24px;border:1px solid var(--border,#3b4656);border-radius:14px;background:var(--surface,#242a33);color:inherit;box-shadow:0 22px 60px #0009}
+.yrm-ddns-editor::backdrop{background:#000a}
+.yrm-ddns-editor form{display:grid;gap:13px}
+.yrm-ddns-editor label{display:grid;gap:5px}
+.yrm-ddns-editor input{min-width:0;width:100%}
+.yrm-ddns-editor .panel-modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.yrm-ddns-editor small{color:var(--muted,#a9b4c2)}
+@media(max-width:700px){.yrm-ddns-record{grid-template-columns:1fr}.yrm-ddns-record-actions{justify-content:flex-start}}
+
+.yrm-ddns-editor [hidden]{display:none !important;}
+
+.yrm-ddns-editor input:-webkit-autofill,
+#yrm-ddns-new-form input:-webkit-autofill{-webkit-text-fill-color:var(--text,#e8eef5);-webkit-box-shadow:0 0 0 1000px #141d2a inset;caret-color:var(--text,#e8eef5)}
