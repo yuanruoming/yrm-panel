@@ -39,7 +39,9 @@ public sealed class PrivilegedCommandService
             return new(false, "Invalid operation argument.");
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(helper == "update" ? 20 : helper == "firewall" && action == "apply" ? 90 : 25));
+        timeout.CancelAfter(TimeSpan.FromSeconds(helper == "update" ? 20 :
+            helper == "firewall" && action == "apply" ? 90 :
+            helper == "samba" && action != "list" ? 60 : 25));
         var start = new ProcessStartInfo("/usr/bin/sudo")
         {
             UseShellExecute = false,

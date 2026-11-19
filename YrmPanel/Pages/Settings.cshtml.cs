@@ -116,6 +116,16 @@ public sealed class SettingsModel : PageModel
         };
     }
 
+    public bool IsShareableVolume(StorageDevice volume)
+    {
+        var path = volume.MountPoint;
+        return (volume.Type is "disk" or "part") && !volume.ReadOnly &&
+               volume.FileSystem.Length > 0 && path.Length > 1 && path.StartsWith('/') &&
+               !new[] { "/boot", "/etc", "/usr", "/var", "/opt", "/root",
+                        "/proc", "/sys", "/dev", "/run", "/home" }
+                   .Any(prefix => path == prefix || path.StartsWith(prefix + "/", StringComparison.Ordinal));
+    }
+
     public async Task OnGetAsync()
     {
         switch (Tab)
@@ -125,6 +135,7 @@ public sealed class SettingsModel : PageModel
                 break;
             case "storage":
                 StorageDevices = await _devices.ListAsync(HttpContext.RequestAborted);
+                Sharing = await _samba.ListAsync(HttpContext.RequestAborted);
                 break;
             case "security":
                 if (SecuritySection == "firewall")
@@ -165,6 +176,53 @@ public sealed class SettingsModel : PageModel
     {
         var result = await _devices.UnmountAsync(mountPath, adminPassword, HttpContext.RequestAborted);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        return RedirectToPage(new { tab = "storage" });
+    }
+
+    public async Task<IActionResult> OnPostShareVolumeAsync(
+        string mountPath, string? shareName, bool readOnly, string? smbPassword,
+        string? adminPassword)
+    {
+        var ct = HttpContext.RequestAborted;
+        var devices = await _devices.ListAsync(ct);
+        var volume = devices.FirstOrDefault(item =>
+            string.Equals(item.MountPoint, mountPath, StringComparison.Ordinal) &&
+            IsShareableVolume(item));
+        if (volume is null)
+        {
+            Notice = "Error: The selected volume is not mounted or is not shareable.";
+            return RedirectToPage(new { tab = "storage" });
+        }
+
+        var state = await _samba.ListAsync(ct);
+        if (!state.Available)
+        {
+            Notice = "Error: " + state.Message;
+            return RedirectToPage(new { tab = "storage" });
+        }
+        if (state.Shares.Any(s => string.Equals(s.Path, mountPath, StringComparison.Ordinal)))
+        {
+            Notice = "Error: This volume is already shared.";
+            return RedirectToPage(new { tab = "storage" });
+        }
+        if (!state.AccountConfigured)
+        {
+            if (string.IsNullOrEmpty(smbPassword))
+            {
+                Notice = "Error: Set an SMB password for the first share.";
+                return RedirectToPage(new { tab = "storage" });
+            }
+            Notice = await _samba.SetPasswordAsync(smbPassword, adminPassword, ct);
+            if (Notice.StartsWith("Error:", StringComparison.Ordinal))
+                return RedirectToPage(new { tab = "storage" });
+        }
+        Notice = await _samba.SaveAsync(shareName, mountPath, readOnly, adminPassword, ct);
+        return RedirectToPage(new { tab = "storage" });
+    }
+
+    public async Task<IActionResult> OnPostUnshareVolumeAsync(string name, string? adminPassword)
+    {
+        Notice = await _samba.DeleteAsync(name, adminPassword, HttpContext.RequestAborted);
         return RedirectToPage(new { tab = "storage" });
     }
 

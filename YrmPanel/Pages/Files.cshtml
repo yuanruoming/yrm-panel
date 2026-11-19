@@ -112,6 +112,15 @@
         </div>
         <div class="explorer-toolbar fm-compact-toolbar">
           <button type="button" class="button button-secondary" data-open-new-folder>＋ New Folder</button>
+          @if (Model.View.Available && Model.MountedVolumes.Any(v =>
+              string.Equals(v.MountPoint, Model.Absolute, StringComparison.Ordinal)) &&
+              FileAccess.IsManaged(Model.Absolute) &&
+              !shared.Any(s => string.Equals(s.Path, Model.Absolute, StringComparison.Ordinal)))
+          {
+            <button type="button" class="button button-secondary"
+                    data-share-folder="@System.IO.Path.GetFileName(Model.Absolute)"
+                    data-share-absolute="@Model.Absolute">Share this volume via SMB</button>
+          }
           @if (Model.View.Available && Model.View.CanWrite)
           {
             <form method="post" asp-page-handler="Upload" asp-route-path="@currentRoute" enctype="multipart/form-data" class="explorer-upload fm-upload-form">

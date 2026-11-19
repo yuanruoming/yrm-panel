@@ -278,8 +278,6 @@ public sealed class FilesModel : PageModel
             if (!string.IsNullOrWhiteSpace(absoluteFolder))
             {
                 full = MyFoldersStore.Normalize(absoluteFolder);
-                if (!_folders.List().Contains(full, StringComparer.Ordinal))
-                    throw new UnauthorizedAccessException("Add the folder to My Folders before sharing it.");
             }
             else
             {

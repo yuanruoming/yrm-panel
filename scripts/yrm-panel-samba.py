@@ -5,6 +5,7 @@ Share metadata is stored in Samba's standard configuration, not Panel-private
 file storage. Root actions are fixed and input-validated. Unsharing never
 removes the underlying files.
 """
+import fcntl
 import configparser
 import json
 import os
@@ -22,6 +23,8 @@ ACCOUNT = pathlib.Path('/etc/yrm-panel/samba-user')
 NAME = re.compile(r'^[\w-]{1,32}$', re.UNICODE)
 RESERVED = frozenset(('bin', 'boot', 'dev', 'etc', 'lib', 'lib64', 'proc', 'root',
                       'run', 'sbin', 'sys', 'usr', 'var', 'opt', 'snap', '.'))
+LOCK = pathlib.Path('/run/yrm-panel-samba.lock')
+HOST_FLAG = 'YRM_PANEL_SAMBA_HOST_WORKER'
 
 
 def emit(ok, message, **values):
@@ -36,8 +39,76 @@ def fail(message):
 def run(command, **kwargs):
     completed = subprocess.run(command, capture_output=True, text=True, timeout=15, **kwargs)
     if completed.returncode:
-        raise ValueError(f'{pathlib.Path(command[0]).name} operation failed. Check system logs.')
+        program = pathlib.Path(command[0]).name
+        # Provide an actionable, non-secret error without dumping stderr or user passwords.
+        if program == 'testparm':
+            raise ValueError('Samba rejected the share configuration; previous settings are preserved.')
+        if program == 'systemctl':
+            raise ValueError('Samba service could not reload; previous settings are restored.')
+        if program == 'smbpasswd':
+            raise ValueError('Samba could not save the SMB account password.')
+        raise ValueError(f'{program} operation failed. Check system logs.')
     return completed.stdout
+
+
+def atomic_bytes(path, data):
+    """Never expose an incomplete smb.conf, including during rollback."""
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
+    fd, name = tempfile.mkstemp(prefix='.yrm-samba-', dir=str(path.parent))
+    try:
+        os.fchmod(fd, mode)
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, path)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def host_dispatch():
+    """Run mutations on the real host, not inside the web service mount namespace.
+
+    sudo does not remove ProtectSystem's mount restrictions. The host systemd
+    manager launches a fixed, root-owned executable without shell evaluation.
+    SMB passwords are carried on stdin, never in arguments or journal messages.
+    """
+    if len(sys.argv) < 2:
+        return
+    action = sys.argv[1]
+    expected = {'save': 5, 'delete': 3, 'set-password': 2}
+    if action not in expected or os.environ.get(HOST_FLAG) == '1':
+        return
+    if os.geteuid() != 0:
+        fail('Restricted root helper is required.')
+    if len(sys.argv) != expected[action]:
+        fail('Unsupported Samba action.')
+    if action == 'save' and sys.argv[4] not in ('true', 'false'):
+        fail('Invalid read-only setting.')
+    runner = shutil.which('systemd-run')
+    if not runner or not pathlib.Path('/run/systemd/system').is_dir():
+        fail('Host systemd manager is unavailable; SMB configuration was not changed.')
+    command = [runner, '--system', '--quiet', '--wait', '--pipe', '--collect',
+               '--service-type=exec', f'--setenv={HOST_FLAG}=1', '--',
+               '/usr/local/libexec/yrm-panel-samba', *sys.argv[1:]]
+    password = sys.stdin.readline(300) if action == 'set-password' else None
+    try:
+        result = subprocess.run(command, input=password, text=True,
+                                capture_output=True, timeout=45)
+    except subprocess.TimeoutExpired:
+        fail('Host SMB operation timed out. Check actual Samba state before retrying.')
+    except OSError:
+        fail('Unable to reach host Samba worker. SMB configuration was not changed.')
+    try:
+        data = json.loads(result.stdout.strip().splitlines()[-1])
+        if isinstance(data, dict) and isinstance(data.get('ok'), bool):
+            emit(result.returncode == 0 and data['ok'],
+                 data.get('message', 'Host SMB operation failed.'))
+            raise SystemExit(0 if result.returncode == 0 and data['ok'] else 1)
+    except (IndexError, json.JSONDecodeError):
+        pass
+    fail('Host Samba worker failed. See system journal for the service error.')
 
 
 def account():
@@ -61,25 +132,50 @@ def bootstrap():
         raise ValueError('Samba configuration is missing.')
     source = MAIN.read_text(encoding='utf-8')
     include = 'include = /etc/samba/yrm-panel-shares.conf'
-    if include not in source:
-        match = re.search(r'^\s*\[global\]\s*$', source, re.M | re.I)
-        if match is None:
-            raise ValueError('The Samba global section could not be found.')
-        shutil.copy2(MAIN, str(MAIN) + '.before-yrm-panel')
-        MAIN.write_text(source[:match.end()] + '\n   ' + include + source[match.end():], encoding='utf-8')
+    if not re.search(r'^[ \t]*\[global\][ \t]*$', source, re.M | re.I):
+        raise ValueError('The Samba global section could not be found.')
+    # `include` is global-only and is parsed literally in place. It must be the
+    # LAST parameter within [global]: putting it first can misclassify later
+    # global options after the included share sections; putting it after a
+    # normal share causes Samba to ignore a global-only directive.
+    include_re = re.compile(r'^[ \t]*include[ \t]*=[ \t]*/etc/samba/yrm-panel-shares\.conf[ \t]*$',
+                            re.M | re.I)
+    cleaned = include_re.sub('', source)
+    match = re.search(r'^[ \t]*\[global\][ \t]*$', cleaned, re.M | re.I)
+    assert match is not None
+    section_after_global = re.search(r'^[ \t]*\[[^\]\n]+\][ \t]*$',
+                                     cleaned[match.end():], re.M)
+    boundary = match.end() + section_after_global.start() if section_after_global else len(cleaned)
+    updated = (cleaned[:boundary].rstrip() +
+               '\n\n    ' + include + '\n\n' + cleaned[boundary:].lstrip('\n'))
+    # Avoid rewriting the base configuration when the include is already in
+    # the right place and only insignificant whitespace would differ.
+    if source != updated:
+        original_backup = pathlib.Path(str(MAIN) + '.before-yrm-panel')
+        if not original_backup.exists():
+            shutil.copy2(MAIN, original_backup)
+        atomic_bytes(MAIN, updated.encode('utf-8'))
     if not MANAGED.exists():
-        MANAGED.write_text('# YRM Panel managed Samba shares; preserved on uninstall.\n', encoding='utf-8')
-        MANAGED.chmod(0o644)
+        atomic_bytes(MANAGED, b'# YRM Panel managed Samba shares; preserved on uninstall.\n')
     try:
         run(['testparm', '-s', str(MAIN)])
         run(['systemctl', 'reload', 'smbd'])
     except Exception:
-        if include not in source:
-            MAIN.write_text(source, encoding='utf-8')
+        if updated != source:
+            atomic_bytes(MAIN, source.encode('utf-8'))
+            try:
+                run(['testparm', '-s', str(MAIN)])
+                run(['systemctl', 'reload', 'smbd'])
+            except Exception:
+                pass
         raise
 
 
-def save_config(config):
+def loaded_share_names(output):
+    return {match.group(1).casefold() for match in re.finditer(r'^\s*\[([^\]]+)\]', output, re.M)}
+
+
+def save_config(config, removed_names=()):
     fd, temp = tempfile.mkstemp(prefix='yrm-smb-', dir=str(MANAGED.parent), text=True)
     previous = MANAGED.read_bytes() if MANAGED.exists() else None
     try:
@@ -87,14 +183,23 @@ def save_config(config):
             config.write(target)
         os.chmod(temp, 0o644)
         os.replace(temp, MANAGED)
-        run(['testparm', '-s', str(MAIN)])
+        actual = loaded_share_names(run(['testparm', '-s', str(MAIN)]))
+        missing = [name for name in config.sections() if name.casefold() not in actual]
+        unexpected = [name for name in removed_names if name.casefold() in actual]
+        if missing or unexpected:
+            raise ValueError('Samba did not activate the requested share configuration; previous settings are restored.')
         run(['systemctl', 'reload', 'smbd'])
     except Exception:
         if previous is None:
             MANAGED.unlink(missing_ok=True)
         else:
-            MANAGED.write_bytes(previous)
-            MANAGED.chmod(0o644)
+            atomic_bytes(MANAGED, previous)
+        # Restore the last known good configuration in the running daemon too.
+        try:
+            run(['testparm', '-s', str(MAIN)])
+            run(['systemctl', 'reload', 'smbd'])
+        except Exception:
+            pass
         raise
     finally:
         if os.path.exists(temp):
@@ -114,7 +219,7 @@ def backup_mounted():
 
 
 def validate_path(raw, readonly):
-    if not raw.startswith('/') or '\x00' in raw or '..' in pathlib.PurePath(raw).parts:
+    if not raw.startswith('/') or any(ord(char) < 32 for char in raw) or '..' in pathlib.PurePath(raw).parts:
         raise ValueError('A normal absolute path is required.')
     source = pathlib.Path(raw)
     for element in (source, *source.parents):
@@ -178,7 +283,7 @@ def remove_share(name):
     if not config.has_section(name):
         raise ValueError('Only shares created by YRM Panel may be removed.')
     config.remove_section(name)
-    save_config(config)
+    save_config(config, removed_names=(name,))
 
 
 def list_shares():
@@ -234,17 +339,25 @@ def main():
     action = sys.argv[1]
     try:
         if action == 'bootstrap' and len(sys.argv) == 2:
-            bootstrap(); emit(True, 'Samba integration installed.')
+            with LOCK.open('a+') as guard:
+                fcntl.flock(guard, fcntl.LOCK_EX)
+                bootstrap()
+            emit(True, 'Samba integration installed.')
         elif action == 'list' and len(sys.argv) == 2:
             if not MAIN.is_file():
                 raise ValueError('Samba is unavailable.')
             user = account()
             emit(True, 'OK', account=user, accountConfigured=account_configured(user), shares=list_shares())
-        elif action == 'save' and len(sys.argv) == 5:
-            save_share(sys.argv[2], sys.argv[3], sys.argv[4] == 'true')
+        elif action == 'save' and len(sys.argv) == 5 and sys.argv[4] in ('true', 'false'):
+            with LOCK.open('a+') as guard:
+                fcntl.flock(guard, fcntl.LOCK_EX)
+                save_share(sys.argv[2], sys.argv[3], sys.argv[4] == 'true')
             emit(True, 'SMB share saved.')
         elif action == 'delete' and len(sys.argv) == 3:
-            remove_share(sys.argv[2]); emit(True, 'SMB share removed. Files are preserved.')
+            with LOCK.open('a+') as guard:
+                fcntl.flock(guard, fcntl.LOCK_EX)
+                remove_share(sys.argv[2])
+            emit(True, 'SMB share removed. Files are preserved.')
         elif action == 'set-password' and len(sys.argv) == 2:
             set_password(sys.stdin.readline(300).rstrip('\n'))
             emit(True, 'SMB password configured for the Linux account.')
@@ -255,4 +368,5 @@ def main():
 
 
 if __name__ == '__main__':
+    host_dispatch()
     main()

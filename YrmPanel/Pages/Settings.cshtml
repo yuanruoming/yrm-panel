@@ -116,6 +116,48 @@
                 }
                 else
                 { <p class="muted">This filesystem is not eligible for automated mounting.</p> }
+                @if (Model.Sharing.Available && Model.IsShareableVolume(partition))
+                {
+                  var currentShare = Model.Sharing.Shares.FirstOrDefault(s =>
+                      string.Equals(s.Path, partition.MountPoint, StringComparison.Ordinal));
+                  @if (currentShare is null)
+                  {
+                    <details class="yrm-disk-initialize">
+                      <summary class="button button-secondary">Share whole volume via SMB</summary>
+                      <form method="post" asp-page-handler="ShareVolume" asp-route-tab="storage"
+                            data-requires-admin="Share mounted volume" class="fm-dialog-form">
+                        <input type="hidden" name="mountPath" value="@partition.MountPoint" />
+                        <label>Share name
+                          <input name="shareName" required maxlength="32"
+                                 value="@System.IO.Path.GetFileName(partition.MountPoint)" />
+                        </label>
+                        <label class="v1-check"><input name="readOnly" type="checkbox" value="true" /> Read-only</label>
+                        @if (!Model.Sharing.AccountConfigured)
+                        {
+                          <label>First-time SMB password
+                            <input name="smbPassword" type="password" required minlength="12" maxlength="256"
+                                   autocomplete="new-password" />
+                          </label>
+                        }
+                        <button class="button button-primary" type="submit">Share</button>
+                      </form>
+                    </details>
+                  }
+                  else
+                  {
+                    <div class="v1-row"><span class="tag">SMB: @currentShare.Name</span>
+                      @if (currentShare.Managed)
+                      {
+                        <form method="post" asp-page-handler="UnshareVolume" asp-route-tab="storage"
+                              data-requires-admin="Stop sharing mounted volume"
+                              data-confirm="Stop sharing @currentShare.Name? Your files will be preserved.">
+                          <input type="hidden" name="name" value="@currentShare.Name" />
+                          <button class="button button-secondary" type="submit">Stop sharing</button>
+                        </form>
+                      }
+                    </div>
+                  }
+                }
               </div>
             }
             @if (Model.StorageDevices.Any(x => x.ParentPath == disk.Path && Model.IsSmallUnformatted(x)))

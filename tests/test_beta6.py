@@ -120,6 +120,6 @@ class DdnsContracts(unittest.TestCase):
         self.assertIn('availability = updates.LastCheck',prog)
 
     def test_beta6_version(self):
-        self.assertRegex(source('YrmPanel/YrmPanel.csproj'), r'<Version>1\.0\.0-beta\.[67]</Version>')
+        self.assertRegex(source('YrmPanel/YrmPanel.csproj'), r'<Version>1\.0\.0-beta\.[678]</Version>')
 
 if __name__ == '__main__':unittest.main()

@@ -64,7 +64,7 @@ class DdnsAndDialogs(unittest.TestCase):
         self.assertNotIn('window.confirm(',source('YrmPanel/wwwroot/js/v1-files.js'))
         self.assertNotIn('window.alert(',source('YrmPanel/wwwroot/js/v1-settings.js'))
     def test_beta7_version(self):
-        self.assertIn('<Version>1.0.0-beta.7</Version>',source('YrmPanel/YrmPanel.csproj'))
+        self.assertRegex(source('YrmPanel/YrmPanel.csproj'), r'<Version>1\.0\.0-beta\.[78]</Version>')
 
 if __name__ == '__main__':
     unittest.main()

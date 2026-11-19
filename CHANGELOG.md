@@ -1,3 +1,10 @@
+## v1.0.0 BETA8 — Native Samba host integration and direct volume sharing
+
+- Samba mutations run as a fixed root helper under the host systemd manager, avoiding the restricted web service mount namespace. Password is passed via stdin, not command-line flags.
+- Native Samba configuration keeps a managed include at the end, uses atomic writes, testparm validation, effective share checks, service reload and rollback of failed changes. No SMB protocol implementation or recursive permission changes.
+- Files can share owned folders without adding them to My Folders; Storage can directly share/unshare eligible mounted volumes. Existing mount and formatting safety logic is untouched.
+- Add mocked regression checks to the dev build. Windows .NET 10 compilation and real Ubuntu/Windows SMB client integration are still required before a Stable tag.
+
 ## v1.0.0 BETA7 — Host mount operations, DDNS management, dialogs
 
 - Storage root operations now run through host systemd transient units rather than inheriting the web service mount namespace and read-only `/etc`. Existing UUID, mount-path, filesystem and privilege checks remain enforced. A fresh empty ext4 `/data` or `/backup` may grant nonrecursive ownership of its mount root to the configured Panel Linux user; populated volumes are never chowned.

@@ -1,8 +1,8 @@
-# YRM PANEL v1.0.0 BETA7 — Stable candidate source
+# YRM PANEL v1.0.0 BETA8 — SMB/Storage integration candidate
 
 ASP.NET Core 10 / Razor Pages Web UI for a personally administered Ubuntu/Debian server. It runs as an **existing Linux user** and uses password-authorized fixed helpers for system administration. The browser UI is desktop-style; the Linux user and kernel supply the actual filesystem permissions.
 
-**Status: 1.0.0-beta.7 candidate, not released as Stable.** The assembly version is `1.0.0-beta.7` on the rolling Dev channel. The commit should only be tagged `v1.0.0` after passing Windows Build, Ubuntu VM checks, and stable release validation. Detailed steps and limitations: `V1_ACCEPTANCE.md`.
+**Status: 1.0.0-beta.8 candidate, not released as Stable.** The assembly version is `1.0.0-beta.8` on the rolling Dev channel. The commit should only be tagged `v1.0.0` after passing Windows Build, Ubuntu VM checks, and stable release validation. Detailed steps and limitations: `V1_ACCEPTANCE.md`.
 
 ## Core capabilities
 
@@ -19,7 +19,7 @@ ASP.NET Core 10 / Razor Pages Web UI for a personally administered Ubuntu/Debian
 
 ## Apply source and test
 
-Copy the contents of the BETA7 overlay ZIP directly over the current BETA6 local project directory. Do **not** run a generator. Build on Windows:
+Copy the complete files in the BETA8 overlay ZIP over the existing BETA7 project directory. Do **not** run a generator. Build on Windows:
 
 ```powershell
 dotnet build .\YrmPanel\YrmPanel.csproj -c Release
@@ -39,3 +39,5 @@ See `V1_ACCEPTANCE.md` for what has **not** been confirmed by CI/static tests.
 For BETA5 changes, deployment prerequisites and safety checks, see `BETA5_HANDOFF.md`.
 
 BETA6 upgrade and focused test checklist: [BETA6_HANDOFF.md](BETA6_HANDOFF.md).
+
+BETA8 SMB + Storage change and acceptance checklist: [BETA8_HANDOFF.md](BETA8_HANDOFF.md).
