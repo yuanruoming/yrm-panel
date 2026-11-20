@@ -12,7 +12,12 @@ print('PASS: Python helper syntax')
 PY
 for file in scripts/*.sh; do bash -n "$file"; done
 echo 'PASS: Bash syntax'
-for pattern in 'test_beta*.py' 'test_release.py' 'test_ui_contracts.py' 'test_taskbar_contracts.py'; do
+# All feature regressions are mandatory. The legacy test_beta*.py files
+# are superseded by tests/regression and may be removed from the repository.
+for directory in tests/regression tests/ui; do
+  PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$directory" -p 'test_*.py'
+done
+for pattern in 'test_release.py' 'test_ui_contracts.py' 'test_taskbar_contracts.py' 'test_samba_helper.py' 'test_storage_helper.py'; do
   PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s tests -p "$pattern"
 done
 if command -v node >/dev/null 2>&1; then

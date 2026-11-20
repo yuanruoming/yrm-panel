@@ -7,19 +7,16 @@
     var shared = Model.Samba.Shares;
     var currentRoute = Model.IsMyFolders ? "@folders" : (string.IsNullOrEmpty(Model.Path) ? "/" : Model.Path);
 }
-<div class="page-heading files-heading">
-  <div><p class="eyebrow">FILE MANAGER</p><h1>Files<span class="accent-period">.</span></h1></div>
-</div>
 @if (!string.IsNullOrWhiteSpace(Model.Notice))
 { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
 <section class="fm-explorer yrm-flat-files">
   <div class="fm-columns">
     <aside class="fm-locations" aria-label="File locations">
-      <div class="fm-locations-heading">MY FILES</div>
+      <div class="fm-locations-heading">FILES</div>
       <a class="fm-location-link @(Model.IsMyFolders ? "is-active" : "")" asp-page="/Files" asp-route-path="@("@folders")">
-        <svg class="ui-icon"><use href="#i-folder"/></svg> My Folders
+        <svg class="ui-icon"><use href="#i-folder"/></svg> My Files
       </a>
-      @foreach (var folderPath in Model.MyFolders)
+      @foreach (var folderPath in Model.MyFiles)
       {
         var relative = folderPath.TrimStart('/');
         var displayName = System.IO.Path.GetFileName(folderPath);
@@ -49,6 +46,15 @@
         }
         @if (Model.QuickAccess.Count == 0) { <small class="muted yrm-b10-quick-empty">Pin folders from More.</small> }
       </div>
+      <details class="fm-system-nav fm-storage-nav">
+        <summary><svg class="ui-icon"><use href="#i-harddrive"/></svg> Storage</summary>
+        @foreach (var volume in Model.MountedVolumes)
+        {
+          <a class="fm-location-link" asp-page="/Files" asp-route-path="@volume.MountPoint.TrimStart('/')" title="@volume.MountPoint">
+            <svg class="ui-icon"><use href="#i-harddrive"/></svg><span>@(string.IsNullOrWhiteSpace(volume.Label) ? volume.Name : volume.Label)</span>
+          </a>
+        }
+      </details>
       <details class="fm-system-nav" data-persist-disclosure="yrm-panel:system-files-open">
         <summary><svg class="ui-icon"><use href="#i-harddrive"/></svg> System Files</summary>
         <a class="fm-location-link @(!Model.IsMyFolders && Model.Path == "" ? "is-active" : "")"
@@ -64,88 +70,81 @@
       @if (Model.IsMyFolders)
       {
         <div class="fm-page-title">
-          <div><h2>My Folders</h2><p>Only folders you create or explicitly add appear here.</p></div>
+          <div><h2>My Files</h2></div>
           <div class="fm-action-row">
-            <button type="button" class="button button-secondary" data-open-add-folder>＋ Add Existing</button>
             <button type="button" class="button button-primary" data-open-new-folder>＋ New Folder</button>
           </div>
         </div>
-        @if (Model.MyFolders.Count == 0)
+        @if (Model.MyFiles.Count == 0)
         {
           <div class="fm-library-empty">
             <svg class="ui-icon"><use href="#i-folder"/></svg>
             <h3>No folders yet</h3>
-            <p>Create a folder or add one you already use. Linux system files stay out of this view.</p>
+            <p>Folders created in your home and mounted storage appear here automatically.</p>
             <div class="fm-action-row">
               <button type="button" class="button button-primary" data-open-new-folder>Create Folder</button>
-              <button type="button" class="button button-secondary" data-open-add-folder>Add Existing</button>
             </div>
           </div>
         }
         else
         {
-          <div class="fm-library-list">
-            @foreach (var folderPath in Model.MyFolders)
+          <div class="responsive-table fm-my-files-table"><table class="data-table explorer-table">
+            <thead><tr><th>Name</th><th>Modified</th><th>Type</th><th aria-label="Actions"></th></tr></thead>
+            <tbody>
+            @foreach (var folderPath in Model.MyFiles)
             {
               var name = System.IO.Path.GetFileName(folderPath);
               var exists = System.IO.Directory.Exists(folderPath);
+              var relative = folderPath.TrimStart('/');
               var matching = shared.FirstOrDefault(x => string.Equals(x.Path, folderPath, StringComparison.Ordinal));
-              <div class="fm-library-row yrm-b10-library-row">
-                <span class="fm-folder-symbol"><svg class="ui-icon"><use href="#i-folder"/></svg></span>
-                <div class="fm-library-meta">
-                  @if (exists)
-                  { <a asp-page="/Files" asp-route-path="@folderPath.TrimStart('/')">@name</a> }
-                  else { <strong>@name</strong> }
-                  <small>@folderPath</small>
-                </div>
-                @if (!exists) { <span class="tag">Unavailable</span> }
-                else if (matching is not null) { <span class="tag fm-shared-tag">Shared · SMB</span> }
-                <details class="explorer-item-menu"><summary aria-label="Folder actions" title="Actions">⋯</summary>
-                  <div class="explorer-actions-popover">
-                    @if (exists)
-                    {
-                      <a asp-page="/Files" asp-route-path="@folderPath.TrimStart('/')">Open</a>
-                      @if (matching is not null && matching.Managed)
+              <tr>
+                <td class="explorer-name">
+                  <a asp-page="/Files" asp-route-path="@relative"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@name</span></a>
+                  @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared">Shared</small> }
+                </td>
+                <td class="muted">@(exists ? System.IO.Directory.GetLastWriteTimeUtc(folderPath).ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "—")</td>
+                <td class="muted">Folder</td>
+                <td class="explorer-menu-cell">
+                  <details class="explorer-item-menu"><summary aria-label="Folder actions for @name" title="Actions">⋯</summary>
+                    <div class="explorer-actions-popover">
+                      <a asp-page="/Files" asp-route-path="@relative">Open</a>
+                      @if (exists && matching is not null && matching.Managed)
                       {
                         <form method="post" asp-page-handler="Unshare" asp-route-path="@("@folders")" data-requires-admin="Remove SMB share">
                           <input type="hidden" name="name" value="@matching.Name"/><button type="submit">Stop sharing</button>
                         </form>
                       }
-                      else if (matching is null && FileAccess.IsManaged(folderPath))
+                      else if (exists && matching is null && FileAccess.IsManaged(folderPath))
                       { <button type="button" data-share-folder="@name" data-share-absolute="@folderPath">Share</button> }
-                    }
-                    @if (exists && !Model.QuickAccess.Contains(folderPath, StringComparer.Ordinal))
-                    {
-                      <form method="post" asp-page-handler="PinFolder" asp-route-path="@("@folders")">
-                        <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Pin to Quick Access</button>
-                      </form>
-                    }
-                    else if (Model.QuickAccess.Contains(folderPath, StringComparer.Ordinal))
-                    {
-                      <form method="post" asp-page-handler="UnpinFolder" asp-route-path="@("@folders")">
-                        <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Unpin shortcut</button>
-                      </form>
-                    }
-                    @if (exists)
-                    {
-                      <form method="post" asp-page-handler="DeleteLibrary" asp-route-path="@("@folders")"
-                            data-confirm="Permanently delete @name and everything inside? This cannot be undone.">
-                        <input type="hidden" name="folderPath" value="@folderPath"/><button class="danger" type="submit">Delete folder</button>
-                      </form>
-                    }
-                    else
-                    {
-                      <form method="post" asp-page-handler="RemoveMissingLibrary" asp-route-path="@("@folders")">
-                        <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Remove unavailable entry</button>
-                      </form>
-                    }
-                    <hr class="yrm-menu-divider" />
+                      @if (exists && !Model.QuickAccess.Contains(folderPath, StringComparer.Ordinal))
+                      {
+                        <form method="post" asp-page-handler="PinFolder" asp-route-path="@("@folders")">
+                          <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Pin to Quick Access</button>
+                        </form>
+                      }
+                      else if (exists)
+                      {
+                        <form method="post" asp-page-handler="UnpinFolder" asp-route-path="@("@folders")">
+                          <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Unpin shortcut</button>
+                        </form>
+                      }
+                      @if (exists && FileAccess.IsManaged(System.IO.Path.GetDirectoryName(folderPath) ?? "/"))
+                      {
+                        <hr class="yrm-menu-divider" />
+                        <form method="post" asp-page-handler="DeleteLibrary" asp-route-path="@("@folders")"
+                              data-confirm="Permanently delete @name and its contents? This cannot be undone.">
+                          <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit" class="danger">Delete folder</button>
+                        </form>
+                      }
+                      <hr class="yrm-menu-divider" />
                       <button type="button" data-b12-properties data-b12-prop-name="@name" data-b12-prop-path="@folderPath" data-b12-prop-type="Folder" data-b12-prop-size="—" data-b12-prop-modified="—">Properties</button>
-                  </div>
-                </details>
-              </div>
+                    </div>
+                  </details>
+                </td>
+              </tr>
             }
-          </div>
+            </tbody>
+          </table></div>
         }
       }
       else
@@ -249,12 +248,6 @@
                         }
                         else if (matching is null && canShare)
                         { <button type="button" data-share-folder="@item.Name">Share</button> }
-                        @if (canShare && !Model.MyFolders.Contains(absolute, StringComparer.Ordinal))
-                        {
-                          <form method="post" asp-page-handler="AddExisting" asp-route-path="@currentRoute">
-                            <input type="hidden" name="folderPath" value="@absolute"/><button type="submit">Add to My Folders</button>
-                          </form>
-                        }
                         @if (canEnable)
                         {
                           <form method="post" asp-page-handler="EnableFolder" asp-route-path="@currentRoute" data-requires-admin="Grant folder permissions">
@@ -345,14 +338,6 @@
       </div>
     </div>
     <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-close-dialog="new-folder-dialog">Cancel</button><button type="submit" class="button button-primary">Create Folder</button></div>
-  </form>
-</dialog>
-<dialog id="add-existing-dialog" class="panel-modal fm-small-dialog" aria-labelledby="add-existing-title">
-  <div class="panel-modal-head"><strong id="add-existing-title">Add Existing Folder</strong><button type="button" data-close-dialog="add-existing-dialog" aria-label="Close">×</button></div>
-  <form method="post" asp-page-handler="AddExisting" asp-route-path="@("@folders")" class="fm-dialog-form">
-    <p class="muted">Add a folder already on Linux. The folder stays where it is and its permissions do not change.</p>
-    <label>Absolute path<input name="folderPath" required placeholder="/data/Projects" autocomplete="off"/></label>
-    <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-close-dialog="add-existing-dialog">Cancel</button><button type="submit" class="button button-primary">Add Folder</button></div>
   </form>
 </dialog>
 <dialog id="file-action-dialog" class="panel-modal fm-small-dialog" aria-labelledby="file-action-title">

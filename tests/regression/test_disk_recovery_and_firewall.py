@@ -6,7 +6,7 @@ import stat
 from types import SimpleNamespace
 from unittest import TestCase, mock
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 def load_script(name):
     path = ROOT / 'scripts' / name

@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 def source(path):
     return (ROOT / path).read_text(encoding='utf-8')

@@ -8,7 +8,7 @@ import shutil
 import subprocess
 import unittest
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 def source(path):
@@ -33,7 +33,7 @@ class ProductContracts(unittest.TestCase):
         self.assertIn('points.Contains("/", StringComparer.Ordinal)', code)
         self.assertIn('"/usr/bin/findmnt"', code)
 
-    def test_my_folders_delete_is_real_but_quick_access_is_bookmark_only(self):
+    def test_my_files_delete_is_real_but_quick_access_is_bookmark_only(self):
         view = source('YrmPanel/Pages/Files.cshtml')
         handler = source('YrmPanel/Pages/Files.cshtml.cs')
         store = source('YrmPanel/Services/MyFoldersStore.cs')

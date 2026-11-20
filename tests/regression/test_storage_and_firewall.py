@@ -6,7 +6,7 @@ import stat
 import unittest
 from unittest import mock
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 def load_script(filename):
     spec = importlib.util.spec_from_file_location(filename.replace('-', '_').replace('.py',''), ROOT/'scripts'/filename)

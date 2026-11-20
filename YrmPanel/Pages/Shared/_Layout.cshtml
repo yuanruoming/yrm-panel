@@ -14,7 +14,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="color-scheme" content="dark" />
-  <title>@title · YRM Panel</title>
+  <title>YRM PANEL</title>
   <link rel="icon" type="image/x-icon" href="~/favicon.ico" asp-append-version="true" />
   @if (!string.IsNullOrEmpty(wallpaper))
   { <link rel="preload" as="image" href="@wallpaper" /> }
@@ -45,6 +45,7 @@
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h5M14 16l4-4-4-4M8 12h10"/></symbol>
     <symbol id="i-pin" viewBox="0 0 24 24"><path d="M16 9V4l1-1H7l1 1v5l-3 4v2h14v-2zM12 15v7"/></symbol>
+    <symbol id="i-pin-off" viewBox="0 0 24 24"><path d="M9 3h8l-1 1v5l-1.4 2M6.6 10.6 5 13v2h10M12 15v7M3 3l18 18"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7a8 8 0 0 0-14-1L4 8M4 3v5h5M4 17a8 8 0 0 0 14 1l2-2m0 5v-5h-5"/></symbol>
     <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 2v10M6.5 5.5a9 9 0 1 0 11 0"/></symbol>
   </svg>
@@ -103,7 +104,7 @@
   <aside class="pinned-monitor" id="pinned-monitor" aria-label="Pinned system monitor" hidden>
     <div class="pinned-header"><span><span class="status-light"></span>System monitor</span><div class="pinned-actions">
       <button type="button" class="os-icon-button" data-open-monitor title="Detailed monitor" aria-label="Open detailed monitor"><svg class="ui-icon"><use href="#i-activity"/></svg></button>
-      <button type="button" class="os-icon-button" id="pinned-unpin" title="Unpin monitor" aria-label="Unpin monitor"><svg class="ui-icon"><use href="#i-x"/></svg></button>
+      <button type="button" class="os-icon-button" id="pinned-unpin" title="Unpin system monitor" aria-label="Unpin system monitor"><svg class="ui-icon"><use href="#i-pin-off"/></svg></button>
     </div></div>
     <div class="pinned-stats"><div><span>CPU</span><strong id="pinned-cpu">—</strong></div><div><span>RAM</span><strong id="pinned-ram">—</strong></div></div>
     <div class="pinned-meter"><span class="pinned-track"><span id="pinned-cpu-meter"></span></span><span class="pinned-track"><span id="pinned-ram-meter"></span></span></div>

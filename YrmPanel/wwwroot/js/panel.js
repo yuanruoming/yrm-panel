@@ -23,6 +23,7 @@
   const homeButton = $("taskbar-home");
   const MAX_TABS = 6;
   const tabs = new Map();
+  let desktopNeedsRefresh = false;
   let taskbarPins = [];
   let taskbarShortcuts = [];
   let taskbarCsrf = "";
@@ -97,10 +98,13 @@
   monitorClose?.addEventListener("click", () => setMonitorOpen(false));
 
   function updatePinned() {
-    if (pinned) pinned.hidden = !(pinnedEnabled && activeUrl === null);
+    // A desktop widget stays present across apps; the window occludes it naturally.
+    if (pinned) pinned.hidden = !pinnedEnabled;
     pinButton?.setAttribute("aria-pressed", String(pinnedEnabled));
     pinButton?.classList.toggle("is-active", pinnedEnabled);
-    pinButton?.setAttribute("title", pinnedEnabled ? "Unpin desktop monitor" : "Pin compact monitor to desktop");
+    pinButton?.querySelector('use')?.setAttribute('href', pinnedEnabled ? '#i-pin-off' : '#i-pin');
+    pinButton?.setAttribute("title", pinnedEnabled ? "Unpin system monitor" : "Pin system monitor");
+    pinButton?.setAttribute("aria-label", pinnedEnabled ? "Unpin system monitor" : "Pin system monitor");
   }
   try { pinnedEnabled = localStorage.getItem("yrm-panel:pinned-monitor") === "1"; } catch { /* blocked storage is okay */ }
   updatePinned();
@@ -238,7 +242,7 @@
       }
       pin.title=taskbarPins.includes(id)?"Unpin from Taskbar":"Pin to Taskbar";
       pin.classList.toggle('is-pinned',taskbarPins.includes(id));
-      pin.innerHTML='<svg class="ui-icon" aria-hidden="true"><use href="#i-pin"></use></svg>';
+      pin.innerHTML=`<svg class="ui-icon" aria-hidden="true"><use href="${taskbarPins.includes(id)?'#i-pin-off':'#i-pin'}"></use></svg>`;
       pin.setAttribute("aria-label",pin.title);
     });
   }
@@ -472,7 +476,8 @@
     if (appWindow) appWindow.setAttribute("aria-label", `${title} window`);
     const heading = $("window-active-title");
     if (heading) heading.textContent = title;
-    document.title = `${title} · YRM Panel`;
+    // Browser chrome belongs to the persistent shell, not the active app.
+    if (document.title !== "YRM PANEL") document.title = "YRM PANEL";
     updatePinned();
     if(!isDesktop)applyWindowBounds();
   }
@@ -512,7 +517,9 @@
     renderTabs();
     closePopup(launcher, launcherButton);
     if (push) history.pushState({yrmPanelRoute:null}, "", "/");
-    void refreshDesktop();
+    // Switching apps must not fetch and rebuild the desktop each time.
+    // Only application shortcut mutations invalidate the desktop content.
+    if (desktopNeedsRefresh) { desktopNeedsRefresh = false; void refreshDesktop(); }
   }
   function showTab(url, push = true) {
     if (!page || !tabs.has(url)) return;
@@ -951,8 +958,10 @@
           if (canonicalPath(url.split("?")[0]) === "/Files") tab.fragment = null;
         }
       }
-      if (["/Settings","/Applications"].includes(canonicalPath(submittedUrl.split("?")[0]))) void refreshDesktop();
-      if (canonicalPath(submittedUrl.split("?")[0]) === "/Applications") void loadTaskbarPins();
+      if (canonicalPath(submittedUrl.split("?")[0]) === "/Applications") {
+        desktopNeedsRefresh = true;
+        void loadTaskbarPins();
+      }
       windowScroll.scrollTop = 0;
       const title = doc.body.dataset.initialTitle || "Application";
       if (tabs.has(activeUrl)) { tabs.get(activeUrl).title = title; tabs.get(activeUrl).fragment = null; }

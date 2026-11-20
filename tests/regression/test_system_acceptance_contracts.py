@@ -6,7 +6,7 @@ import json
 import pathlib
 from unittest import TestCase, mock
 
-ROOT=pathlib.Path(__file__).resolve().parents[1]
+ROOT=pathlib.Path(__file__).resolve().parents[2]
 SCRIPT=ROOT/'scripts/yrm-panel-mount.py'
 spec=importlib.util.spec_from_file_location('yrm_mount_final',SCRIPT)
 module=importlib.util.module_from_spec(spec)
@@ -85,7 +85,7 @@ class VisualContracts(TestCase):
         css=read('YrmPanel/wwwroot/css/v1-stability.css')
         shell=read('YrmPanel/Pages/Shared/_Layout.cshtml')
         self.assertIn('.workspace-window.is-maximized',css)
-        self.assertIn('height:calc(100dvh - 74px)',css)
+        self.assertIn('.workspace-stage>.workspace-window.is-maximized',css)
         self.assertNotIn('yrm-topmark',shell)
         self.assertIn('href="~/favicon.ico"',shell)
     def test_media_player_is_own_ui_and_cleanup(self):

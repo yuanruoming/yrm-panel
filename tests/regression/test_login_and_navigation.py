@@ -5,7 +5,7 @@ from pathlib import Path
 import re
 import unittest
 
-ROOT=Path(__file__).resolve().parents[1]
+ROOT=Path(__file__).resolve().parents[2]
 
 def source(name):return (ROOT/name).read_text(encoding='utf-8')
 
@@ -68,9 +68,10 @@ class LayoutTests(unittest.TestCase):
         self.assertIn('No filesystem',view)
         self.assertIn('Complete Incomplete Setup',view)
     def test_last_route_only_explicitly_allowed_pages(self):
-        js=source('YrmPanel/wwwroot/js/v1-stability.js')
-        self.assertIn('const allowed = /^\\/(?:Files|Settings|Docker|Applications|Features|Shares|Services)',js)
-        self.assertIn('sessionStorage.setItem(key, route)',js)
-        self.assertIn('last && allowed.test(last)',js)
+        js=source('YrmPanel/wwwroot/js/panel.js')
+        self.assertIn('const routeStorageKey=',js)
+        self.assertIn('function saveWorkspaceRoute(url)',js)
+        self.assertIn('if (saved && internalUrl(saved))',js)
+        self.assertIn('allowedPages.has(canonicalPath(url.pathname))',js)
 
 if __name__=='__main__':unittest.main()

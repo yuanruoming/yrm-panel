@@ -557,7 +557,14 @@
     toggle.setAttribute('aria-haspopup','listbox');toggle.setAttribute('aria-expanded','false');
     toggle.setAttribute('aria-label',select.getAttribute('aria-label')||select.closest('label')?.textContent.trim()||'Choose option');
     const text=document.createElement('span');text.className='yrm-b11-select-current';
-    const arrow=document.createElement('span');arrow.className='yrm-b11-select-arrow';arrow.setAttribute('aria-hidden','true');arrow.textContent='⌄';
+    const arrow=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    arrow.setAttribute('viewBox','0 0 24 24');arrow.setAttribute('class','yrm-b11-select-arrow');
+    arrow.setAttribute('aria-hidden','true');
+    const chevron=document.createElementNS('http://www.w3.org/2000/svg','path');
+    chevron.setAttribute('d','m6 9 6 6 6-6');chevron.setAttribute('fill','none');
+    chevron.setAttribute('stroke','currentColor');chevron.setAttribute('stroke-width','2');
+    chevron.setAttribute('stroke-linecap','round');chevron.setAttribute('stroke-linejoin','round');
+    arrow.append(chevron);
     toggle.append(text,arrow);
     const list=document.createElement('div');list.className='yrm-b11-select-list';list.setAttribute('role','listbox');
     function sync(){text.textContent=select.selectedOptions[0]?.textContent||'Select';

@@ -8,7 +8,7 @@ from unittest import TestCase, mock
 from importlib.util import module_from_spec, spec_from_file_location
 import json
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 def load(name, path):
     spec = spec_from_file_location(name, ROOT / path)
@@ -56,8 +56,10 @@ class MountHelperTests(TestCase):
             mounts.create_mount('abcdef01', str(self.managed), True)
         self.assertTrue(self.managed.exists())
         self.assertIn('yrm-panel-managed:', self.fstab.read_text())
-        with mock.patch.object(mounts, 'run', return_value=''):
-            mounts.unmount(str(self.managed))
+        with mock.patch.object(mounts, 'run', return_value=''), \
+             mock.patch.object(mounts, 'verify_mounted_uuid'), \
+             mock.patch.object(mounts.subprocess, 'run', return_value=mock.Mock(returncode=0, stderr='')):
+            mounts.unmount(str(self.managed), 'abcdef01')
         self.assertNotIn('yrm-panel-managed:', self.fstab.read_text())
         self.assertTrue(self.managed.is_dir())
 
@@ -66,13 +68,16 @@ class MountHelperTests(TestCase):
              mock.patch.object(mounts, 'run', return_value='/'):
             mounts.create_mount('abcdef01', str(self.managed), False)
         self.assertIn(str(self.managed), json.loads(self.manual.read_text()))
-        with mock.patch.object(mounts, 'run', return_value=''):
-            mounts.unmount(str(self.managed))
+        with mock.patch.object(mounts, 'run', return_value=''), \
+             mock.patch.object(mounts, 'verify_mounted_uuid'), \
+             mock.patch.object(mounts.subprocess, 'run', return_value=mock.Mock(returncode=0, stderr='')):
+            mounts.unmount(str(self.managed), 'abcdef01')
         self.assertNotIn(str(self.managed), json.loads(self.manual.read_text()))
 
     def test_unmanaged_mount_cannot_be_unmounted(self):
-        with self.assertRaisesRegex(ValueError,'managed'):
-            mounts.unmount(str(self.managed))
+        with mock.patch.object(mounts, 'verify_mounted_uuid'), \
+             self.assertRaisesRegex(ValueError,'managed'):
+            mounts.unmount(str(self.managed), 'abcdef01')
 
     def test_mount_failure_rolls_back_new_directory_mounted_state(self):
         def fake_run(args, **kwargs):
@@ -162,8 +167,8 @@ class PackageContractTests(TestCase):
         code=(ROOT/'YrmPanel/Services/FileManagerService.cs').read_text()
         js=(ROOT/'YrmPanel/wwwroot/js/v1-files.js').read_text()
         self.assertIn('File.Move(temp, target, replace)',code)
-        self.assertIn('OK = Replace existing file',js)
-        self.assertIn('Cancel = Skip',js)
+        self.assertIn('Replace existing file?',js)
+        self.assertIn('Cancel will skip this file.',js)
         self.assertNotIn(' (1)',js)
 
     def test_upload_conflict_only_returns_when_file_exists(self):

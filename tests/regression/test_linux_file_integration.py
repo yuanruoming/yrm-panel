@@ -9,14 +9,14 @@ from tempfile import TemporaryDirectory
 from unittest import TestCase, mock
 import configparser
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 spec = spec_from_file_location('samba_rc41', ROOT / 'scripts' / 'yrm-panel-samba.py')
 samba = module_from_spec(spec)
 spec.loader.exec_module(samba)
 
 
-class RC41FileAndUiTests(TestCase):
+class FileAndUiIntegrationContracts(TestCase):
     def test_samba_writes_available_inside_protected_service(self):
         unit = (ROOT / 'packaging/yrm-panel.service').read_text()
         self.assertIn('ProtectSystem=full', unit)
@@ -39,9 +39,11 @@ class RC41FileAndUiTests(TestCase):
         self.assertIn('if (!Request.Query.ContainsKey("path")) Path = FolderHome;', page)
         self.assertIn('if (Path == "/") Path = "";', page)
         self.assertIn('asp-route-path="/"', view)
-        self.assertIn('My Folders', view)
+        self.assertIn('My Files', view)
+        self.assertNotIn('My Folders', view)
+        self.assertIn('DiscoverMyFiles()', page)
         self.assertIn('Show hidden files', view)
-        self.assertIn('data-open-add-folder', view)
+        self.assertNotIn('data-open-add-folder', view)
         self.assertIn('data-share-folder=', view)
         self.assertIn('data-share-absolute=', view)
         self.assertNotIn('Share via SMB', view)
@@ -82,7 +84,8 @@ class SambaConfigurationTests(TestCase):
             mock.patch.object(samba, 'validate_path', return_value='/data/Photos'),
             mock.patch.object(samba, 'effective_names', return_value=set()),
             mock.patch.object(samba, 'account', return_value='yuanruoming'),
-            mock.patch.object(samba, 'run', return_value=''),
+            mock.patch.object(samba, 'run', side_effect=lambda argv: self.managed.read_text()
+                       if argv and argv[0] == 'testparm' else ''),
         ]
         for patcher in self.patches:
             patcher.start()

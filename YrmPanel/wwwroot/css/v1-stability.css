@@ -443,7 +443,7 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b11-select-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;border:1px solid #455872;border-radius:8px;background:#142132;color:#e3eefb;padding:9px 11px;min-height:37px;cursor:pointer;font:inherit;font-size:12px;}
 .yrm-b11-select-toggle:hover{border-color:#7697b5;background:#1b3045;}
 .yrm-b11-select-toggle:focus-visible{outline:2px solid #7bb4e7;outline-offset:2px;}
-.yrm-b11-select-arrow{font-size:19px;color:#a4bfd9;line-height:.7;flex:none;}
+.yrm-b11-select-arrow{width:16px;height:16px;color:#bfc3ca;flex:none;transition:transform .16s ease;}
 .yrm-b11-select-list{display:none;position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:800;background:#1d2b3c;border:1px solid #506783;border-radius:8px;padding:5px;max-height:220px;overflow:auto;box-shadow:0 16px 30px #0009;}
 .yrm-b11-select.is-open>.yrm-b11-select-list{display:grid;gap:2px;}
 .yrm-b11-select-option{width:100%;text-align:left;border:0;border-radius:5px;background:transparent;color:#d9e8f6;font:inherit;font-size:12px;padding:9px 10px;cursor:pointer;}
@@ -600,7 +600,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 /* Consolidated desktop/window/taskbar, firewall, monitor and wallpaper repairs. */
 :root {
   --yrm-shell-bg: #17181b;
-  --yrm-shell-raised: #222326;
+  --yrm-shell-raised: #111215;
   --yrm-shell-border: rgba(220, 224, 230, .15);
   --yrm-shell-text: #e4e5e8;
 }
@@ -611,10 +611,14 @@ body.is-desktop .workspace-stage{display:none!important;}
   color: var(--yrm-shell-text) !important;
 }
 .workspace-stage > .workspace-window {
-  background: var(--yrm-shell-bg) !important;
-  border-color: var(--yrm-shell-border) !important;
+  background: #101114 !important;
+  border: 1px solid #08090b !important;
   box-shadow: 0 22px 65px rgba(0,0,0,.48) !important;
 }
+/* Single hierarchy: dark shell, dark titlebar, charcoal app content. */
+.workspace-window > .window-scroll { background: #292b30 !important; }
+.workspace-window .window-page { background: #292b30 !important; color: #e5e5e7; }
+.workspace-window .fm-content, .workspace-window .server-settings-content { background: #292b30; }
 .workspace-window > .window-titlebar {
   background: var(--yrm-shell-raised) !important;
   border-bottom-color: var(--yrm-shell-border) !important;
@@ -655,9 +659,11 @@ body.is-desktop .workspace-stage{display:none!important;}
   color: #d7d9de !important;
 }
 .yrm-launcher-taskbar-pin svg { width: 15px; height: 15px; pointer-events:none; }
-.yrm-launcher-taskbar-pin.is-pinned { background: #55585e !important; color: #fff !important; }
-/* Open monitor drawer stays above app windows; compact pinned monitor stays below them. */
-.workspace-stage { z-index: 35 !important; }
+/* Pin state is conveyed by the SVG shape, not a different button background. */
+.yrm-launcher-taskbar-pin.is-pinned { background: #33353a !important; color: #d7d9de !important; }
+/* The desktop monitor is a widget, not a drawer. Only actual windows cover it. */
+.workspace-stage { z-index: 35 !important; pointer-events: none; }
+.workspace-stage > .workspace-window { pointer-events: auto; }
 .monitor-drawer { z-index: 60 !important; }
 .pinned-monitor { z-index: 24 !important; }
 .os-topbar { z-index: 65 !important; }
@@ -679,7 +685,12 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-b11-fw-fields .yrm-b11-fw-source { grid-column: auto; }
 .yrm-b11-fw-fields .yrm-b11-fw-source-address { grid-column: auto; }
 .yrm-b11-fw-fields input:disabled { opacity: .58; cursor: not-allowed; }
-.yrm-b11-fw-dialog { overflow: auto; max-height: calc(100dvh - 28px); }
+/* Stable editor columns on desktop; real one-column form on narrow screens. */
+.yrm-b11-fw-dialog { overflow: auto; max-height: calc(100dvh - 28px); width: min(580px,calc(100vw - 28px)); max-width: 580px; }
+.yrm-b11-fw-fields { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 16px; }
+.yrm-b11-fw-dialog .yrm-b11-select { width: 100%; min-width: 0; }
+.yrm-b11-fw-dialog .yrm-b11-select-toggle { width: 100%; }
+.yrm-b11-fw-table { min-width: 590px; }
 .yrm-ui-firewall-note { margin: 12px 0 0; font-size: 11px; line-height: 1.5; color: #aab0b8; }
 /* Wallpaper history uses existing settings storage and flat single-row entries. */
 .yrm-ui-wallpaper-history { border-top:1px solid var(--yrm-shell-border); margin-top:18px; padding-top:13px; }

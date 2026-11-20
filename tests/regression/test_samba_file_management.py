@@ -10,7 +10,7 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts' / 'yrm-panel-samba.py'
 spec = importlib.util.spec_from_file_location('yrm_beta8_samba', SCRIPT)
 samba = importlib.util.module_from_spec(spec)

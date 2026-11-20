@@ -1,0 +1,30 @@
+YRM PANEL - test cleanup following the beta.12.2 desktop refactor
+
+The following old files have been migrated into tests/regression/ and are no
+longer selected by scripts/verify-v1.sh. After confirming the new ZIP files
+are present, delete these obsolete originals in Rider / file explorer:
+
+tests/test_beta10.py
+tests/test_beta121.py
+tests/test_beta4.py
+tests/test_beta5.py
+tests/test_beta6.py
+tests/test_beta7.py
+tests/test_beta8.py
+tests/test_beta8_followup.py
+tests/test_beta9.py
+tests/test_rc41_integration.py
+tests/test_v1_candidate.py
+tests/test_v1_final_pass.py
+tests/test_v1_stability.py
+tests/verify_beta121_ui.py
+
+Note: verify_beta121_ui.py asserted the old incorrect rule that a pinned
+System Monitor must disappear when an application opens. Its coverage was
+superseded by the updated desktop and regression tests.
+
+Do NOT delete tests/regression/, tests/ui/, tests/test_release.py,
+tests/test_ui_contracts.py, tests/test_taskbar_contracts.py,
+tests/test_samba_helper.py, or tests/test_storage_helper.py.
+
+Nothing in this package deletes existing folders or user data automatically.

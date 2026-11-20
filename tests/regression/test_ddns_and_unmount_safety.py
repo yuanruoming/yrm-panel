@@ -10,7 +10,7 @@ import subprocess
 import unittest
 from unittest.mock import patch, Mock
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('yrm_b9_mount', ROOT / 'scripts/yrm-panel-mount.py')
 mount = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mount)

@@ -29,8 +29,10 @@ class DesktopContracts(unittest.TestCase):
 
     def test_pinned_app_icon_uses_existing_svg_symbol(self):
         js = source("YrmPanel/wwwroot/js/panel.js")
-        self.assertIn("pin.innerHTML='<svg", js)
-        self.assertIn('<use href="#i-pin"', js)
+        self.assertIn('pin.innerHTML=`<svg', js)
+        self.assertIn("'#i-pin-off'", js)
+        self.assertIn("'#i-pin'", js)
+        self.assertIn('pinned.hidden = !pinnedEnabled', js)
         self.assertNotIn('pin.textContent=taskbarPins.includes(id)', js)
 
     def test_ddns_notification_key_has_kind_provider_domain_family(self):

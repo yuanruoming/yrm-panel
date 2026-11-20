@@ -28,7 +28,7 @@ public sealed class FilesModel : PageModel
     public bool IsMyFolders => Path == FolderHome;
     private string CurrentRelative => Path == "/" ? "" : Path;
     public FileView View { get; private set; } = new("system", "", false, "Not loaded", []);
-    public IReadOnlyList<string> MyFolders { get; private set; } = [];
+    public IReadOnlyList<string> MyFiles { get; private set; } = [];
     public IReadOnlyList<string> QuickAccess { get; private set; } = [];
     public IReadOnlyList<StorageDevice> MountedVolumes { get; private set; } = [];
     public IReadOnlyList<StorageDevice> PhysicalDisks { get; private set; } = [];
@@ -57,7 +57,6 @@ public sealed class FilesModel : PageModel
     {
         if (!Request.Query.ContainsKey("path")) Path = FolderHome;
         if (Path == "/") Path = "";
-        MyFolders = _folders.List();
         QuickAccess = _folders.ListPins();
         var discovered = await _devices.ListAsync(HttpContext.RequestAborted);
         PhysicalDisks = discovered.Where(d => d.Type == "disk").ToArray();
@@ -70,6 +69,7 @@ public sealed class FilesModel : PageModel
             .GroupBy(device => device.MountPoint, StringComparer.Ordinal)
             .Select(group => group.First())
             .ToArray();
+        MyFiles = DiscoverMyFiles();
         if (IsMyFolders)
         {
             View = new FileView("system", "", true, null, []);
@@ -79,6 +79,53 @@ public sealed class FilesModel : PageModel
             View = _files.Browse("system", CurrentRelative, Hidden);
         }
         Samba = await _samba.ListAsync(HttpContext.RequestAborted);
+    }
+
+    // The visible My Files root is derived from real directories, not a parallel
+    // 'registered folders' database. Historical bookmarks are read for compatibility.
+    // Nothing here moves, copies, deletes, or changes permissions on user files.
+    private IReadOnlyList<string> DiscoverMyFiles()
+    {
+        var roots = new List<string>();
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrWhiteSpace(home) && home != "/" && Directory.Exists(home))
+            roots.Add(System.IO.Path.TrimEndingDirectorySeparator(home));
+        roots.AddRange(MountedVolumes.Select(v => v.MountPoint)
+            .Where(m => Directory.Exists(m) && m != "/"));
+        var found = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var root in roots.Distinct(StringComparer.Ordinal))
+        {
+            // FileManagerService already skips hidden entries, symlinks and lost+found.
+            var browse = _files.Browse("system", root.TrimStart('/'));
+            if (!browse.Available) continue;
+            foreach (var entry in browse.Items.Where(e => e.IsDirectory))
+            {
+                var path = System.IO.Path.Combine(root, entry.Name);
+                if (Directory.Exists(path)) found.Add(path);
+            }
+        }
+        foreach (var old in _folders.List())
+        {
+            // Preserve formerly-added external folders even when their parent is
+            // outside the two normal managed storage roots.
+            if (Directory.Exists(old) && _files.Browse("system", old.TrimStart('/')).Available)
+                found.Add(old);
+        }
+        return found.OrderBy(x => System.IO.Path.GetFileName(x), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x, StringComparer.Ordinal).ToArray();
+    }
+
+    private async Task<bool> IsMyFilesEntryAsync(string absolute)
+    {
+        if (_folders.List().Contains(absolute, StringComparer.Ordinal)) return true;
+        var parent = System.IO.Path.GetDirectoryName(absolute);
+        var home = System.IO.Path.TrimEndingDirectorySeparator(
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+        if (string.Equals(parent, home, StringComparison.Ordinal)) return true;
+        var devices = await _devices.ListAsync(HttpContext.RequestAborted);
+        return devices.Any(device => device.MountPoint == parent && device.MountPoint != "/" &&
+            device.FileSystem.Length > 0 && !device.MountPoint.StartsWith("/boot", StringComparison.Ordinal) &&
+            !device.MountPoint.StartsWith("/var/", StringComparison.Ordinal));
     }
 
     public IActionResult OnGetTree(string path = "")
@@ -118,7 +165,7 @@ public sealed class FilesModel : PageModel
             if (!view.Available || !view.CanWrite)
                 throw new UnauthorizedAccessException("Choose a folder your Linux user can manage.");
             _folders.Add(absolute);
-            Notice = "Folder added to My Folders. No files or permissions were changed.";
+            Notice = "Folder added to My Files. No files or permissions were changed.";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                                       or ArgumentException or NotSupportedException)
@@ -166,7 +213,7 @@ public sealed class FilesModel : PageModel
         return Back();
     }
 
-    // A My Folders deletion is the same real filesystem deletion as in Files.
+    // A My Files deletion acts on the real folder. Quick Access only removes shortcuts.
     // Quick Access uses Unpin instead, never deleting real data.
     public async Task<IActionResult> OnPostDeleteLibraryAsync(string folderPath)
     {
@@ -174,8 +221,8 @@ public sealed class FilesModel : PageModel
         try
         {
             var absolute = MyFoldersStore.Normalize(folderPath);
-            if (!_folders.List().Contains(absolute, StringComparer.Ordinal))
-                throw new UnauthorizedAccessException("Folder is not in My Folders.");
+            if (!await IsMyFilesEntryAsync(absolute))
+                throw new UnauthorizedAccessException("Folder is not an entry in My Files.");
             await AssertNoSharesAsync(absolute);
             _files.DeleteLibraryFolder(absolute);
             _folders.ForgetDeletedTree(absolute);
@@ -239,19 +286,8 @@ public sealed class FilesModel : PageModel
             }
             Notice = Act(() => _files.CreateFolder("system", normalizedParent, name), "Folder created.");
         }
-        if (!Notice.StartsWith("Error:", StringComparison.Ordinal) &&
-            (rootParent || Path == FolderHome))
-        {
-            try
-            {
-                var createdPath = FileManagerService.Absolute(
-                    rootParent ? name : normalizedParent + "/" + name);
-                _folders.Add(createdPath);
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-                                          or ArgumentException)
-            { Notice += " Could not pin it automatically: " + ex.Message; }
-        }
+        // The new folder appears in My Files through directory discovery.
+        // Do not add another entry to the legacy my-folders.json registry.
         return Back();
     }
 
