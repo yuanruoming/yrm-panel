@@ -1,3 +1,4 @@
+/* Metrics renderer only. panel.js is the sole owner of monitor visibility and pin state. */
 (() => {
   "use strict";
   const get = id => document.getElementById(id);
@@ -11,9 +12,6 @@
   };
   const put = (id, value) => { const el = get(id); if (el) el.textContent = String(value); };
   const pct = n => Math.max(0, Math.min(100, Number(n) || 0));
-  // The legacy 5-second metrics poll still updates the same DOM node.
-  // Guard the single uptime label so its shorter minutes-only formatting
-  // cannot overwrite the newer seconds-accurate monitor display.
   let latestUptimeText='';
   const uptimeElement=get('uptime');
   if (uptimeElement && typeof MutationObserver==='function') {
@@ -43,25 +41,8 @@
     latestUptimeText=`Uptime · ${d ? `${d}d ${h}h ${m}m ${sec}s` : h ? `${h}h ${m}m ${sec}s` : `${m}m ${sec}s`}`;
     put("uptime",latestUptimeText);
   }
-  const pinned = get("pinned-monitor");
-  if (pinned) {
-    let updating = false;
-    const repair = () => {
-      if (updating) return;
-      let enabled = false;
-      try { enabled = localStorage.getItem("yrm-panel:pinned-monitor") === "1"; } catch {}
-      if (pinned.hidden === enabled) {
-        updating = true;
-        pinned.hidden = !enabled;
-        updating = false;
-      }
-    };
-    const observer = new MutationObserver(repair);
-    observer.observe(pinned, {attributes: true, attributeFilter: ["hidden"]});
-    get("monitor-pin")?.addEventListener("click", () => queueMicrotask(repair));
-    get("pinned-unpin")?.addEventListener("click", () => queueMicrotask(repair));
-    repair();
-  }
+  // EventSource and polling update metrics only. Neither is allowed to unhide
+  // the compact monitor while an application window is active.
   if (typeof EventSource === "function") {
     const stream = new EventSource("/api/metrics/stream");
     stream.onmessage = event => { try { apply(JSON.parse(event.data)); } catch {} };

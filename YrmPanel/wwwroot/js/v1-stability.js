@@ -123,6 +123,7 @@
     const summary=item?.querySelector('.explorer-item-menu > summary');
     if (!summary){event.preventDefault();return;}
     event.preventDefault();
+    if (item?.matches('[data-b10-file-row]'))setFileSelection(item);
     closeFloatingMenu();
     contextMenuAnchor={x:event.clientX,y:event.clientY};
     summary.click();
@@ -208,30 +209,48 @@
     selectedFileRow?.classList.add('is-selected');
     const toolbar=document.getElementById('yrm-b10-file-selection');
     if (!toolbar)return;
-    toolbar.hidden=!selectedFileRow;
-    const label=document.getElementById('yrm-b10-selected-name');
-    if (label)label.textContent=selectedFileRow?.dataset.b10Filename||'1 selected';
+    toolbar.classList.toggle('has-selection', Boolean(selectedFileRow));
     const canWrite=Boolean(selectedFileRow?.querySelector('[data-b10-row-delete]'));
     for(const attr of ['data-b10-file-delete','data-b10-file-move','data-b10-file-rename']){
       const button=toolbar.querySelector(`[${attr}]`);
       if (button)button.disabled=!canWrite;
     }
+    const copy=toolbar.querySelector('[data-b12-file-copy]');
+    if(copy)copy.disabled=!selectedFileRow;
   }
   document.addEventListener('click',event=>{
     const target=event.target;
     if (!(target instanceof Element))return;
     const row=target.closest('[data-b10-file-row]');
-    if (row && !target.closest('button,a,form,details,summary,input')) {
-      setFileSelection(selectedFileRow===row?null:row);
+    if (row && !target.closest('.explorer-item-menu,form,details,summary,input')) {
+      setFileSelection(row);
       return;
     }
-    if (target.closest('[data-b10-file-clear]')) {setFileSelection(null);return;}
+    if(target.closest('.explorer-table tbody') && !row)setFileSelection(null);
     const action=target.closest('[data-b10-file-rename],[data-b10-file-move],[data-b10-file-delete],[data-b12-file-copy]');
     if (!action || !selectedFileRow?.isConnected)return;
     if (action.matches('[data-b10-file-rename]'))selectedFileRow.querySelector('[data-rename-item]')?.click();
     if (action.matches('[data-b12-file-copy]'))selectedFileRow.querySelector('[data-copy-item]')?.click();
     if (action.matches('[data-b10-file-move]'))selectedFileRow.querySelector('[data-move-item]')?.click();
     if (action.matches('[data-b10-file-delete]'))selectedFileRow.querySelector('[data-b10-row-delete]')?.requestSubmit();
+  },true);
+  // fnOS-style: click selects a folder; double-click enters it.
+  document.addEventListener('click',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    const anchor=node?.closest('[data-b10-file-row] td.explorer-name a[href]');
+    if(!anchor || anchor.dataset.yrmOpenOnDouble==='1')return;
+    event.preventDefault();
+    event.stopPropagation();
+    setFileSelection(anchor.closest('[data-b10-file-row]'));
+  },true);
+  document.addEventListener('dblclick',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    const anchor=node?.closest('[data-b10-file-row] td.explorer-name a[href]');
+    if(!anchor)return;
+    event.preventDefault();
+    anchor.dataset.yrmOpenOnDouble='1';
+    anchor.click();
+    delete anchor.dataset.yrmOpenOnDouble;
   },true);
   const selectionObserver=new MutationObserver(()=>{
     if (selectedFileRow && !selectedFileRow.isConnected)setFileSelection(null);
@@ -334,15 +353,9 @@
     if (button) { button.disabled=true;button.textContent='Updating…'; }
     const group=form.closest('[data-b9-ddns-provider]');
     const status=group?.querySelector('[data-b9-ddns-status]');
-    let info=group?.querySelector('[data-b9-ddns-result]');
+    // Provider table is status-only. Detailed errors belong to Notifications.
+    group?.querySelectorAll('[data-b9-ddns-result]').forEach(el=>el.remove());
     if (status) {status.textContent='Updating';status.dataset.b10State='updating';}
-    if (!info && group) {
-      info=document.createElement('p');
-      info.dataset.b9DdnsResult='1';
-      info.className='yrm-b9-ddns-feedback';
-      (group.querySelector('.yrm-b11-provider-cell')||group).append(info);
-    }
-    if (info) {info.textContent='';info.hidden=true;}
     void (async()=>{
       try {
         const response=await fetch(form.action,{
@@ -380,10 +393,20 @@
           }
         }
         if (status) {status.textContent=data.ok?'Normal':'Failed';status.dataset.b10State=data.ok?'normal':'failed';}
-        if (!data.ok && info) {info.hidden=false;info.textContent=data.message||'DDNS update failed.';}
+        if(!data.ok) {
+          window.dispatchEvent(new CustomEvent('yrm:notification',{detail:{
+            kind:'ddns',severity:'error',title:'DDNS update failed',
+            source:group?.dataset.b9DdnsProvider+' · '+group?.dataset.b9DdnsHostname,
+            message:data.message||'Provider update failed.'
+          }}));
+        }
       } catch (err) {
         if (status) {status.textContent='Unavailable';status.dataset.b10State='unavailable';}
-        if (info) {info.hidden=false;info.textContent=String(err.message||err);}
+        window.dispatchEvent(new CustomEvent('yrm:notification',{detail:{
+          kind:'ddns',severity:'error',title:'DDNS update unavailable',
+          source:group?.dataset.b9DdnsProvider+' · '+group?.dataset.b9DdnsHostname,
+          message:String(err.message||err)
+        }}));
       } finally {
         delete form.dataset.b9Busy;
         if (button) {button.disabled=false;button.textContent=previous;}

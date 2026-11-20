@@ -285,6 +285,170 @@
     tabsHost.replaceChildren(...nodes);
     homeButton?.classList.toggle("is-active", activeUrl === null);
   }
+  // BETA12.1 - one owner for window geometry; no parallel window controller.
+  // Settings and Files use the same movable, resizable desktop window.
+  const windowBounds = new Map();
+  const windowTitlebar = appWindow?.querySelector('.window-titlebar');
+  const workspaceKey = () => canonicalPath((activeUrl || '/Settings').split('?')[0]);
+  const availableSpace = () => ({
+    width: Math.max(280, stage?.clientWidth || innerWidth),
+    height: Math.max(250, stage?.clientHeight || innerHeight - 49)
+  });
+  function clampWindowBounds(bounds) {
+    const space=availableSpace();
+    const minWidth=Math.min(420,space.width);
+    const minHeight=Math.min(290,space.height);
+    const width=Math.max(minWidth,Math.min(space.width, Number(bounds.width)||minWidth));
+    const height=Math.max(minHeight,Math.min(space.height, Number(bounds.height)||minHeight));
+    return {left:Math.max(0,Math.min(space.width-width,Number(bounds.left)||0)),
+      top:Math.max(0,Math.min(space.height-height,Number(bounds.top)||0)),width,height};
+  }
+  function readWindowBounds() {
+    if (!appWindow || !stage) return null;
+    const r=appWindow.getBoundingClientRect(), sr=stage.getBoundingClientRect();
+    return clampWindowBounds({left:r.left-sr.left,top:r.top-sr.top,width:r.width,height:r.height});
+  }
+  function storeWindowBounds() {
+    if (!activeUrl || appWindow?.classList.contains('is-maximized'))return;
+    const bounds=readWindowBounds();
+    if (bounds)windowBounds.set(workspaceKey(),bounds);
+  }
+  function applyWindowBounds() {
+    if (!appWindow || appWindow.classList.contains('is-maximized') || !activeUrl)return;
+    const key=workspaceKey(),space=availableSpace();
+    const preferredWidth=key==='/Files'?1300:key==='/Settings'?1080:1120;
+    const width=Math.min(preferredWidth,space.width-32);
+    const height=Math.min(key==='/Files'?800:740,space.height-30);
+    const fallback={left:(space.width-width)/2,top:(space.height-height)/2,width,height};
+    const bounds=clampWindowBounds(windowBounds.get(key)||fallback);
+    for(const [name,value] of Object.entries(bounds))appWindow.style[name]=`${Math.round(value)}px`;
+  }
+  function toggleWindowMaximize() {
+    if (!appWindow)return;
+    if (!appWindow.classList.contains('is-maximized'))storeWindowBounds();
+    appWindow.classList.toggle('is-maximized');
+    if (!appWindow.classList.contains('is-maximized'))applyWindowBounds();
+    const button=$('window-maximize');
+    if(button)button.title=appWindow.classList.contains('is-maximized')?'Restore':'Maximize';
+  }
+  if(windowTitlebar && appWindow){
+    windowTitlebar.addEventListener('dblclick',event=>{
+      if(event.target instanceof Element && event.target.closest('button'))return;
+      toggleWindowMaximize();
+    });
+    windowTitlebar.addEventListener('pointerdown',event=>{
+      if(event.button!==0 || !activeUrl || appWindow.classList.contains('is-maximized') ||
+          (event.target instanceof Element && event.target.closest('button,a,input')))return;
+      const start=readWindowBounds();if(!start)return;
+      const startX=event.clientX,startY=event.clientY;
+      windowTitlebar.setPointerCapture(event.pointerId);
+      const move=e=>{
+        const next=clampWindowBounds({...start,left:start.left+(e.clientX-startX),
+          top:start.top+(e.clientY-startY)});
+        appWindow.style.left=next.left+'px';appWindow.style.top=next.top+'px';
+      };
+      const end=()=>{
+        windowTitlebar.removeEventListener('pointermove',move);
+        windowTitlebar.removeEventListener('pointerup',end);
+        windowTitlebar.removeEventListener('pointercancel',end);
+        storeWindowBounds();
+      };
+      windowTitlebar.addEventListener('pointermove',move);
+      windowTitlebar.addEventListener('pointerup',end);
+      windowTitlebar.addEventListener('pointercancel',end);
+      event.preventDefault();
+    });
+    // Native CSS resize remains active; remember its result when the gesture ends.
+    appWindow.addEventListener('pointerup',()=>storeWindowBounds());
+    window.addEventListener('resize',()=>{
+      if(appWindow.classList.contains('is-maximized'))return;
+      const current=readWindowBounds();
+      if(current && activeUrl)windowBounds.set(workspaceKey(),current);
+      applyWindowBounds();
+    });
+  }
+  // BETA12.1 notification center: single-admin browser history, bounded and
+  // deduplicated by origin/message. Never store credentials or authorization data.
+  const notificationKey='yrm-panel:notifications-v1';
+  let notifications=[];
+  try {
+    const saved=JSON.parse(localStorage.getItem(notificationKey)||'[]');
+    if(Array.isArray(saved))notifications=saved.slice(0,30).filter(x=>x&&typeof x.message==='string');
+  }catch{}
+  const rightControls=document.querySelector('.os-top-right');
+  const notificationTrigger=document.createElement('button');
+  notificationTrigger.type='button';notificationTrigger.className='yrm-notif-trigger';
+  notificationTrigger.setAttribute('aria-label','Notifications');
+  notificationTrigger.setAttribute('aria-expanded','false');
+  notificationTrigger.title='Notifications';
+  notificationTrigger.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>';
+  const count=document.createElement('span');count.className='yrm-notif-count';count.hidden=true;
+  notificationTrigger.append(count);
+  rightControls?.insertBefore(notificationTrigger,$('clock-text'));
+  const notificationDrawer=document.createElement('section');
+  notificationDrawer.className='yrm-notif-drawer';notificationDrawer.hidden=true;
+  notificationDrawer.setAttribute('aria-label','Notifications');
+  const notifHead=document.createElement('div');notifHead.className='yrm-notif-head';
+  const notifTitle=document.createElement('strong');notifTitle.textContent='Notifications';
+  const clear=document.createElement('button');clear.type='button';clear.className='yrm-notif-clear';clear.textContent='Clear all';
+  notifHead.append(notifTitle,clear);
+  const notifList=document.createElement('div');notifList.className='yrm-notif-list';
+  notificationDrawer.append(notifHead,notifList);document.body.append(notificationDrawer);
+  const saveNotifications=()=>{
+    try{localStorage.setItem(notificationKey,JSON.stringify(notifications.slice(0,30)));}catch{}
+  };
+  function renderNotifications(){
+    const unread=notifications.filter(n=>!n.read).length;
+    count.hidden=unread===0;count.textContent=String(Math.min(99,unread));
+    notifList.replaceChildren();
+    if(!notifications.length){const empty=document.createElement('p');empty.className='yrm-notif-empty';
+      empty.textContent='No notifications';notifList.append(empty);return;}
+    for(const event of notifications){
+      const item=document.createElement('article');item.className='yrm-notif-item';
+      const title=document.createElement('strong');title.textContent=event.title;
+      const source=document.createElement('small');
+      source.textContent=`${event.source} · ${new Date(event.time).toLocaleString()}`;
+      const msg=document.createElement('p');msg.textContent=event.message;
+      item.append(title,source,msg);notifList.append(item);
+    }
+  }
+  function showNotifications(open){
+    notificationDrawer.hidden=!open;
+    notificationTrigger.setAttribute('aria-expanded',String(open));
+    if(open){notifications.forEach(n=>n.read=true);saveNotifications();renderNotifications();}
+  }
+  notificationTrigger.addEventListener('click',()=>showNotifications(notificationDrawer.hidden));
+  clear.addEventListener('click',()=>{notifications=[];saveNotifications();renderNotifications();});
+  document.addEventListener('pointerdown',event=>{
+    if(!notificationDrawer.hidden && !notificationDrawer.contains(event.target) &&
+       !notificationTrigger.contains(event.target))showNotifications(false);
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape' && !notificationDrawer.hidden)showNotifications(false);
+  });
+  function pushNotification(detail){
+    if(!detail || typeof detail!=='object')return;
+    const title=String(detail.title||'System notification').slice(0,90);
+    const source=String(detail.source||'YRM Panel').slice(0,120);
+    // Error details are supplied by the Panel, not arbitrary HTML. Redact common credential patterns.
+    const message=String(detail.message||'Operation failed').replace(/((?:password|token|secret|api[_-]?key)\s*[:=]\s*)[^\s,&]+/ig,'$1[redacted]').slice(0,700);
+    const existing=notifications.find(n=>n.title===title&&n.source===source&&n.message===message);
+    if(existing)return; // Repeated DDNS checks should not flood the history.
+    notifications.unshift({title,source,message,time:Date.now(),read:!notificationDrawer.hidden});
+    notifications=notifications.slice(0,30);saveNotifications();renderNotifications();
+  }
+  window.addEventListener('yrm:notification',event=>pushNotification(event.detail));
+  function scanDdnsFailures(){
+    page?.querySelectorAll('[data-b9-ddns-record]').forEach(record=>{
+      const error=record.querySelector('[data-b9-ddns-error]')?.textContent.trim();
+      if(!error)return;
+      const row=record.closest('[data-b9-ddns-provider]');
+      pushNotification({title:'DDNS update failed',
+        source:`${row?.dataset.b9DdnsProvider||'Provider'} · ${row?.dataset.b9DdnsHostname||'Domain'}`,
+        message:error});
+    });
+  }
+  renderNotifications();
   function setPageShell(isDesktop, title) {
     body.classList.toggle("is-desktop", isDesktop);
     body.classList.toggle("has-window", !isDesktop);
@@ -295,6 +459,7 @@
     if (heading) heading.textContent = title;
     document.title = `${title} · YRM Panel`;
     updatePinned();
+    if(!isDesktop)applyWindowBounds();
   }
   function rememberActive() {
     if (!activeUrl || !page || !tabs.has(activeUrl)) return;
@@ -370,10 +535,19 @@
     host.append(item);
     setTimeout(() => item.remove(), type === "error" ? 9500 : 4200);
   }
-  function errorToast(message) { showToast(message, "error"); }
+  function errorToast(message) {
+    showToast(message, "error");
+    window.dispatchEvent(new CustomEvent('yrm:notification',{detail:{
+      kind:'system',title:'Panel operation failed',source:'YRM Panel',message
+    }}));
+  }
   function harvestNotices(container) {
     container?.querySelectorAll(".notice[data-result-notice]").forEach(note => {
-      showToast(note.textContent.trim(), note.dataset.resultNotice === "error" ? "error" : "success");
+      const failure=note.dataset.resultNotice === "error";
+      showToast(note.textContent.trim(), failure ? "error" : "success");
+      if(failure)window.dispatchEvent(new CustomEvent('yrm:notification',{detail:{
+        kind:'system',title:'Operation failed',source:'YRM Panel',message:note.textContent.trim()
+      }}));
       note.remove();
     });
   }
@@ -460,8 +634,7 @@
       if (!response.ok)throw new Error(data.error||"Cannot browse folder.");
       field.value=data.path;
       const rights=$("yrm-b12-action-rights");
-      if (rights)rights.textContent=data.canManage?`Destination: ${data.absolute}`:
-        `Read-only destination: ${data.absolute}`;
+      if (rights)rights.textContent=data.canManage?'':`Read-only: ${data.absolute}`;
       const submit=$("file-action-form")?.querySelector('button[type="submit"]');
       if (submit)submit.disabled=!data.canManage;
       const add=(label,nextPath)=>{
@@ -502,14 +675,18 @@
       $("file-action-name").value = item;
       const input = $("file-action-value");
       input.name = rename ? "newName" : "destination";
+      input.type = rename ? "text" : "hidden";
+      input.required = rename;
       input.value = rename ? item : "";
+      $("yrm-b121-action-input-row")?.toggleAttribute("hidden", !rename);
       $("file-action-title").textContent = rename ? `Rename ${item}` : `${copy ? "Copy" : "Move"} ${item} to...`;
       const chooser = $("yrm-b12-action-picker");
       if (chooser) chooser.hidden=rename;
       input.maxLength=rename?255:1024;
       const submit=form.querySelector('button[type="submit"]');
       if (submit)submit.disabled=!rename;
-      $("file-action-label").textContent = rename ? "New name" : "Destination folder (relative to /)";
+      $("file-action-label").textContent = "New name";
+      if (submit)submit.textContent = rename ? "Rename" : copy ? "Copy" : "Move";
       openDialog("file-action-dialog");
       if (!rename)void listActionFolders(path);
       return;
@@ -606,6 +783,7 @@
       activeUrl = url;
       page.replaceChildren(fragment);
       harvestNotices(page);
+      scanDdnsFailures();
       windowScroll.scrollTop = 0;
       setPageShell(false, title);
       renderTabs();
@@ -652,12 +830,13 @@
   }
   setPageShell(activeUrl === null, body.dataset.initialTitle || "Desktop");
   renderTabs();
+  scanDdnsFailures();
   void loadTaskbarPins();
 
   homeButton?.addEventListener("click", () => showDesktop());
   $("window-minimize")?.addEventListener("click", () => showDesktop());
   $("window-close")?.addEventListener("click", () => { if (activeUrl) closeTab(activeUrl); });
-  $("window-maximize")?.addEventListener("click", () => appWindow?.classList.toggle("is-maximized"));
+  $("window-maximize")?.addEventListener("click",toggleWindowMaximize);
   document.addEventListener("click", (event) => {
     const anchor = event.target.closest?.("a[href]");
     if (anchor?.hasAttribute("data-log-viewer")) {
@@ -731,6 +910,7 @@
       for (const node of Array.from(remotePage.childNodes)) fragment.append(document.importNode(node, true));
       page.replaceChildren(fragment);
       harvestNotices(page);
+      scanDdnsFailures();
       // Refresh Files on next opening after any disk mount-state change.
       if (canonicalPath(submittedUrl.split("?")[0]) === "/Settings" &&
           /^(Mount|Unmount|InitializeDisk|CompleteDisk)$/.test(action.searchParams.get("handler") || "")) {

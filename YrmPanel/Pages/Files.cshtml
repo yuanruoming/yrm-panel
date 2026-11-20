@@ -173,6 +173,15 @@
               <button class="button button-secondary" type="submit">Request management</button>
             </form>
           }
+          @if (Model.View.Available)
+          {
+          <div class="yrm-b10-file-selection" id="yrm-b10-file-selection" aria-label="Selected file actions">
+            <button type="button" class="button button-secondary" data-b10-file-rename disabled>Rename</button>
+            <button type="button" class="button button-secondary" data-b12-file-copy disabled>Copy To</button>
+            <button type="button" class="button button-secondary" data-b10-file-move disabled>Move To</button>
+            <button type="button" class="button button-danger" data-b10-file-delete disabled>Delete</button>
+          </div>
+          }
           <a class="fm-hidden-toggle" asp-page="/Files" asp-route-path="@currentRoute" asp-route-hidden="@(!Model.Hidden)">
             @(Model.Hidden ? "Hide hidden files" : "Show hidden files")
           </a>
@@ -180,14 +189,6 @@
         @if (!Model.View.Available) { <div class="empty-hint">@Model.View.Error</div> }
         else
         {
-          <div class="yrm-b10-file-selection" id="yrm-b10-file-selection" hidden>
-            <span id="yrm-b10-selected-name">1 selected</span>
-            <button type="button" class="button button-secondary" data-b10-file-rename>Rename</button>
-            <button type="button" class="button button-secondary" data-b12-file-copy>Copy To</button>
-            <button type="button" class="button button-secondary" data-b10-file-move>Move</button>
-            <button type="button" class="button button-danger" data-b10-file-delete>Delete</button>
-            <button type="button" class="mini-button" data-b10-file-clear aria-label="Clear selection">×</button>
-          </div>
           <div class="responsive-table"><table class="data-table explorer-table">
             <thead><tr><th>File name</th><th>Modified</th><th>Type</th><th>Size</th><th aria-label="Actions"></th></tr></thead>
             <tbody>
@@ -353,9 +354,9 @@
   <form method="post" id="file-action-form">
     @Html.AntiForgeryToken()
     <input type="hidden" name="name" id="file-action-name"/>
-    <div class="form-stack"><label id="file-action-label">New name</label><input id="file-action-value" name="newName" required maxlength="255"/></div>
+    <div class="form-stack" id="yrm-b121-action-input-row"><label id="file-action-label">New name</label><input id="file-action-value" name="newName" required maxlength="255"/></div>
     <div id="yrm-b12-action-picker" class="yrm-b12-action-picker" hidden>
-      <p class="muted" id="yrm-b12-target-note">Choose an existing destination folder. Source files are preserved when copying.</p>
+
       <div id="yrm-b12-action-tree" class="explorer-tree yrm-b12-action-tree" aria-label="Choose destination folder"></div>
       <p class="muted" id="yrm-b12-action-rights" aria-live="polite"></p>
     </div>
