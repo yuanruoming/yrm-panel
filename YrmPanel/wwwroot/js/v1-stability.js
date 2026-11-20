@@ -61,15 +61,16 @@
   }
   function positionFloatingMenu() {
     if (!floatingMenu) return;
-    const {owner,proxy}=floatingMenu;
+    const {owner,proxy,anchor}=floatingMenu;
     if (!owner.isConnected) {closeFloatingMenu();return;}
-    const rect=owner.querySelector('summary')?.getBoundingClientRect();
+    const rect=anchor ? {left:anchor.x,right:anchor.x,top:anchor.y,bottom:anchor.y} : owner.querySelector('summary')?.getBoundingClientRect();
     if (!rect) {closeFloatingMenu();return;}
     const width=proxy.offsetWidth||174,height=proxy.offsetHeight;
     proxy.style.left=`${Math.max(8,Math.min(innerWidth-width-8,rect.right-width))}px`;
     proxy.style.top=`${innerHeight-rect.bottom>=height+12 || innerHeight-rect.bottom>=rect.top
       ?rect.bottom+5:Math.max(8,rect.top-height-5)}px`;
   }
+  let contextMenuAnchor=null;
   // Use visual proxies, not detached real forms: original forms must stay inside
   // #window-page so existing CSRF, sudo authorization and AJAX handlers work.
   document.addEventListener('click',event=>{
@@ -105,14 +106,35 @@
       });
       owner.open=true;
       document.body.append(proxy);
-      floatingMenu={owner,proxy};
+      floatingMenu={owner,proxy,anchor:contextMenuAnchor};
+      contextMenuAnchor=null;
       positionFloatingMenu();
       return;
     }
     if (floatingMenu && !floatingMenu.proxy.contains(el))closeFloatingMenu();
   },true);
+  document.addEventListener('contextmenu',event=>{
+    const target=event.target instanceof Element?event.target:null;
+    if (!target || !target.closest('.fm-explorer'))return;
+    // Preserve browser text editing and form controls, but use the same
+    // existing menu for both More and right-click on folder/file entries.
+    if (target.closest('input,textarea,select,[contenteditable="true"]'))return;
+    const item=target.closest('[data-b10-file-row],.fm-library-row,.yrm-b11-quick-item');
+    const summary=item?.querySelector('.explorer-item-menu > summary');
+    if (!summary){event.preventDefault();return;}
+    event.preventDefault();
+    closeFloatingMenu();
+    contextMenuAnchor={x:event.clientX,y:event.clientY};
+    summary.click();
+    contextMenuAnchor=null;
+  });
   document.addEventListener('keydown',event=>{
-    if (event.key==='Escape' && floatingMenu){closeFloatingMenu();event.preventDefault();}
+    if (event.key==='Escape' && floatingMenu){closeFloatingMenu();event.preventDefault();return;}
+    if (!(event.key==='ContextMenu' || (event.shiftKey && event.key==='F10')))return;
+    const target=event.target instanceof Element?event.target:null;
+    const item=target?.closest('[data-b10-file-row],.fm-library-row,.yrm-b11-quick-item');
+    const summary=item?.querySelector('.explorer-item-menu > summary');
+    if (summary){event.preventDefault();summary.click();}
   },true);
   window.addEventListener('scroll',positionFloatingMenu,true);
   window.addEventListener('resize',positionFloatingMenu);
@@ -271,7 +293,7 @@
       info=document.createElement('p');
       info.dataset.b9DdnsResult='1';
       info.className='yrm-b9-ddns-feedback';
-      group.append(info);
+      (group.querySelector('.yrm-b11-provider-cell')||group).append(info);
     }
     if (info) {info.textContent='';info.hidden=true;}
     void (async()=>{
@@ -290,6 +312,16 @@
           if (!row)continue;
           const ip=row.querySelector('[data-b9-ddns-ip]');
           if (ip) ip.textContent=record.ipSource==='disabled'?'Disabled':record.ip||'Not checked';
+          const marker=row.querySelector('[data-b11-family-state]');
+          if (marker){
+            const off=record.ipSource==='disabled';
+            const failed=/^(failed|error)/i.test(record.status||'');
+            const good=/^(updated|unchanged|ip unchanged)/i.test(record.status||'');
+            marker.textContent=off?'Off':failed?'Failed':good?'Normal':'Not checked';
+            marker.className='yrm-b11-ip-state '+(off?'is-off':failed?'is-failed':good?'is-normal':'is-unknown');
+          }
+          const last=group.querySelector('[data-b11-last-update]');
+          if (last && record.lastRun)last.textContent=record.lastRun;
           const checked=row.querySelector('[data-b9-ddns-checked]');
           if (checked)checked.textContent=record.lastRun?`Checked ${record.lastRun}`:'Not checked yet';
           const error=row.querySelector('[data-b9-ddns-error]');
@@ -378,4 +410,169 @@
   restoreStorageTab();
   window.setInterval(()=>void showUpdateStages(),2200);
   void showUpdateStages();
+
+  /* BETA11: a single firewall list + edit dialog. The existing v1-settings
+     form remains authoritative: its original hidden draft rows serialize
+     and validate the rules, and the server still controls UFW rollback. */
+  let currentFwRoot=null,editingFwRow=null,newFwRow=false,fwOldDirty='';
+  const firewallRoot=()=>get('v1-firewall-rules');
+  const ruleFields=['scope','action','port','protocol','source'];
+  const ruleValue=(row,key)=>row?.querySelector(`[data-fw="${key}"]`)?.value||'';
+  function paintFirewall(){
+    const body=get('yrm-b11-fw-body'),root=firewallRoot();
+    if (!body || !root)return;
+    const rows=Array.from(root.querySelectorAll('.v1-firewall-row'));
+    const fragment=document.createDocumentFragment();
+    if(!rows.length){const tr=document.createElement('tr');const td=document.createElement('td');
+      td.colSpan=6;td.className='yrm-b11-empty';td.textContent='No firewall rules configured.';tr.append(td);fragment.append(tr);}
+    for(const [index,row] of rows.entries()){
+      const tr=document.createElement('tr');
+      for(const key of ruleFields){
+        const td=document.createElement('td');td.textContent=ruleValue(row,key)||'—';
+        if(key==='action')td.className='yrm-b11-fw-action '+(ruleValue(row,key)==='deny'?'is-deny':'is-allow');
+        tr.append(td);
+      }
+      const td=document.createElement('td');td.className='yrm-b11-fw-row-actions';
+      const edit=document.createElement('button');edit.type='button';edit.className='yrm-b11-icon-action';edit.textContent='Edit';edit.dataset.b11FwEdit=String(index);
+      const remove=document.createElement('button');remove.type='button';remove.className='yrm-b11-icon-action is-delete';remove.textContent='Delete';remove.dataset.b11FwDelete=String(index);
+      td.append(edit,remove);tr.append(td);fragment.append(tr);
+    }
+    body.replaceChildren(fragment);
+  }
+  function initializeFirewall(){
+    const root=firewallRoot();if(!root||root===currentFwRoot)return;
+    currentFwRoot=root;
+    // v1-settings may finish generating initial draft rows in an earlier
+    // MutationObserver callback. Delay the first paint until that completes.
+    new MutationObserver(paintFirewall).observe(root,{childList:true,subtree:true});
+    queueMicrotask(paintFirewall);
+  }
+  function fwDialog(){return get('yrm-b11-fw-dialog');}
+  function closeFwEditor(){
+    if(newFwRow&&editingFwRow?.isConnected){
+      editingFwRow.querySelector('button.mini-button')?.click();
+      const dirty=get('v1-fw-dirty');if(dirty)dirty.textContent=fwOldDirty;
+    }
+    editingFwRow=null;newFwRow=false;
+    fwDialog()?.close();
+    paintFirewall();
+  }
+  function openFwEditor(row,isNew){
+    const dialog=fwDialog();if(!(dialog instanceof HTMLDialogElement)||!row)return;
+    editingFwRow=row;newFwRow=isNew;
+    const title=get('yrm-b11-fw-title');if(title)title.textContent=isNew?'Add Firewall Rule':'Edit Firewall Rule';
+    for(const key of ruleFields){
+      const input=dialog.querySelector(`[data-b11-fw-field="${key}"]`);
+      if(input){input.value=ruleValue(row,key);input.dispatchEvent(new Event('change',{bubbles:true}));}
+    }
+    const error=get('yrm-b11-fw-error');if(error){error.hidden=true;error.textContent='';}
+    if(!dialog.open)dialog.showModal();
+    dialog.querySelector('[data-b11-fw-field="port"]')?.focus();
+  }
+  document.addEventListener('click',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    if(!node)return;
+    if(node.closest('[data-b11-fw-add]')){
+      const root=firewallRoot();if(!root)return;
+      if(root.querySelectorAll('.v1-firewall-row').length>=50)return;
+      fwOldDirty=get('v1-fw-dirty')?.textContent||'';
+      get('v1-firewall-form')?.querySelector('[data-fw-add]')?.click();
+      const row=root.querySelector('.v1-firewall-row:last-child');
+      openFwEditor(row,true);return;
+    }
+    const edit=node.closest('[data-b11-fw-edit]');
+    if(edit){openFwEditor(firewallRoot()?.querySelectorAll('.v1-firewall-row')[Number(edit.dataset.b11FwEdit)],false);return;}
+    const remove=node.closest('[data-b11-fw-delete]');
+    if(remove){firewallRoot()?.querySelectorAll('.v1-firewall-row')[Number(remove.dataset.b11FwDelete)]?.querySelector('button.mini-button')?.click();paintFirewall();return;}
+    if(node.closest('[data-b11-fw-cancel]')){closeFwEditor();return;}
+    if(node.closest('[data-b11-fw-save]')){
+      const d=fwDialog();if(!editingFwRow||!d)return;
+      const values={};for(const key of ruleFields)values[key]=d.querySelector(`[data-b11-fw-field="${key}"]`)?.value.trim()||'';
+      const error=get('yrm-b11-fw-error');
+      if(!/^\d{1,5}(?:-\d{1,5})?(?:,\d{1,5}(?:-\d{1,5})?)*$/.test(values.port)){
+        if(error){error.textContent='Enter a valid port, list (80,443), or range (20-442).';error.hidden=false;}return;
+      }
+      for(const key of ruleFields){const original=editingFwRow.querySelector(`[data-fw="${key}"]`);
+        if(original){original.value=values[key]||(key==='source'?'any':'');original.dispatchEvent(new Event('input',{bubbles:true}));}}
+      editingFwRow=null;newFwRow=false;d.close();paintFirewall();
+    }
+  },true);
+  document.addEventListener('cancel',event=>{if(event.target===fwDialog()){event.preventDefault();closeFwEditor();}},true);
+  const fwObserver=new MutationObserver(initializeFirewall);
+  fwObserver.observe(document.body,{childList:true,subtree:true});
+  initializeFirewall();
+
+  /* Consistent, keyboard-operable dropdowns in DDNS and firewall editors.
+     The original <select> is retained for native form submission and change
+     listeners; no extra server API or third-party JS is introduced. */
+  let openedSelect=null;
+  function closeSelect(){if(!openedSelect)return;openedSelect.classList.remove('is-open');
+    openedSelect.querySelector('.yrm-b11-select-toggle')?.setAttribute('aria-expanded','false');openedSelect=null;}
+  function enhanceSelect(select){
+    if(select.dataset.b11Enhanced==='1'||select.closest('.yrm-b10-provider-picker'))return;
+    select.dataset.b11Enhanced='1';
+    const wrapper=document.createElement('span');wrapper.className='yrm-b11-select';
+    select.parentNode.insertBefore(wrapper,select);wrapper.append(select);
+    const toggle=document.createElement('button');toggle.type='button';toggle.className='yrm-b11-select-toggle';
+    toggle.setAttribute('aria-haspopup','listbox');toggle.setAttribute('aria-expanded','false');
+    toggle.setAttribute('aria-label',select.getAttribute('aria-label')||select.closest('label')?.textContent.trim()||'Choose option');
+    const text=document.createElement('span');text.className='yrm-b11-select-current';
+    const arrow=document.createElement('span');arrow.className='yrm-b11-select-arrow';arrow.setAttribute('aria-hidden','true');arrow.textContent='⌄';
+    toggle.append(text,arrow);
+    const list=document.createElement('div');list.className='yrm-b11-select-list';list.setAttribute('role','listbox');
+    function sync(){text.textContent=select.selectedOptions[0]?.textContent||'Select';
+      list.querySelectorAll('[data-b11-select-option]').forEach(button=>{
+        const selected=button.dataset.b11SelectOption===select.value;
+        button.setAttribute('aria-selected',String(selected));
+      });}
+    [...select.options].forEach(option=>{
+      const btn=document.createElement('button');btn.type='button';btn.className='yrm-b11-select-option';btn.dataset.b11SelectOption=option.value;
+      btn.textContent=option.textContent;btn.setAttribute('role','option');btn.disabled=option.disabled;
+      list.append(btn);
+    });
+    select.tabIndex=-1;wrapper.append(toggle,list);wrapper.b11Sync=sync;sync();
+    select.addEventListener('change',sync);
+  }
+  function initializeSelects(){
+    document.querySelectorAll('.yrm-b9-ddns-dialog select,.yrm-b10-ddns-dialog select,.yrm-b11-fw-dialog select,.yrm-b11-fw-status select')
+      .forEach(enhanceSelect);
+  }
+  document.addEventListener('click',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    if(!node)return;
+    const option=node.closest('[data-b11-select-option]');
+    if(option){const wrapper=option.closest('.yrm-b11-select');const select=wrapper?.querySelector('select');
+      if(select){select.value=option.dataset.b11SelectOption;select.dispatchEvent(new Event('change',{bubbles:true}));}
+      wrapper?.querySelector('.yrm-b11-select-toggle')?.focus();closeSelect();return;}
+    const toggle=node.closest('.yrm-b11-select-toggle');
+    if(toggle){const wrapper=toggle.closest('.yrm-b11-select'),reopen=openedSelect!==wrapper;
+      closeSelect();if(reopen){openedSelect=wrapper;wrapper.classList.add('is-open');toggle.setAttribute('aria-expanded','true');}
+      return;}
+    if(!node.closest('.yrm-b11-select'))closeSelect();
+  },true);
+  // Provider templates may change other selects programmatically (without
+  // firing their change event). Refresh their labels after that handler runs.
+  document.addEventListener('change',event=>{
+    if(event.target instanceof Element && event.target.id==='yrm-ddns-provider-preset'){
+      queueMicrotask(()=>document.querySelectorAll('.yrm-b11-select').forEach(w=>w.b11Sync?.()));
+    }
+  });
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape' && openedSelect){closeSelect();event.preventDefault();return;}
+    const node=event.target instanceof Element?event.target:null;
+    const wrapper=node?.closest('.yrm-b11-select');if(!wrapper)return;
+    if(!['ArrowDown','ArrowUp','Home','End','Enter',' '].includes(event.key))return;
+    const select=wrapper.querySelector('select');if(!select||select.disabled)return;
+    event.preventDefault();
+    const options=[...select.options].filter(o=>!o.disabled);
+    if(!options.length)return;
+    if(event.key==='Enter'||event.key===' '){if(openedSelect===wrapper)closeSelect();else wrapper.querySelector('.yrm-b11-select-toggle')?.click();return;}
+    let i=options.findIndex(o=>o.value===select.value);
+    i=event.key==='Home'?0:event.key==='End'?options.length-1:
+      (i+(event.key==='ArrowDown'?1:-1)+options.length)%options.length;
+    select.value=options[i].value;select.dispatchEvent(new Event('change',{bubbles:true}));
+  },true);
+  const selectObserver=new MutationObserver(initializeSelects);
+  selectObserver.observe(document.body,{childList:true,subtree:true});
+  initializeSelects();
 })();

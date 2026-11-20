@@ -34,11 +34,17 @@
         @foreach (var pinnedPath in Model.QuickAccess)
         {
           var relative = pinnedPath.TrimStart('/');
-          <div class="yrm-b10-quick-item">
+          <div class="yrm-b10-quick-item yrm-b11-quick-item">
             <a class="fm-location-link @(Model.Path == relative ? "is-active" : "")" asp-page="/Files" asp-route-path="@relative" title="@pinnedPath">
               <svg class="ui-icon"><use href="#i-folder"/></svg><span>@System.IO.Path.GetFileName(pinnedPath)</span>
             </a>
-            <form method="post" asp-page-handler="UnpinFolder" asp-route-path="@currentRoute"><input type="hidden" name="folderPath" value="@pinnedPath"/><button type="submit" class="yrm-b10-unpin" title="Unpin shortcut" aria-label="Unpin @System.IO.Path.GetFileName(pinnedPath)">×</button></form>
+            <details class="explorer-item-menu yrm-b11-quick-menu">
+              <summary aria-label="Quick Access actions for @System.IO.Path.GetFileName(pinnedPath)" title="More actions">⋯</summary>
+              <div class="explorer-actions-popover">
+                <a asp-page="/Files" asp-route-path="@relative">Open</a>
+                <form method="post" asp-page-handler="UnpinFolder" asp-route-path="@currentRoute"><input type="hidden" name="folderPath" value="@pinnedPath"/><button type="submit">Unpin from Quick Access</button></form>
+              </div>
+            </details>
           </div>
         }
         @if (Model.QuickAccess.Count == 0) { <small class="muted yrm-b10-quick-empty">Pin folders from More.</small> }

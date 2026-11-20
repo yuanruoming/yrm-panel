@@ -14,6 +14,7 @@ jobs:
           python3 -m py_compile scripts/yrm-panel-samba.py scripts/yrm-panel-mount.py
           python3 -m unittest discover -s tests -p 'test_beta*.py'
           python3 -m unittest discover -s tests -p 'test_release.py'
+          python3 -m unittest discover -s tests -p 'test_ui_contracts.py'
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'

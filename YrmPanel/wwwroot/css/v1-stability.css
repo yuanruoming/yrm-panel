@@ -265,12 +265,6 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b10-update-details{margin-top:8px;border-top:1px solid rgba(156,191,217,.17);padding-top:8px;}
 .yrm-b10-update-details>summary{font-size:12px;cursor:pointer;color:#acd1ec;}
 .yrm-b10-update-details .yrm-b9-update-stages{margin-top:9px;}
-.yrm-b10-ddns-group-footer{justify-content:flex-end!important;gap:14px;}
-.yrm-ddns-group{position:relative;}
-.yrm-ddns-group .yrm-ddns-group-head{padding-right:120px;}
-.yrm-b10-ddns-group-footer>form{position:absolute;right:12px;top:13px;}
-.yrm-b10-ddns-group-footer>small{margin-right:auto;}
-.yrm-b10-ddns-group-footer .button{min-width:98px;}
 .yrm-b9-secret-toggle{display:inline-flex;align-items:center;justify-content:center;position:absolute;right:7px;top:50%;transform:translateY(-50%);height:26px;width:50px;margin:0;border:0;background:transparent;color:#bed9ef;}
 .yrm-b10-secret-field{position:relative;display:block;}
 .yrm-b10-secret-field input[name=token]{padding-right:65px!important;}
@@ -285,28 +279,12 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b10-quick-item>.fm-location-link{flex:1;min-width:0;overflow:hidden;}
 .yrm-b10-quick-item>.fm-location-link span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .yrm-b10-quick-item form{margin:0;}
-.yrm-b10-unpin{border:0;background:transparent;color:#aabbd0;font-size:17px;cursor:pointer;padding:3px 6px;border-radius:5px;}
-.yrm-b10-unpin:hover{background:#405066;color:white;}
 .yrm-b10-quick-empty{padding:6px 11px;display:block;font-size:11px;}
 .yrm-b10-library-row{min-height:62px;}
 .yrm-b10-library-row .fm-library-meta{flex:1;}
 @media(max-width:850px){.yrm-b10-nav-divider{margin:5px 9px;border-left:1px solid rgba(161,186,206,.16);border-top:0;}.yrm-b10-quick-links{display:flex;gap:5px;max-height:none;}.yrm-b10-quick-label{min-width:100px;}}
 
-/* BETA10: compact fnOS-style DDNS rows and unified family editor. */
-.yrm-ddns-group{padding:14px 16px!important;border:1px solid rgba(155,180,207,.17);border-radius:11px;margin-top:12px;}
-.yrm-ddns-group-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 0 11px!important;border-bottom:1px solid rgba(155,180,207,.14);}
-.yrm-ddns-group .yrm-ddns-group-head{padding-right:0!important;}
-.yrm-b10-ddns-head-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
-.yrm-b10-ddns-head-actions form{margin:0;}
-.yrm-b10-ddns-head-actions .button{min-height:31px;padding:6px 11px;font-size:11px;}
-.yrm-b10-ddns-head-actions [data-b10-state=failed],.yrm-b10-ddns-head-actions [data-b10-state=unavailable]{background:rgba(198,68,81,.12)!important;border-color:#9a505b!important;color:#ffc0c6!important;}
-.yrm-b10-ddns-head-actions [data-b10-state=normal]{background:rgba(54,150,114,.12)!important;border-color:#39745c!important;color:#9de4c2!important;}
-.yrm-ddns-records{display:grid;gap:0!important;}
-.yrm-ddns-record{display:flex;align-items:center;gap:16px;padding:10px 1px!important;border-bottom:1px solid rgba(155,180,207,.08);}
-.yrm-ddns-record:last-child{border-bottom:0;}
-.yrm-ddns-record strong{font-size:12px!important;color:#e7eef8;}
-.yrm-ddns-record [data-b9-ddns-ip]{margin-top:3px;font-size:12px;}
-.yrm-b10-ddns-schedule{margin-top:7px;font-size:11px;}
+/* BETA11 uses a real six-column DDNS table; obsolete group-card rules removed. */
 .yrm-b10-ddns-dialog{width:min(570px,calc(100vw - 24px));max-width:570px;max-height:calc(100dvh - 34px);overflow:auto;padding:20px 22px;}
 .yrm-b10-ddns-dialog form{display:grid;gap:13px;padding:15px 0 0;}
 .yrm-b10-ddns-dialog form>label,.yrm-b10-ddns-dialog .yrm-b10-ddns-family>label{display:grid;gap:6px;position:relative;}
@@ -321,7 +299,7 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b9-ddns-dialog .yrm-b10-secret-field,.yrm-b10-ddns-dialog .yrm-b10-secret-field{display:block;width:100%;position:relative;}
 .yrm-b9-ddns-dialog .yrm-b10-secret-field input,.yrm-b10-ddns-dialog .yrm-b10-secret-field input{width:100%;padding-right:62px!important;}
 .yrm-b9-ddns-dialog .yrm-b10-secret-field .yrm-b9-secret-toggle,.yrm-b10-ddns-dialog .yrm-b10-secret-field .yrm-b9-secret-toggle{position:absolute!important;top:50%!important;right:6px!important;transform:translateY(-50%)!important;margin:0!important;background:transparent!important;border:0!important;width:52px!important;height:30px!important;}
-@media(max-width:700px){.yrm-b10-ddns-head-actions{gap:5px}.yrm-b10-add-families{grid-template-columns:1fr}.yrm-ddns-group-head{align-items:flex-start;flex-wrap:wrap;}}
+@media(max-width:700px){.yrm-b10-add-families{grid-template-columns:1fr;}}
 
 /* Files table must retain table-cell layout; a flex <td> broke column alignment. */
 .fm-explorer .explorer-table{table-layout:fixed;min-width:650px;width:100%;border-collapse:collapse;}
@@ -351,3 +329,128 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b10-provider-options[hidden]{display:none!important;}
 .yrm-b10-provider-options button{width:100%;text-align:left;border:0;background:transparent;color:#e4eef8;font:inherit;padding:10px 12px;border-radius:6px;cursor:pointer;}
 .yrm-b10-provider-options button:hover,.yrm-b10-provider-options button[aria-selected=true]{background:#344c67;}
+
+/* BETA11 desktop interaction language: dense tables, coherent actions, switches and menus. */
+.yrm-b11-table-wrap{width:100%;overflow-x:auto;scrollbar-width:thin;scrollbar-color:#526880 transparent;border:1px solid rgba(151,183,213,.20);border-radius:10px;background:rgba(14,22,33,.23);}
+.yrm-b11-table{width:100%;border-collapse:collapse;text-align:left;font-size:12px;}
+.yrm-b11-table thead{background:rgba(98,131,165,.09);}
+.yrm-b11-table th{padding:12px 13px;color:#9fb3c9;font-size:10px;letter-spacing:.055em;text-transform:uppercase;font-weight:700;white-space:nowrap;border-bottom:1px solid rgba(151,183,213,.19);}
+.yrm-b11-table td{padding:14px 13px;border-bottom:1px solid rgba(151,183,213,.11);vertical-align:middle;}
+.yrm-b11-table tbody tr:last-child td{border-bottom:0;}
+.yrm-b11-table tbody tr:hover{background:rgba(117,172,217,.075);}
+.yrm-b11-actions-head{text-align:right!important;}
+.yrm-b11-list-heading{margin-bottom:16px;}
+.yrm-b11-list-heading h3{margin:0;font-size:15px;}
+.yrm-b11-empty{padding:17px;color:#a4b8cb;font-size:12px;}
+/* One provider/domain is exactly one row, never nested cards. */
+.yrm-b11-ddns-table{min-width:880px;}
+.yrm-b11-ddns-table th:nth-child(1){width:13%;}
+.yrm-b11-ddns-table th:nth-child(2){width:23%;}
+.yrm-b11-ddns-table th:nth-child(3),.yrm-b11-ddns-table th:nth-child(4){width:12%;}
+.yrm-b11-ddns-table th:nth-child(5){width:16%;}
+.yrm-b11-ddns-table th:nth-child(6){width:24%;}
+.yrm-b11-provider-cell strong{display:block;font-size:13px;color:#e8f3fc;}
+.yrm-b11-domain{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;color:#d5e5f3;}
+.yrm-b11-ip-result{display:grid;gap:4px;min-width:0;}
+.yrm-b11-ip-result [data-b9-ddns-ip]{font-size:10px;color:#93a8bd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;}
+.yrm-b11-ip-state{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:650;white-space:nowrap;}
+.yrm-b11-ip-state::before{content:'';width:6px;height:6px;flex:none;border-radius:50%;background:#8192a7;}
+.yrm-b11-ip-state.is-normal{color:#8cdec0;}
+.yrm-b11-ip-state.is-normal::before{background:#56cb9f;}
+.yrm-b11-ip-state.is-failed{color:#ffacb4;}
+.yrm-b11-ip-state.is-failed::before{background:#e47485;}
+.yrm-b11-ip-state.is-off{color:#9baabe;}
+.yrm-b11-ip-state.is-off::before{background:#67798a;}
+.yrm-b11-ip-state.is-unknown{color:#bacde2;}
+.yrm-b11-last-update{color:#b8c9dc;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.yrm-b11-action-row{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:max-content;}
+.yrm-b11-action-row form{margin:0;flex:none;}
+.yrm-b11-action-row .button{padding:7px 11px;min-height:31px;font-size:11px;white-space:nowrap;}
+.yrm-b11-action-row .yrm-b11-remove{color:#ffabb3;}
+.yrm-b11-action-row .yrm-b11-remove:hover{background:rgba(184,60,77,.15);border-color:#a3525e;}
+.yrm-b11-provider-cell .yrm-b9-ddns-feedback{display:block;margin-top:5px;max-width:200px;line-height:1.35;}
+/* Actual switches: input is still a real semantic form control. */
+.yrm-ddns-editor label.yrm-b11-toggle-line,
+.yrm-b9-ddns-dialog label.yrm-b11-toggle-line,
+.yrm-b10-ddns-dialog label.yrm-b11-toggle-line{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:14px!important;min-height:40px;margin:0;position:relative;color:#dae7f4;font-size:12px;cursor:pointer;}
+.yrm-b11-toggle-line>span:first-child{flex:1;min-width:0;line-height:1.4;}
+.yrm-ddns-editor label.yrm-b11-toggle-line input[type=checkbox],
+.yrm-b9-ddns-dialog label.yrm-b11-toggle-line input[type=checkbox]{position:absolute!important;right:17px!important;top:50%!important;width:1px!important;height:1px!important;min-height:0!important;padding:0!important;opacity:0!important;pointer-events:none!important;}
+.yrm-b11-switch{display:block;position:relative;flex:0 0 36px;width:36px;height:21px;border:1px solid #61758b;border-radius:18px;background:#314052;transition:background .12s ease;}
+.yrm-b11-switch::before{content:'';position:absolute;left:2px;top:2px;width:15px;height:15px;border-radius:50%;background:#ccd7e1;transition:transform .12s ease;}
+.yrm-b11-toggle-line input:checked+.yrm-b11-switch{background:#4b9bdc;border-color:#7db9e8;}
+.yrm-b11-toggle-line input:checked+.yrm-b11-switch::before{transform:translateX(15px);background:white;}
+.yrm-b11-toggle-line input:focus-visible+.yrm-b11-switch{outline:2px solid #9dccff;outline-offset:3px;}
+.yrm-b11-toggle-line input:disabled+.yrm-b11-switch{opacity:.38;cursor:not-allowed;}
+.yrm-b10-ddns-family input[type=checkbox]{width:1px!important;}
+.yrm-b10-ddns-families{background:rgba(15,25,36,.23);padding:9px 14px;}
+.yrm-b10-ddns-family{gap:10px;}
+.yrm-b10-ddns-family>label:not(.yrm-b11-toggle-line){margin-left:0;}
+/* The same dropdown widget is used by DDNS and Firewall. Native select
+   remains in the DOM for form submission and an accessible JS-off fallback. */
+.yrm-b11-select{position:relative;display:block;width:100%;min-width:0;}
+.yrm-b11-select>select[data-b11-enhanced]{position:absolute!important;opacity:0!important;width:1px!important;height:1px!important;min-height:0!important;pointer-events:none!important;z-index:-1;}
+.yrm-b11-select-toggle{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;border:1px solid #455872;border-radius:8px;background:#142132;color:#e3eefb;padding:9px 11px;min-height:37px;cursor:pointer;font:inherit;font-size:12px;}
+.yrm-b11-select-toggle:hover{border-color:#7697b5;background:#1b3045;}
+.yrm-b11-select-toggle:focus-visible{outline:2px solid #7bb4e7;outline-offset:2px;}
+.yrm-b11-select-arrow{font-size:19px;color:#a4bfd9;line-height:.7;flex:none;}
+.yrm-b11-select-list{display:none;position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:800;background:#1d2b3c;border:1px solid #506783;border-radius:8px;padding:5px;max-height:220px;overflow:auto;box-shadow:0 16px 30px #0009;}
+.yrm-b11-select.is-open>.yrm-b11-select-list{display:grid;gap:2px;}
+.yrm-b11-select-option{width:100%;text-align:left;border:0;border-radius:5px;background:transparent;color:#d9e8f6;font:inherit;font-size:12px;padding:9px 10px;cursor:pointer;}
+.yrm-b11-select-option:hover,.yrm-b11-select-option:focus-visible,.yrm-b11-select-option[aria-selected=true]{background:#344b65;color:#fff;}
+/* One firewall rule per list row; editing is an independent modal. */
+.yrm-b11-fw-top{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;margin:1px 0 16px;}
+.yrm-b11-fw-top>div{display:grid;gap:5px;}
+.yrm-b11-fw-top strong{font-size:13px;}
+.yrm-b11-fw-top small{font-size:11px;color:#9baec3;}
+.v1-settings-panel .yrm-b11-fw-status{display:flex;align-items:center;gap:12px;color:#b6c8dd;font-size:12px;}
+.yrm-b11-fw-status .yrm-b11-select{width:145px;flex:none;}
+.yrm-b11-fw-status .yrm-b11-select>select{width:1px;}
+.yrm-b11-fw-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:18px 0 10px;}
+.yrm-b11-fw-toolbar strong{font-size:13px;}
+.yrm-b11-fw-toolbar .button{padding:8px 11px;font-size:11px;}
+.yrm-b11-fw-table{min-width:670px;}
+.yrm-b11-fw-table th:nth-child(1){width:16%;}
+.yrm-b11-fw-table th:nth-child(2){width:14%;}
+.yrm-b11-fw-table th:nth-child(3){width:18%;}
+.yrm-b11-fw-table th:nth-child(4){width:13%;}
+.yrm-b11-fw-table th:nth-child(5){width:21%;}
+.yrm-b11-fw-table th:nth-child(6){width:18%;}
+.yrm-b11-fw-action.is-deny{color:#ffadb7;}
+.yrm-b11-fw-action.is-allow{color:#a5d8bf;}
+.yrm-b11-fw-row-actions{text-align:right;white-space:nowrap;}
+.yrm-b11-icon-action{border:0;background:transparent;border-radius:6px;padding:7px 8px;color:#b8d9f2;font:inherit;font-size:11px;cursor:pointer;}
+.yrm-b11-icon-action:hover{background:#32445b;color:white;}
+.yrm-b11-icon-action.is-delete{color:#ffb0b8;}
+.yrm-b11-icon-action.is-delete:hover{background:#6b303c;}
+.yrm-b11-fw-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:17px 0 3px;}
+.yrm-b11-fw-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;padding-top:16px;}
+.yrm-b11-fw-fields label{display:grid;gap:6px;min-width:0;font-size:12px;color:#aebed0;}
+.yrm-b11-fw-fields .yrm-b11-fw-source{grid-column:1/-1;}
+.yrm-b11-fw-dialog{width:min(510px,calc(100vw - 30px));max-width:510px;padding:21px 23px;overflow:visible;}
+.yrm-b11-fw-dialog::backdrop{background:#000b;}
+.yrm-b11-fw-dialog input{min-width:0;width:100%;background:#142132;border:1px solid #455872;border-radius:8px;color:#eaf3fc;padding:9px 11px;min-height:37px;font:inherit;}
+.yrm-b11-fw-dialog .yrm-inline-error{margin:10px 0 0;}
+.yrm-b11-fw-dialog .yrm-inline-error[hidden]{display:none!important;}
+.yrm-b11-fw-dialog .panel-modal-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:19px;}
+/* Files context menu (right-click and More are the same action). */
+.fm-system-nav{display:grid;gap:6px;}
+.fm-system-nav>summary{margin-bottom:3px;}
+.fm-system-nav>.fm-location-link{margin:2px 4px 2px 16px!important;min-height:35px;box-sizing:border-box;}
+.fm-system-nav>.fm-location-link:hover{background:rgba(91,141,185,.20);}
+.fm-system-nav>.fm-location-link.is-active{background:rgba(97,153,209,.29);}
+.yrm-b10-quick-links{display:grid;gap:5px;}
+.yrm-b11-quick-item{display:flex;align-items:center;gap:8px;min-width:0;min-height:36px;border-radius:8px;}
+.yrm-b11-quick-item>.fm-location-link{flex:1;min-width:0;}
+.yrm-b11-quick-menu{flex:none;margin-right:3px;}
+.yrm-b11-quick-menu>summary{display:flex;align-items:center;justify-content:center;width:27px;height:29px;border-radius:7px;font-size:19px;color:#a6bed3;background:transparent;border:1px solid transparent;}
+.yrm-b11-quick-menu>summary:hover,.yrm-b11-quick-menu[open]>summary{color:#fff;background:#35465b;border-color:#526984;}
+.yrm-b11-quick-menu .explorer-actions-popover{width:212px;}
+.fm-locations .fm-location-link{min-height:35px;box-sizing:border-box;}
+.fm-explorer .explorer-table td.explorer-menu-cell{padding-left:8px!important;padding-right:9px!important;}
+.fm-explorer .explorer-table .explorer-item-menu>summary{min-width:31px;min-height:31px;}
+body>.explorer-actions-popover{width:212px;min-width:212px;padding:7px;border-radius:10px;background:#1c2a3b;border-color:#526781;}
+body>.explorer-actions-popover button,body>.explorer-actions-popover a{font-size:12px;line-height:1.4;padding:10px 11px;border-radius:6px;}
+body>.explorer-actions-popover button+button{margin-top:2px;}
+@media(max-width:850px){.yrm-b10-quick-links{display:flex;flex-wrap:wrap;}.yrm-b11-quick-item{max-width:220px;}.yrm-b11-fw-fields{grid-template-columns:1fr;}}
+@media(max-width:600px){.yrm-b11-fw-top,.yrm-b11-fw-toolbar{align-items:flex-start;}.yrm-b11-list-heading{gap:12px;}.yrm-b11-fw-dialog{overflow:auto;max-height:calc(100dvh - 25px);}}

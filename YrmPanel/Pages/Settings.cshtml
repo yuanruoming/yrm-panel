@@ -216,50 +216,67 @@
     else if (activeTab == "ddns")
     {
       <div class="settings-section-heading"><h2>Dynamic DNS</h2><p>Automatically keep your hostnames in sync.</p></div>
-      <section class="v1-settings-panel yrm-ddns-list">
-        <div class="settings-row-top"><h3>DDNS Profiles</h3><div class="yrm-b9-ddns-heading-actions"><span class="muted">@(Model.DdnsProfiles.Select(x => x.Provider + "|" + x.Hostname.ToLowerInvariant()).Distinct().Count()) configured</span><button class="button button-primary" type="button" data-b9-ddns-add>+ Add Provider</button></div></div>
-        @foreach (var group in Model.DdnsProfiles.GroupBy(p => new { Provider = p.Provider.ToLowerInvariant(), Hostname = p.Hostname.ToLowerInvariant() }))
-        {
-          var active = group.Any(p => p.Enabled && p.IpSource != "disabled");
-          var failed = group.Any(p => p.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase));
-          var warning = group.Any(p => p.VerifyDns && (p.Verification == "DNS lookup unavailable" || p.Verification.StartsWith("Waiting", StringComparison.OrdinalIgnoreCase)));
-          var groupStatus = !active ? "Disabled" : failed ? "Failed" : warning ? "DNS unverified" : group.Any(p => p.LastStatus is "Updated" or "Unchanged" or "IP unchanged") ? "Normal" : "Not checked";
-          <div class="yrm-ddns-group" data-b9-ddns-provider="@group.Key.Provider" data-b9-ddns-hostname="@group.Key.Hostname">
-            <div class="yrm-ddns-group-head">
-              <div><strong>@(char.ToUpperInvariant(group.Key.Provider[0]) + group.Key.Provider.Substring(1))</strong><div class="muted">@group.Key.Hostname</div></div>
-              <div class="yrm-b10-ddns-head-actions">
-                <span class="tag" data-b9-ddns-status data-b10-state="@groupStatus.ToLowerInvariant()">@groupStatus</span>
-                <form method="post" asp-page-handler="DdnsGroupCheck" asp-route-tab="ddns" data-b9-ddns-check>
-                  <input type="hidden" name="hostname" value="@group.Key.Hostname"/>
-                  <input type="hidden" name="provider" value="@group.Key.Provider"/>
-                  <button class="button button-primary" type="submit">Update Now</button>
-                </form>
-                <button class="button button-secondary" type="button" data-yrm-ddns-edit="yrm-b10-ddns-edit-@group.First().Id">Edit</button>
-                <form method="post" asp-page-handler="DdnsDeleteGroup" asp-route-tab="ddns" data-confirm="Remove this DDNS provider configuration? The DNS records remain unchanged.">
-                  <input type="hidden" name="hostname" value="@group.Key.Hostname"/>
-                  <input type="hidden" name="provider" value="@group.Key.Provider"/>
-                  <button class="button button-secondary" type="submit" aria-label="Remove provider">Remove</button>
-                </form>
-              </div>
-            </div>
-            <div class="yrm-ddns-records">
-              @foreach (var profile in group.OrderBy(p => p.RecordType == "A" ? 0 : 1))
-              {
-                <div class="yrm-ddns-record" data-b9-ddns-record="@profile.Id">
-                  <div>
-                    <strong>@(profile.RecordType == "A" ? "IPv4 · A" : "IPv6 · AAAA")</strong>
-                    <div class="muted" data-b9-ddns-ip>@(profile.IpSource == "disabled" ? "Disabled" : profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</div>
-                    <small class="muted" data-b9-ddns-checked>@(profile.LastRun is { } last ? "Checked " + last.ToLocalTime().ToString("dd MMM yyyy HH:mm") : "Not checked yet")</small>
-                    <small class="yrm-inline-error" data-b9-ddns-error hidden="@(!profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase))">@(profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase) ? profile.LastStatus : "")</small>
+      <section class="v1-settings-panel yrm-b11-ddns-panel">
+        <div class="settings-row-top yrm-b11-list-heading">
+          <h3>DDNS Profiles</h3>
+          <button class="button button-primary" type="button" data-b9-ddns-add>+ Add Provider</button>
+        </div>
+        <div class="yrm-b11-table-wrap">
+          <table class="yrm-b11-table yrm-b11-ddns-table">
+            <thead><tr><th>Provider</th><th>Domain</th><th>IPv4</th><th>IPv6</th><th>Last Update</th><th class="yrm-b11-actions-head">Actions</th></tr></thead>
+            <tbody>
+            @foreach (var group in Model.DdnsProfiles.GroupBy(p => new { Provider = p.Provider.ToLowerInvariant(), Hostname = p.Hostname.ToLowerInvariant() }))
+            {
+              var v4 = group.FirstOrDefault(p => p.RecordType == "A");
+              var v6 = group.FirstOrDefault(p => p.RecordType == "AAAA");
+              var lastRun = group.OrderByDescending(p => p.LastRun).FirstOrDefault()?.LastRun;
+              var failed = group.Any(p => p.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase));
+              var active = group.Any(p => p.Enabled && p.IpSource != "disabled");
+              var groupStatus = !active ? "Disabled" : failed ? "Failed" : group.Any(p => p.LastStatus is "Updated" or "Unchanged" or "IP unchanged") ? "Normal" : "Not checked";
+              <tr class="yrm-b11-ddns-row" data-b9-ddns-provider="@group.Key.Provider" data-b9-ddns-hostname="@group.Key.Hostname">
+                <td class="yrm-b11-provider-cell"><strong>@(char.ToUpperInvariant(group.Key.Provider[0]) + group.Key.Provider.Substring(1))</strong><span data-b9-ddns-status data-b10-state="@groupStatus.ToLowerInvariant()" hidden>@groupStatus</span></td>
+                <td class="yrm-b11-domain" title="@group.Key.Hostname">@group.Key.Hostname</td>
+                @foreach (var profile in new[] { v4, v6 })
+                {
+                  <td class="yrm-b11-ip-cell">
+                    @if (profile is null) { <span class="yrm-b11-ip-state is-off">—</span> }
+                    else
+                    {
+                      var isOff = !profile.Enabled || profile.IpSource == "disabled";
+                      var isFailed = profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase);
+                      var isOk = profile.LastStatus is "Updated" or "Unchanged" or "IP unchanged";
+                      var state = isOff ? "Off" : isFailed ? "Failed" : isOk ? "Normal" : "Not checked";
+                      <div data-b9-ddns-record="@profile.Id" title="@profile.LastStatus" class="yrm-b11-ip-result">
+                        <span class="yrm-b11-ip-state @(isFailed ? "is-failed" : isOff ? "is-off" : isOk ? "is-normal" : "is-unknown")" data-b11-family-state>@state</span>
+                        <small data-b9-ddns-ip title="Detected IP">@(isOff ? "Disabled" : profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</small>
+                        <span data-b9-ddns-checked hidden>@(profile.LastRun is { } checkedAt ? checkedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm") : "Not checked yet")</span>
+                        <span data-b9-ddns-error hidden="@(!isFailed)">@(isFailed ? profile.LastStatus : "")</span>
+                      </div>
+                    }
+                  </td>
+                }
+                <td class="yrm-b11-last-update" data-b11-last-update>@(lastRun is { } updated ? updated.ToLocalTime().ToString("dd MMM yyyy HH:mm") : "Never")</td>
+                <td class="yrm-b11-ddns-actions">
+                  <div class="yrm-b11-action-row">
+                    <form method="post" asp-page-handler="DdnsGroupCheck" asp-route-tab="ddns" data-b9-ddns-check>
+                      <input type="hidden" name="hostname" value="@group.Key.Hostname" />
+                      <input type="hidden" name="provider" value="@group.Key.Provider" />
+                      <button type="submit" class="button button-secondary">Update Now</button>
+                    </form>
+                    <button type="button" class="button button-secondary" data-yrm-ddns-edit="yrm-b10-ddns-edit-@group.First().Id">Edit</button>
+                    <form method="post" asp-page-handler="DdnsDeleteGroup" asp-route-tab="ddns" data-confirm="Remove this DDNS configuration? Existing DNS records will not be deleted.">
+                      <input type="hidden" name="hostname" value="@group.Key.Hostname" />
+                      <input type="hidden" name="provider" value="@group.Key.Provider" />
+                      <button type="submit" class="button button-secondary yrm-b11-remove">Delete</button>
+                    </form>
                   </div>
-
-                </div>
-              }
-            </div>
-            <div class="yrm-b10-ddns-schedule muted">Interval · @(group.Min(p => p.IntervalMinutes)) minutes</div>
-          </div>
-        }
-        @if (Model.DdnsProfiles.Count == 0) { <p class="muted">No DDNS profiles yet.</p> }
+                </td>
+              </tr>
+            }
+            </tbody>
+          </table>
+        </div>
+        @if (Model.DdnsProfiles.Count == 0) { <p class="muted yrm-b11-empty">No DDNS providers configured.</p> }
       </section>
       @foreach (var group in Model.DdnsProfiles.GroupBy(p => new { Provider = p.Provider.ToLowerInvariant(), Hostname = p.Hostname.ToLowerInvariant() }))
       {
@@ -271,7 +288,7 @@
           <form method="post" asp-page-handler="DdnsEditGroup" asp-route-tab="ddns" autocomplete="off">
             <input type="hidden" name="provider" value="@primary.Provider" />
             <input type="hidden" name="originalHostname" value="@primary.Hostname" />
-            <label>Profile name<input name="name" required maxlength="50" value="@primary.Name" autocomplete="off" /></label>
+            <input type="hidden" name="name" value="@primary.Name" />
             <label>Hostname<input name="hostname" required value="@primary.Hostname" autocomplete="off" /></label>
             @if (primary.Provider == "dynu")
             { <label>Dynu username<input name="username" value="@primary.Username" required autocomplete="off" /></label> }
@@ -286,7 +303,7 @@
                 var suffix = family.Type == "A" ? "4" : "6";
                 var selected = family.Item is not null && family.Item.IpSource != "disabled";
                 <div class="yrm-b10-ddns-family" data-b10-family="@suffix">
-                  <label class="v1-check"><input type="checkbox" name="@(suffix == "4" ? "ipv4Enabled" : "ipv6Enabled")" value="true" checked="@selected" disabled="@(primary.Provider == "custom" && family.Item is null)"/> @family.Label</label>
+                  <label class="v1-check yrm-b11-toggle-line"><span>@family.Label</span><input type="checkbox" name="@(suffix == "4" ? "ipv4Enabled" : "ipv6Enabled")" value="true" checked="@selected" disabled="@(primary.Provider == "custom" && family.Item is null)"/><span class="yrm-b11-switch" aria-hidden="true"></span></label>
                   <label>Address source<select name="@("ipSource" + suffix)" data-b10-source-select>
                     <option value="public" selected="@(family.Item?.IpSource is null or "disabled" or "public")">Automatic public IP</option>
                     <option value="interface" selected="@(family.Item?.IpSource == "interface")">Network interface</option>
@@ -325,7 +342,7 @@
               </details>
             }
             <label>Update interval (minutes)<input type="number" name="intervalMinutes" min="5" max="1440" required value="@primary.IntervalMinutes" /></label>
-            <label class="v1-check"><input name="enabled" type="checkbox" value="true" checked="@primary.Enabled"/> Enable automatic updates</label>
+            <label class="v1-check yrm-b11-toggle-line"><span>Enable automatic updates</span><input name="enabled" type="checkbox" value="true" checked="@primary.Enabled"/><span class="yrm-b11-switch" aria-hidden="true"></span></label>
             <div class="panel-modal-actions"><button class="button button-secondary" type="button" data-yrm-ddns-edit-close>Cancel</button><button class="button button-primary" type="submit">Save Changes</button></div>
           </form>
         </dialog>
@@ -345,13 +362,11 @@
               </div>
             </label>
             <p id="yrm-ddns-provider-note" class="muted">Dynu: enter your hostname, username and IP Update Password.</p>
-            <div class="v1-grid">
-              <label>Profile name<input name="name" required maxlength="50" placeholder="Dynu IPv4" /></label>
-              <label>Hostname<input name="hostname" required placeholder="nas.example.com" /></label>
-            </div>
+            <input type="hidden" name="name" value="Dynu" />
+            <label>Hostname<input name="hostname" required placeholder="nas.example.com" /></label>
             <div class="yrm-b10-add-families">
-              <label class="v1-check"><input type="checkbox" name="ipv4Enabled" value="true" checked /> IPv4 · A Record</label>
-              <label class="v1-check"><input type="checkbox" name="ipv6Enabled" value="true"/> IPv6 · AAAA Record</label>
+              <label class="v1-check yrm-b11-toggle-line"><span>IPv4 · A Record</span><input type="checkbox" name="ipv4Enabled" value="true" checked /><span class="yrm-b11-switch" aria-hidden="true"></span></label>
+              <label class="v1-check yrm-b11-toggle-line"><span>IPv6 · AAAA Record</span><input type="checkbox" name="ipv6Enabled" value="true"/><span class="yrm-b11-switch" aria-hidden="true"></span></label>
             </div>
             <small class="muted">Choose one or both records. Dynu and Cloudflare use the same provider credentials for both.</small>
             <div class="v1-grid" data-ddns-technical>
@@ -439,19 +454,38 @@
             </div>
           }
           <form id="v1-firewall-form" method="post" asp-page-handler="Firewall" asp-route-tab="security" asp-route-section="firewall" data-requires-admin="Save &amp; Apply firewall rule changes">
-            <div class="yrm-fw-state">
-              <div><strong>Firewall status</strong><small>Host firewall (UFW)</small></div>
-              <select name="firewallEnabled" aria-label="Firewall status">
+            <div class="yrm-b11-fw-top">
+              <div><strong>Host Firewall</strong><small>Ubuntu UFW · Rules are applied only when you save.</small></div>
+              <label class="yrm-b11-fw-status">Firewall<select name="firewallEnabled" aria-label="Firewall status">
                 <option value="true" selected="@Model.Firewall.Active">Active</option>
                 <option value="false" selected="@(!Model.Firewall.Active)">Inactive</option>
-              </select>
+              </select></label>
             </div>
-            <div class="yrm-fw-header"><span>Scope</span><span>Action</span><span>Ports</span><span>Protocol</span><span>Source IP / CIDR</span><span></span></div>
-            <div id="v1-firewall-rules" data-initial="@(System.Text.Json.JsonSerializer.Serialize(Model.Firewall.Rules.Select(x=>new {scope=x.Scope,action=x.Action,port=x.Port,protocol=x.Protocol,source=x.Source})))"></div>
+            <div class="yrm-b11-fw-toolbar">
+              <strong>Firewall Rules</strong>
+              <button type="button" class="button button-secondary" data-b11-fw-add>+ Add Rule</button>
+            </div>
+            <div class="yrm-b11-table-wrap"><table class="yrm-b11-table yrm-b11-fw-table">
+              <thead><tr><th>Scope</th><th>Action</th><th>Ports</th><th>Protocol</th><th>Source</th><th class="yrm-b11-actions-head">Actions</th></tr></thead>
+              <tbody id="yrm-b11-fw-body"><tr><td colspan="6" class="muted">No rules configured.</td></tr></tbody>
+            </table></div>
+            <div id="v1-firewall-rules" hidden data-initial="@(System.Text.Json.JsonSerializer.Serialize(Model.Firewall.Rules.Select(x=>new {scope=x.Scope,action=x.Action,port=x.Port,protocol=x.Protocol,source=x.Source})))"></div>
             <input type="hidden" id="v1-fw-json" name="rulesJson" value="[]" />
-            <div class="v1-row"><button class="button button-secondary" data-fw-add type="button">+ Add Rule</button><span id="v1-fw-dirty" class="muted"></span></div>
-            <div class="v1-row"><button class="button button-primary" type="submit">Save &amp; Apply</button></div>
+            <button type="button" hidden data-fw-add aria-hidden="true" tabindex="-1">Add draft rule</button>
+            <div class="yrm-b11-fw-footer"><span id="v1-fw-dirty" class="muted"></span><button class="button button-primary" type="submit">Save &amp; Apply</button></div>
           </form>
+          <dialog id="yrm-b11-fw-dialog" class="yrm-ddns-editor yrm-b11-fw-dialog" aria-labelledby="yrm-b11-fw-title">
+            <div class="panel-modal-head"><strong id="yrm-b11-fw-title">Firewall Rule</strong><button type="button" data-b11-fw-cancel aria-label="Close">×</button></div>
+            <div class="yrm-b11-fw-fields">
+              <label>Scope<select data-b11-fw-field="scope"><option value="host">Host (UFW)</option><option value="docker">Docker</option></select></label>
+              <label>Action<select data-b11-fw-field="action"><option value="allow">Allow</option><option value="deny">Deny</option><option value="lan">LAN only</option></select></label>
+              <label>Ports<input data-b11-fw-field="port" placeholder="80,443 or 20-442" inputmode="text" /></label>
+              <label>Protocol<select data-b11-fw-field="protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
+              <label class="yrm-b11-fw-source">Source IP / CIDR<input data-b11-fw-field="source" value="any" placeholder="any or 192.168.1.0/24" /></label>
+            </div>
+            <p class="yrm-inline-error" id="yrm-b11-fw-error" hidden></p>
+            <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-b11-fw-cancel>Cancel</button><button type="button" class="button button-primary" data-b11-fw-save>Save Rule</button></div>
+          </dialog>
           <details class="yrm-firewall-advanced"><summary>Advanced details</summary>
             <pre class="v1-fw-status">@Model.Firewall.Status</pre>
             <p>Ports: 80,443 or 20-442. Source: any, a single IP or CIDR (192.168.0.0/24). Docker filtering currently supports IPv4 with compatible iptables only.</p>
