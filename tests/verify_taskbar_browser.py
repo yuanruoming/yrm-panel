@@ -20,6 +20,12 @@ with sync_playwright() as p:
  page=browser.new_page()
  page.on('pageerror',lambda e:errors.append(str(e)))
  page.set_content(html)
+ page.evaluate("""() => {
+   const change = history.replaceState.bind(history);
+   history.replaceState = (state,title,url) => change(state,title);
+   const push = history.pushState.bind(history);
+   history.pushState = (state,title,url) => push(state,title);
+ }""")
  page.evaluate('''() => {
  window.__pins = ['/Files'];
  window.fetch = async (url, options={})=>{
@@ -36,6 +42,8 @@ with sync_playwright() as p:
  }''')
  page.add_script_tag(content=js)
  page.locator('.taskbar-pin-app[data-taskbar-id="/Files"]').wait_for(timeout=5000)
+ assert page.locator('.taskbar-pin-app[data-taskbar-id="/Files"]').inner_text().strip()=='Files', 'Pinned taskbar app must show its name'
+ assert page.locator('.taskbar-tab-close').count()==0, 'No always-visible close buttons'
  print('initial pins',page.locator('.taskbar-pin-app').count())
  page.locator('[data-taskbar-app="/Docker"]').click()
  page.locator('.taskbar-pin-app[data-taskbar-id="/Docker"]').wait_for(timeout=5000)

@@ -229,16 +229,6 @@
 .yrm-b9-secret-toggle{margin:6px 0 0;border:1px solid #465b70;border-radius:6px;background:#283a4e;color:#d5e8f8;padding:5px 12px;cursor:pointer;font-size:11px;}
 .yrm-b9-secret-toggle:hover{background:#344b66;}
 .yrm-b9-ddns-feedback{margin:8px 0 0;color:#ffc0c0;font-size:12px;overflow-wrap:anywhere;}
-.yrm-b9-update-stages[hidden],#yrm-b9-update-detail[hidden]{display:none!important;}
-.yrm-b9-update-stages{list-style:none;margin:8px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;}
-.yrm-b9-update-stages li{font-size:11px;color:#91a4b8;border:1px solid #364558;border-radius:8px;padding:8px 10px;}
-.yrm-b9-update-stages li::before{content:'○';margin-right:7px;}
-.yrm-b9-update-stages li.is-done{color:#9be1c0;border-color:#34675b;}
-.yrm-b9-update-stages li.is-done::before{content:'✓';}
-.yrm-b9-update-stages li.is-current{color:#c1e6ff;border-color:#649dd3;background:#1e3249;}
-.yrm-b9-update-stages li.is-current::before{content:'◉';}
-.yrm-b9-update-stages li.is-failed{color:#ffb4b4;border-color:#a55760;}
-.yrm-b9-update-stages li.is-failed::before{content:'!';}
 /* The active menu is portaled to body; no table overflow or neighboring row can cover it. */
 body>.explorer-actions-popover{position:fixed!important;right:auto!important;top:0;left:0;z-index:9000;width:174px;max-height:calc(100dvh - 20px);overflow-y:auto;box-shadow:0 16px 42px #000b;}
 .yrm-confirm-modal{width:min(390px,calc(100vw - 32px));max-width:390px;padding:18px 20px;border-radius:13px;}
@@ -342,12 +332,12 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b11-list-heading h3{margin:0;font-size:15px;}
 .yrm-b11-empty{padding:17px;color:#a4b8cb;font-size:12px;}
 /* One provider/domain is exactly one row, never nested cards. */
-.yrm-b11-ddns-table{min-width:880px;}
-.yrm-b11-ddns-table th:nth-child(1){width:13%;}
-.yrm-b11-ddns-table th:nth-child(2){width:23%;}
-.yrm-b11-ddns-table th:nth-child(3),.yrm-b11-ddns-table th:nth-child(4){width:12%;}
-.yrm-b11-ddns-table th:nth-child(5){width:16%;}
-.yrm-b11-ddns-table th:nth-child(6){width:24%;}
+.yrm-b11-ddns-table{min-width:720px;table-layout:fixed;}
+.yrm-b11-ddns-table th:nth-child(1){width:11%;}
+.yrm-b11-ddns-table th:nth-child(2){width:19%;}
+.yrm-b11-ddns-table th:nth-child(3),.yrm-b11-ddns-table th:nth-child(4){width:10%;}
+.yrm-b11-ddns-table th:nth-child(5){width:17%;}
+.yrm-b11-ddns-table th:nth-child(6){width:33%;}
 .yrm-b11-provider-cell strong{display:block;font-size:13px;color:#e8f3fc;}
 .yrm-b11-domain{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;color:#d5e5f3;}
 .yrm-b11-ip-result{display:grid;gap:4px;min-width:0;}
@@ -368,6 +358,67 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b11-action-row .yrm-b11-remove{color:#ffabb3;}
 .yrm-b11-action-row .yrm-b11-remove:hover{background:rgba(184,60,77,.15);border-color:#a3525e;}
 .yrm-b11-provider-cell .yrm-b9-ddns-feedback{display:none!important;}
+
+/* Flat applications: one navigation rail and one content surface per application.
+   Do not wrap grids, tables, or sections in additional decorative cards. */
+.server-settings-content{min-width:0;}
+.settings-rc41{grid-template-columns:205px minmax(0,1fr);gap:22px;}
+.yrm-flat-panel{background:transparent;border:0;border-radius:0;padding:0;margin:0 0 24px;min-width:0;}
+.yrm-flat-panel h3{margin:0 0 10px;font-size:15px;}
+.yrm-flat-panel form:not(.yrm-b11-action-row form){min-width:0;}
+.yrm-flat-device{display:flex;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid rgba(160,185,209,.20);}
+.yrm-flat-device h3{margin:3px 0;font-size:19px;}
+.settings-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:0!important;}
+.yrm-summary-cell{min-width:0;padding:17px 12px;border-bottom:1px solid rgba(160,185,209,.18);}
+.yrm-summary-cell h3{font-size:18px;overflow-wrap:anywhere;margin:7px 0;}
+.settings-stack{gap:0;}
+.yrm-network-row{padding:17px 0;border-bottom:1px solid rgba(160,185,209,.17);}
+.yrm-network-row h3{margin:0;}
+.yrm-section-heading-actions{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.yrm-section-heading-actions .button{flex:none;}
+.yrm-b11-ddns-panel{border:0!important;padding:0!important;background:none!important;box-shadow:none!important;}
+.yrm-b11-table-wrap{border:0;border-radius:0;background:transparent;overflow-x:auto;}
+.yrm-b11-table thead{background:rgba(98,131,165,.07);}
+.yrm-b11-table th:first-child,.yrm-b11-table td:first-child{padding-left:10px;}
+.yrm-b11-table th:last-child,.yrm-b11-table td:last-child{padding-right:10px;}
+.yrm-b11-ddns-table .yrm-b11-action-row{gap:6px;}
+.yrm-b11-ddns-table .yrm-b11-action-row .button{padding:7px 9px;}
+.yrm-b9-volume-grid{display:grid;grid-template-columns:1fr;gap:0;}
+.yrm-b9-volume-card{background:transparent;border:0;border-bottom:1px solid rgba(160,185,209,.18);border-radius:0;padding:18px 0;}
+.yrm-storage-section .yrm-disk-card{background:transparent;border:0;border-bottom:1px solid rgba(160,185,209,.19);border-radius:0;padding:16px 0;}
+.yrm-partition-card{background:transparent;border:0;border-left:2px solid rgba(111,160,205,.35);border-radius:0;margin-left:18px;padding:11px 14px;}
+.yrm-b11-fw-top,.yrm-b11-fw-toolbar{margin-top:0;}
+/* Preserve form semantics and readable controls when the decorative card is removed. */
+.yrm-flat-panel label{display:grid;gap:6px;font-size:12px;color:#aebdce;}
+.yrm-flat-panel input:not([type=checkbox]):not([type=hidden]):not([type=file]),
+.yrm-flat-panel select,.yrm-flat-panel textarea{box-sizing:border-box;border:1px solid #445268;background:#131e2c;border-radius:8px;color:#f6f8fc;min-height:36px;padding:8px 10px;font:inherit;max-width:100%;}
+.yrm-flat-panel .v1-check{display:flex;align-items:center;gap:8px;}
+.yrm-flat-panel .v1-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+@media(max-width:620px){.yrm-flat-panel .v1-grid{grid-template-columns:1fr}}
+.yrm-flat-panel input,.yrm-flat-panel select,.yrm-flat-panel textarea{max-width:100%;}
+.yrm-b11-fw-dialog .yrm-b11-fw-fields{align-items:start;}
+.yrm-b11-fw-source-address input:disabled{opacity:.45;cursor:not-allowed;}
+.yrm-b11-fw-source-address{min-height:66px;}
+.settings-update-card{padding:0;}
+.settings-update-card .yrm-update-tracker{padding:16px 0;border:0;border-top:1px solid rgba(160,185,209,.18);border-bottom:1px solid rgba(160,185,209,.18);border-radius:0;background:transparent;}
+.settings-update-card .yrm-update-overview>div{border:0;border-bottom:1px solid rgba(160,185,209,.17);border-radius:0;padding:12px 5px;}
+.yrm-flat-files{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0 8px!important;margin:0!important;}
+.yrm-flat-files .fm-columns{border:0;min-height:0;}
+.yrm-flat-files .fm-locations{border-right:1px solid rgba(160,185,209,.18);padding:12px 16px 12px 2px;}
+.yrm-flat-files .fm-content{padding:9px 12px 0 20px;}
+.yrm-menu-divider{border:0;border-top:1px solid rgba(154,177,199,.2);margin:5px 0;}
+.yrm-flat-page-heading{margin:0 0 12px;display:flex;align-items:center;justify-content:space-between;}
+.yrm-flat-page-heading h1{font-size:23px;margin:0;}
+.yrm-flat-page-heading .muted{margin:4px 0 0;}
+.yrm-flat-table-header{display:flex;align-items:center;gap:12px;padding:10px 0 12px;}
+.yrm-flat-table-header h2{font-size:15px;margin:0;}
+.yrm-docker-table-wrap{overflow-x:auto;background:transparent;border:0;}
+.yrm-docker-table{width:100%;border-collapse:collapse;min-width:690px;}
+.yrm-docker-table td,.yrm-docker-table th{border-bottom:1px solid rgba(160,185,209,.15);}
+.yrm-docker-table .action-group{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:nowrap;}
+.yrm-docker-table .action-group form{margin:0;}
+@media(max-width:850px){.settings-rc41{grid-template-columns:1fr;gap:8px}.yrm-flat-files .fm-locations{border-right:0;padding:8px}.yrm-flat-files .fm-content{padding:8px 3px}.yrm-b11-ddns-table{min-width:720px}}
+
 /* Actual switches: input is still a real semantic form control. */
 .yrm-ddns-editor label.yrm-b11-toggle-line,
 .yrm-b9-ddns-dialog label.yrm-b11-toggle-line,
@@ -464,10 +515,17 @@ body>.explorer-actions-popover button+button{margin-top:2px;}
 .yrm-b10-file-selection [data-b12-file-copy]{min-width:70px;}
 
 /* BETA12 Taskbar pins: persistent server-side; desktop wallpaper remains clear. */
-.taskbar-pin-app{position:relative;display:grid;place-items:center;flex:0 0 36px;height:34px;border:1px solid transparent;border-radius:10px;background:rgba(255,255,255,.045);color:#bfdaf1;cursor:pointer;}
-.taskbar-pin-app .ui-icon{width:19px;height:19px;}
-.taskbar-pin-app:hover,.taskbar-pin-app.is-active{background:rgba(111,170,225,.23);border-color:rgba(164,211,251,.22);}
-.taskbar-pin-app.is-running::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);height:3px;width:13px;border-radius:6px;background:#8ac7f3;}
+.taskbar-app{position:relative;display:flex;align-items:center;justify-content:center;gap:8px;flex:none;min-width:90px;max-width:164px;height:34px;border:1px solid transparent;border-radius:9px;background:rgba(255,255,255,.045);color:#d5e9f9;cursor:pointer;padding:0 11px;font-size:12px;font-weight:600;line-height:1.2;}
+.taskbar-app span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.taskbar-app.is-active{background:rgba(111,170,225,.23);border-color:rgba(164,211,251,.22);}
+.taskbar-app.is-running::after{content:'';position:absolute;bottom:1px;left:12px;right:12px;height:2px;border-radius:2px;background:#8ac7f3;}
+.taskbar-tab.taskbar-app{padding:0;min-width:90px;max-width:164px;}
+.taskbar-tab.taskbar-app .taskbar-tab-open{padding:0 11px;justify-content:center;}
+.taskbar-tabs{gap:6px;flex-wrap:nowrap;}
+@media(max-width:760px){.taskbar-app,.taskbar-tab.taskbar-app{min-width:70px;max-width:125px}.taskbar-app span{font-size:11px}}
+.taskbar-pin-app .ui-icon{width:17px;height:17px;flex:none;}
+.taskbar-pin-app:hover{background:rgba(111,170,225,.23);border-color:rgba(164,211,251,.22);}
+
 .yrm-taskbar-context{position:fixed;z-index:600;display:grid;min-width:190px;padding:6px;border:1px solid #40566d;border-radius:10px;background:#202b3a;box-shadow:0 15px 40px #0008;}
 .yrm-taskbar-context button{border:0;background:transparent;text-align:left;color:#e5f0fa;padding:10px 12px;font:inherit;font-size:12px;cursor:pointer;border-radius:6px;}
 .yrm-taskbar-context button:hover,.yrm-taskbar-context button:focus-visible{background:#3b516a;}
@@ -491,7 +549,7 @@ body>.explorer-actions-popover button+button{margin-top:2px;}
 /* BETA12.1: one existing window, movable/resizable below the 49px top bar. */
 .workspace-stage{position:fixed!important;inset:49px 0 0!important;display:block!important;padding:0!important;margin:0!important;min-height:0!important;height:calc(100dvh - 49px)!important;z-index:2;pointer-events:none;}
 body.is-desktop .workspace-stage{display:none!important;}
-.workspace-stage>.workspace-window{position:absolute;box-sizing:border-box;width:min(1120px,calc(100vw - 36px));height:min(760px,calc(100dvh - 76px));min-width:420px;min-height:290px;max-width:100%;max-height:100%;margin:0;pointer-events:auto;resize:both;overflow:hidden;}
+.workspace-stage>.workspace-window{position:absolute;box-sizing:border-box;width:min(1320px,calc(100vw - 32px));height:min(820px,calc(100dvh - 70px));min-width:420px;min-height:290px;max-width:100%;max-height:100%;margin:0;pointer-events:auto;resize:both;overflow:hidden;}
 .workspace-stage>.workspace-window.is-maximized{left:0!important;top:0!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;min-width:0!important;border-radius:0!important;border-left:0;border-right:0;border-bottom:0;box-shadow:none;resize:none;}
 .workspace-window:not(.is-maximized)>.window-titlebar{cursor:grab;touch-action:none;}
 .workspace-window:not(.is-maximized)>.window-titlebar:active{cursor:grabbing;}
@@ -534,3 +592,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 #file-action-dialog[open]:has(#yrm-b12-action-picker[hidden]){height:auto;min-height:0;max-height:min(360px,calc(100dvh - 40px));}
 #file-action-dialog[open]:has(#yrm-b12-action-picker[hidden]) form{overflow:visible;min-height:0;}
 #file-action-dialog[open]:has(#yrm-b12-action-picker[hidden]) .panel-modal-actions{margin-top:20px;}
+
+/* Taskbar keeps both icon and text at all widths; overflow scrolls instead of hiding labels. */
+.taskbar-tabs .taskbar-tab-open .ui-icon{display:block!important;width:17px;height:17px;}
+.taskbar-tabs .taskbar-app span{display:inline-block!important;}

@@ -7,7 +7,6 @@
         ("storage", "Storage", "i-harddrive"),
         ("network", "Network", "i-globe"),
         ("ddns", "Dynamic DNS", "i-globe"),
-        ("accounts", "Accounts", "i-settings"),
         ("security", "Security", "i-shield"),
         ("appearance", "Appearance", "i-folder"),
         ("about", "About & Updates", "i-grid")
@@ -34,15 +33,15 @@
     @if (activeTab == "overview")
     {
       <div class="settings-section-heading"><h2>Overview</h2><p>Your Linux server at a glance.</p></div>
-      <section class="surface-card settings-device-card">
+      <section class="yrm-flat-device">
         <div class="settings-device-avatar"><svg class="ui-icon"><use href="#i-server"/></svg></div>
         <div><p class="eyebrow">DEVICE</p><h3>@info.Hostname</h3><p class="muted">@info.OperatingSystem</p></div>
       </section>
       <div class="settings-summary-grid">
-        <section class="surface-card"><p class="eyebrow">CPU</p><h3>@info.Processors cores</h3><p class="muted settings-clip">@info.CpuModel</p></section>
-        <section class="surface-card"><p class="eyebrow">MEMORY</p><h3>@(info.MemoryBytes > 0 ? (info.MemoryBytes / 1073741824d).ToString("0.0") + " GiB" : "Unavailable")</h3><p class="muted">Installed RAM</p></section>
-        <section class="surface-card"><p class="eyebrow">STORAGE</p><h3>@snapshot.Disks.Count</h3><p class="muted">Detected filesystems</p></section>
-        <section class="surface-card"><p class="eyebrow">NETWORK</p><h3 class="settings-clip">@(info.Adapters.FirstOrDefault(x => x.Ipv4.Length > 0 && !Model.IsVirtualAdapter(x.Name))?.Ipv4.FirstOrDefault() ?? "Unavailable")</h3><p class="muted">Primary IPv4</p></section>
+        <section class="yrm-summary-cell"><p class="eyebrow">CPU</p><h3>@info.Processors cores</h3><p class="muted settings-clip">@info.CpuModel</p></section>
+        <section class="yrm-summary-cell"><p class="eyebrow">MEMORY</p><h3>@(info.MemoryBytes > 0 ? (info.MemoryBytes / 1073741824d).ToString("0.0") + " GiB" : "Unavailable")</h3><p class="muted">Installed RAM</p></section>
+        <section class="yrm-summary-cell"><p class="eyebrow">STORAGE</p><h3>@snapshot.Disks.Count</h3><p class="muted">Detected filesystems</p></section>
+        <section class="yrm-summary-cell"><p class="eyebrow">NETWORK</p><h3 class="settings-clip">@(info.Adapters.FirstOrDefault(x => x.Ipv4.Length > 0 && !Model.IsVirtualAdapter(x.Name))?.Ipv4.FirstOrDefault() ?? "Unavailable")</h3><p class="muted">Primary IPv4</p></section>
       </div>
     }
     else if (activeTab == "storage")
@@ -65,8 +64,7 @@
           .ThenBy(d => d.MountPoint.Length == 0)
           .ThenBy(d => d.Path, StringComparer.Ordinal).ToArray();
       var volumeNumber = 0;
-      <section class="v1-settings-panel yrm-storage-section yrm-b9-volume-section" data-b10-storage-panel="volumes">
-        <div class="settings-row-top"><div><h3>Storage Spaces</h3><p class="muted">Space, capacity and mount status.</p></div></div>
+      <section class="yrm-flat-panel yrm-storage-section yrm-b9-volume-section" data-b10-storage-panel="volumes">
         <div class="yrm-b9-volume-grid">
           @foreach (var volume in volumes)
           {
@@ -115,8 +113,7 @@
         </div>
         @if (volumes.Length == 0) { <p class="muted">No recognized filesystems found.</p> }
       </section>
-      <section class="v1-settings-panel yrm-storage-section yrm-b9-physical-section" data-b10-storage-panel="disks" hidden>
-        <div class="settings-row-top"><div><h3>Physical Disks</h3><p class="muted">Physical devices, partitions and filesystem identification. No duplicate volume actions.</p></div></div>
+      <section class="yrm-flat-panel yrm-storage-section yrm-b9-physical-section" data-b10-storage-panel="disks" hidden>
         @foreach (var disk in Model.StorageDevices.Where(x => x.Type == "disk"))
         {
           <article class="yrm-disk-card">
@@ -175,7 +172,7 @@
       <div class="settings-stack">
         @foreach (var adapter in info.Adapters.Where(x => !Model.IsVirtualAdapter(x.Name)))
         {
-          <section class="surface-card settings-network-card">
+          <section class="yrm-network-row">
             <div class="settings-row-top"><div><h3>@adapter.Name</h3><small class="muted">Network interface</small></div><span class="tag">@adapter.State</span></div>
             @foreach (var ipv4 in adapter.Ipv4)
             {
@@ -215,12 +212,10 @@
     }
     else if (activeTab == "ddns")
     {
-      <div class="settings-section-heading"><h2>Dynamic DNS</h2><p>Automatically keep your hostnames in sync.</p></div>
-      <section class="v1-settings-panel yrm-b11-ddns-panel">
-        <div class="settings-row-top yrm-b11-list-heading">
-          <h3>DDNS Profiles</h3>
-          <button class="button button-primary" type="button" data-b9-ddns-add>+ Add Provider</button>
-        </div>
+      <div class="settings-section-heading yrm-section-heading-actions"><div><h2>Dynamic DNS</h2><p>Automatically keep your hostnames in sync.</p></div>
+        <button class="button button-primary" type="button" data-b9-ddns-add>+ Add Provider</button>
+      </div>
+      <section class="yrm-flat-panel yrm-b11-ddns-panel">
         <div class="yrm-b11-table-wrap">
           <table class="yrm-b11-table yrm-b11-ddns-table">
             <thead><tr><th>Provider</th><th>Domain</th><th>IPv4</th><th>IPv6</th><th>Last Update</th><th class="yrm-b11-actions-head">Actions</th></tr></thead>
@@ -418,14 +413,6 @@
           </form>
       </dialog>
     }
-    else if (activeTab == "accounts")
-    {
-      <div class="settings-section-heading"><h2>Accounts</h2><p>Linux identity used by YRM PANEL.</p></div>
-      <section class="surface-card settings-simple-card">
-        <p class="eyebrow">CURRENT LINUX USER</p><h3>@Model.AccountName</h3>
-        <p class="muted">Linux PAM handles login. YRM PANEL runs with the permissions of this account, and asks for sudo authorization only for administrative operations.</p>
-      </section>
-    }
     else if (activeTab == "security")
     {
       <div class="settings-section-heading"><h2>Security</h2><p>Firewall rules and the Panel HTTPS identity.</p></div>
@@ -435,7 +422,7 @@
       </nav>
       @if (Model.SecuritySection == "firewall")
       {
-      <section class="v1-settings-panel">
+      <section class="yrm-flat-panel">
         <div class="settings-row-top"><h3>Firewall</h3>
           @if (Model.Firewall.Available) { <span class="tag">@(Model.Firewall.Active ? "Active" : "Inactive")</span> }
           else { <span class="tag">Unavailable</span> }
@@ -486,7 +473,12 @@
               <label>Action<select data-b11-fw-field="action"><option value="allow">Allow</option><option value="deny">Deny</option><option value="lan">LAN only</option></select></label>
               <label>Ports<input data-b11-fw-field="port" placeholder="80,443 or 20-442" inputmode="text" /></label>
               <label>Protocol<select data-b11-fw-field="protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
-              <label class="yrm-b11-fw-source">Source IP / CIDR<input data-b11-fw-field="source" value="any" placeholder="any or 192.168.1.0/24" /></label>
+              <label class="yrm-b11-fw-source">Source
+                <select data-b11-fw-source-mode aria-label="Source mode"><option value="any">Any</option><option value="custom">Custom IP / CIDR</option></select>
+              </label>
+              <label class="yrm-b11-fw-source-address">Source IP / CIDR
+                <input data-b11-fw-field="source" placeholder="192.168.1.0/24" disabled />
+              </label>
             </div>
             <p class="yrm-inline-error" id="yrm-b11-fw-error" hidden></p>
             <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-b11-fw-cancel>Cancel</button><button type="button" class="button button-primary" data-b11-fw-save>Save Rule</button></div>
@@ -501,7 +493,7 @@
       }
       else
       {
-      <section class="v1-settings-panel yrm-certificate-card">
+      <section class="yrm-flat-panel yrm-certificate-card">
         <div class="settings-row-top"><h3>HTTPS Certificate</h3><span class="tag">@(Model.Certificate.IsCustom ? "Imported" : "System default")</span></div>
         @if (Model.Certificate.Available)
         {
@@ -539,7 +531,7 @@
     else if (activeTab == "appearance")
     {
       <div class="settings-section-heading"><h2>Appearance</h2><p>Customize your desktop without changing the shared login screen.</p></div>
-      <section class="surface-card settings-simple-card settings-wallpaper-card">
+      <section class="yrm-flat-panel settings-wallpaper-card">
         <div class="settings-row-top"><h3>Desktop Wallpaper</h3><span class="muted">Personal desktop</span></div>
         <img class="v1-wallpaper-preview" id="wallpaper-preview" src="@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))" alt="Wallpaper preview" />
         <div class="v1-wallpaper-mode"><button type="button" class="mini-button" data-wallpaper-fit>Full image</button> · Toggle actual desktop crop</div>
@@ -560,12 +552,12 @@
     else if (activeTab == "about")
     {
       <div class="settings-section-heading"><h2>About &amp; Updates</h2><p>Version information and system updates.</p></div>
-      <section class="surface-card settings-simple-card">
+      <section class="yrm-flat-panel settings-simple-card">
         <div class="yrm-about-identity"><img src="~/images/yrm-panel-mark.png" alt="YRM PANEL icon" width="54" height="54" /><div><p class="eyebrow">YRM PANEL</p><h3>@info.PanelVersion.Split('+')[0]</h3></div></div>
         <p class="muted">Linux server management · ASP.NET Core 10</p>
         <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel" target="_blank" rel="noopener noreferrer">Source and releases ↗</a>
       </section>
-      <section class="surface-card settings-simple-card settings-update-card">
+      <section class="yrm-flat-panel settings-update-card">
         <div class="settings-row-top"><h3>System Update</h3><span class="tag">@Model.UpdateChannel channel</span></div>
         <div class="yrm-update-overview">
           <div><small>Installed version</small><strong>@info.PanelVersion.Split('+')[0]</strong></div>
@@ -575,12 +567,6 @@
           <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@(Model.UpdateStatus.State == "running" ? "Updating" : Model.LastUpdateCheck?.HasUpdate == true ? "Update Available" : Model.UpdateStatus.State == "failed" ? "Update Failed" : Model.LastUpdateCheck?.Available == true ? "Up to Date" : "Not Checked")</strong><span id="yrm-update-percent"></span></div>
           <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress" hidden><span id="yrm-update-bar-fill"></span></div>
           <p id="yrm-update-message" class="muted">@(Model.UpdateStatus.State == "running" ? "Updating YRM PANEL." : Model.LastUpdateCheck?.HasUpdate == true ? Model.LastUpdateCheck.Message : Model.LastUpdateCheck?.Available == true ? "Your installed build is up to date." : Model.UpdateStatus.Message)</p>
-          <details class="yrm-b10-update-details" id="yrm-b10-update-details" hidden><summary>Update details</summary>
-          <ol id="yrm-b9-update-stages" class="yrm-b9-update-stages" aria-label="Update stages" hidden>
-            @foreach (var stage in new[] { "Checking", "Downloading", "Verifying", "Installing", "Restarting", "Completed" })
-            { <li data-b9-update-stage="@stage">@stage</li> }
-          </ol>
-          <p id="yrm-b9-update-detail" class="muted" hidden></p></details>
           <p id="yrm-update-time" class="yrm-update-time muted"></p>
           <button type="button" id="yrm-update-reload" class="button button-primary" hidden>Reload Panel</button>
         </div>

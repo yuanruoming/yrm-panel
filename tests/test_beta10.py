@@ -64,10 +64,13 @@ class ProductContracts(unittest.TestCase):
         self.assertIn('OnPostDdnsAddGroupAsync', code)
         self.assertIn('OnPostDdnsEditGroupAsync', code)
 
-    def test_update_details_not_permanently_six_cards(self):
+    def test_update_is_one_live_phase_not_six_cards(self):
         ui = source('YrmPanel/Pages/Settings.cshtml')
-        self.assertIn('yrm-b10-update-details', ui)
-        self.assertIn('<summary>Update details</summary>', ui)
+        controller = source('YrmPanel/wwwroot/js/v1-settings.js')
+        self.assertIn('id="yrm-update-phase"', ui)
+        self.assertNotIn('id="yrm-b9-update-stages"', ui)
+        self.assertIn('phaseNames[phase]', controller)
+        self.assertNotIn('function showUpdateStages()', source('YrmPanel/wwwroot/js/v1-stability.js'))
 
     def test_maximize_aligns_with_real_topbar(self):
         """Test the current geometry, not a removed BETA10 CSS implementation.

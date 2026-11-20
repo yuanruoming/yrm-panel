@@ -1,27 +1,53 @@
 @page
 @model YrmPanel.Pages.DockerModel
 @{ ViewData["Title"] = "Docker"; }
-<div class="page-heading"><div><p class="eyebrow">CONTAINER ENGINE</p><h1>Docker<span class="accent-period">.</span></h1></div><a class="button button-secondary" asp-page="/Docker">↻ Refresh</a></div>
-@if (!string.IsNullOrWhiteSpace(Model.Notice)) { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || Model.Notice.Contains("denied", StringComparison.OrdinalIgnoreCase) ? "error" : "success")">@Model.Notice</div> }
-@if (!Model.Docker.Available) { <section class="surface-card"><div class="empty-hint">Docker is unavailable.<small>@Model.Docker.Error</small><small>On Linux, the Panel service account needs access to the Docker socket to display containers.</small></div></section> }
-else {
-    @if (!Model.ControlsEnabled) { <div class="notice">Read-only mode: Docker start/stop/restart is disabled in the Panel configuration.</div> }
-    <section class="surface-card table-surface"><div class="card-header"><div><p class="eyebrow">CONTAINERS</p><h3>@Model.Docker.Containers.Count discovered</h3></div></div>
-        <div class="responsive-table"><table class="data-table"><thead><tr><th>Container</th><th>Image</th><th>Project</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+<div class="page-heading yrm-flat-page-heading">
+  <div><h1>Docker</h1></div>
+  <a class="button button-secondary" asp-page="/Docker">Refresh</a>
+</div>
+@if (!string.IsNullOrWhiteSpace(Model.Notice))
+{ <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || Model.Notice.Contains("denied", StringComparison.OrdinalIgnoreCase) ? "error" : "success")">@Model.Notice</div> }
+@if (!Model.Docker.Available)
+{
+  <div class="empty-hint">Docker is unavailable.<small>@Model.Docker.Error</small><small>Check Docker service and socket access from Ubuntu.</small></div>
+}
+else
+{
+  @if (!Model.ControlsEnabled) { <div class="notice">Container controls are disabled.</div> }
+  <div class="yrm-flat-table-header"><h2>Containers</h2><span class="muted">@Model.Docker.Containers.Count</span></div>
+  <div class="responsive-table yrm-docker-table-wrap">
+    <table class="data-table yrm-docker-table">
+      <thead><tr><th>Container</th><th>Image</th><th>Project</th><th>Status</th><th>Actions</th></tr></thead>
+      <tbody>
         @foreach (var c in Model.Docker.Containers)
         {
-            <tr><td><strong>@c.Name</strong><small class="table-sub">@(c.Id.Length > 12 ? c.Id[..12] : c.Id)</small></td><td class="muted">@c.Image</td><td class="muted">@(string.IsNullOrEmpty(c.Project) ? "Standalone" : c.Project)</td><td><span class="status-pill @(c.State == "running" ? "is-running" : "is-stopped")">@c.State</span></td><td>
-                @if (Model.ControlsEnabled) {
-                    <div class="action-group">
-                        <a class="mini-button" asp-page="/Docker" asp-page-handler="Logs" asp-route-id="@c.Id" data-log-viewer>Logs</a>
-                        @if (c.State == "running") { <form method="post" asp-page-handler="Control"><input type="hidden" name="id" value="@c.Id"/><input type="hidden" name="operation" value="stop"/><button type="submit" class="mini-button">Stop</button></form> }
-                        else { <form method="post" asp-page-handler="Control"><input type="hidden" name="id" value="@c.Id"/><input type="hidden" name="operation" value="start"/><button type="submit" class="mini-button">Start</button></form> }
-                        <form method="post" asp-page-handler="Control"><input type="hidden" name="id" value="@c.Id"/><input type="hidden" name="operation" value="restart"/><button type="submit" class="mini-button">Restart</button></form>
-                    </div>
-                } else { <a class="mini-button" asp-page="/Docker" asp-page-handler="Logs" asp-route-id="@c.Id" data-log-viewer>Logs</a> }
-            </td></tr>
+          <tr>
+            <td><strong>@c.Name</strong><small class="table-sub">@(c.Id.Length > 12 ? c.Id[..12] : c.Id)</small></td>
+            <td class="muted">@c.Image</td>
+            <td class="muted">@(string.IsNullOrEmpty(c.Project) ? "Standalone" : c.Project)</td>
+            <td><span class="status-pill @(c.State == "running" ? "is-running" : "is-stopped")">@c.State</span></td>
+            <td>
+              <div class="action-group yrm-docker-actions">
+                <a class="mini-button" asp-page="/Docker" asp-page-handler="Logs" asp-route-id="@c.Id" data-log-viewer>Logs</a>
+                @if (Model.ControlsEnabled)
+                {
+                  <form method="post" asp-page-handler="Control">
+                    <input type="hidden" name="id" value="@c.Id" />
+                    <input type="hidden" name="operation" value="@(c.State == "running" ? "stop" : "start")" />
+                    <button type="submit" class="mini-button">@(c.State == "running" ? "Stop" : "Start")</button>
+                  </form>
+                  <form method="post" asp-page-handler="Control">
+                    <input type="hidden" name="id" value="@c.Id" />
+                    <input type="hidden" name="operation" value="restart" />
+                    <button type="submit" class="mini-button">Restart</button>
+                  </form>
+                }
+              </div>
+            </td>
+          </tr>
         }
-        </tbody></table></div>
-        @if (Model.Docker.Containers.Count == 0) { <div class="empty-hint">No containers to display.</div> }
-    </section>
+      </tbody>
+    </table>
+  </div>
+  @if (Model.Docker.Containers.Count == 0) { <div class="empty-hint">No containers.</div> }
 }

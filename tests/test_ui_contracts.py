@@ -61,6 +61,42 @@ class DesktopUiContracts(unittest.TestCase):
         self.assertIn('yrm-b11-select-toggle',css)
         self.assertIn('select[data-b11-enhanced]',css)
 
+    def test_flat_application_layouts_have_no_card_within_card(self):
+        settings=source('YrmPanel/Pages/Settings.cshtml')
+        files=source('YrmPanel/Pages/Files.cshtml')
+        docker=source('YrmPanel/Pages/Docker.cshtml')
+        self.assertNotIn('class="surface-card',settings)
+        self.assertNotIn('class="v1-settings-panel',settings)
+        self.assertNotIn('DDNS Profiles</h3>',settings)
+        self.assertIn('yrm-section-heading-actions',settings)
+        self.assertNotIn('("accounts", "Accounts",',settings)
+        self.assertNotIn('class="surface-card',files)
+        self.assertNotIn('class="surface-card',docker)
+        self.assertIn('yrm-docker-table',docker)
+
+    def test_single_shell_route_and_taskbar(self):
+        script=source('YrmPanel/wwwroot/js/panel.js')
+        files=source('YrmPanel/Pages/Files.cshtml')
+        self.assertIn('yrmPanelRoute:url',script)
+        self.assertIn('history.pushState({yrmPanelRoute:url}, "", "/")',script)
+        self.assertNotIn('history.pushState(null, "", url)',script)
+        self.assertNotIn('taskbar-tab-close',script)
+        self.assertIn('button.append(svg,label)',script)
+        self.assertIn('data-b12-file-download',files)
+        self.assertIn('asp-route-nav="quick"',files)
+        self.assertIn('asp-route-nav="library"',files)
+
+    def test_firewall_and_update_preserve_semantics(self):
+        view=source('YrmPanel/Pages/Settings.cshtml')
+        script=source('YrmPanel/wwwroot/js/v1-stability.js')
+        controller=source('YrmPanel/wwwroot/js/v1-settings.js')
+        self.assertIn('data-b11-fw-source-mode',view)
+        self.assertIn('data-b11-fw-field="source" placeholder="192.168.1.0/24" disabled',view)
+        self.assertIn("sourceMode.value=src.toLowerCase()==='any'?'any':'custom'",script)
+        self.assertIn("values.source=d.querySelector('[data-b11-fw-source-mode]')?.value==='any'?'any':values.source",script)
+        self.assertNotIn('id="yrm-b9-update-stages"',view)
+        self.assertIn('phaseNames[phase]',controller)
+
     @unittest.skipUnless(shutil.which('node'), 'Node not installed')
     def test_javascript_syntax(self):
         result=subprocess.run(['node','--check',str(ROOT/'YrmPanel/wwwroot/js/v1-stability.js')],capture_output=True,text=True)

@@ -2,19 +2,8 @@
    and non-sensitive workspace state. This file runs after panel.js. */
 (() => {
   'use strict';
-  const key = 'yrm-panel:last-workspace-route';
-  const allowed = /^\/(?:Files|Settings|Docker|Applications|Features|Shares|Services)(?:\?|$)/;
+  // Desktop shell owns route persistence. This module owns only Files UI.
   const get = id => document.getElementById(id);
-  const saveRoute = () => {
-    const route = location.pathname + location.search;
-    if (!allowed.test(route)) return;
-    try { sessionStorage.setItem(key, route); } catch { /* unavailable in private mode */ }
-  };
-  const push = history.pushState;
-  history.pushState = function (...args) { const out = push.apply(this,args); saveRoute(); return out; };
-  const replace = history.replaceState;
-  history.replaceState = function (...args) { const out = replace.apply(this,args); saveRoute(); return out; };
-  window.addEventListener('popstate', saveRoute);
   const fileNavKey = 'yrm-panel:system-files-open';
 
   function restoreDisclosure() {
@@ -34,20 +23,6 @@
 
   const observer = new MutationObserver(restoreDisclosure);
   observer.observe(document.body,{childList:true,subtree:true});
-
-  // Restore the last in-tab application after login or a hard refresh.
-  // Only route names known to the Panel shell are accepted, never arbitrary URLs.
-  const initial=location.pathname;
-  if (initial==='/' || initial==='/Index') {
-    try {
-      const last=sessionStorage.getItem(key);
-      if (last && allowed.test(last)) {
-        const link=document.createElement('a');link.href=last;
-        document.body.append(link);
-        requestAnimationFrame(()=>{link.click();link.remove();});
-      }
-    } catch { /* not essential */ }
-  } else saveRoute();
 
   /* BETA9: one floating Files menu. Portal avoids row stacking/clipping and
      does not rely on CSS z-index battles between neighboring table rows. */
@@ -217,6 +192,8 @@
     }
     const copy=toolbar.querySelector('[data-b12-file-copy]');
     if(copy)copy.disabled=!selectedFileRow;
+    const download=toolbar.querySelector('[data-b12-file-download]');
+    if(download)download.disabled=!selectedFileRow?.querySelector('a[data-native-download]');
   }
   document.addEventListener('click',event=>{
     const target=event.target;
@@ -227,8 +204,9 @@
       return;
     }
     if(target.closest('.explorer-table tbody') && !row)setFileSelection(null);
-    const action=target.closest('[data-b10-file-rename],[data-b10-file-move],[data-b10-file-delete],[data-b12-file-copy]');
+    const action=target.closest('[data-b10-file-rename],[data-b10-file-move],[data-b10-file-delete],[data-b12-file-copy],[data-b12-file-download]');
     if (!action || !selectedFileRow?.isConnected)return;
+    if (action.matches('[data-b12-file-download]'))selectedFileRow.querySelector('a[data-native-download]')?.click();
     if (action.matches('[data-b10-file-rename]'))selectedFileRow.querySelector('[data-rename-item]')?.click();
     if (action.matches('[data-b12-file-copy]'))selectedFileRow.querySelector('[data-copy-item]')?.click();
     if (action.matches('[data-b10-file-move]'))selectedFileRow.querySelector('[data-move-item]')?.click();
@@ -414,44 +392,6 @@
     })();
   },true);
 
-  /* Update stages: use systemd updater's JSON phase, never a fake progress
-     percentage. Download bytes have a value only when Content-Length is known. */
-  let b9UpdatePending=false;
-  async function showUpdateStages() {
-    const stages=get('yrm-b9-update-stages');
-    if (!stages || b9UpdatePending || document.hidden) return;
-    b9UpdatePending=true;
-    try {
-      const response=await fetch('/api/update/status',{credentials:'same-origin',cache:'no-store'});
-      if (!response.ok) return;
-      const {progress}=await response.json();
-      const state=String(progress?.state||'idle').toLowerCase();
-      const phase=String(progress?.phase||'').toLowerCase();
-      stages.hidden=state!=='running' && state!=='completed' && state!=='failed';
-      const detailPanel=get('yrm-b10-update-details');
-      if (detailPanel) detailPanel.hidden=state!=='running' && state!=='failed';
-      if (stages.hidden)return;
-      const order=['checking','downloading','verifying','installing','restarting','completed'];
-      let index=order.indexOf(phase);
-      if (state==='completed')index=5;
-      if (index<0)index=0;
-      stages.querySelectorAll('[data-b9-update-stage]').forEach((li,i)=>{
-        li.classList.toggle('is-done',i<index || state==='completed');
-        li.classList.toggle('is-current',i===index && state==='running');
-        li.classList.toggle('is-failed',i===index && state==='failed');
-        const base=li.dataset.b9UpdateStage;
-        li.textContent=base + (i===index && state==='running' &&
-          phase==='downloading' && Number.isFinite(progress.percent)
-            ? ` · ${Math.max(0,Math.min(99,progress.percent))}%` : '');
-      });
-      const detail=get('yrm-b9-update-detail');
-      if (detail) {
-        detail.hidden=false;
-        detail.textContent=progress.message||'';
-      }
-    } catch { // Expected while the Panel service restarts; poll after recovery.
-    } finally {b9UpdatePending=false;}
-  }
   // Storage tabs: instant switch in the existing Settings page, no roundtrip.
   document.addEventListener('click',event=>{
     const tab=event.target instanceof Element ? event.target.closest('[data-b10-storage-tab]') : null;
@@ -479,8 +419,6 @@
   const storageTabObserver=new MutationObserver(restoreStorageTab);
   storageTabObserver.observe(document.body,{childList:true,subtree:true});
   restoreStorageTab();
-  window.setInterval(()=>void showUpdateStages(),2200);
-  void showUpdateStages();
 
   /* BETA11: a single firewall list + edit dialog. The existing v1-settings
      form remains authoritative: its original hidden draft rows serialize
@@ -536,10 +474,21 @@
       const input=dialog.querySelector(`[data-b11-fw-field="${key}"]`);
       if(input){input.value=ruleValue(row,key);input.dispatchEvent(new Event('change',{bubbles:true}));}
     }
+    const src=ruleValue(row,'source')||'any';
+    const sourceMode=dialog.querySelector('[data-b11-fw-source-mode]');
+    const sourceField=dialog.querySelector('[data-b11-fw-field="source"]');
+    if(sourceMode) sourceMode.value=src.toLowerCase()==='any'?'any':'custom';
+    if(sourceField){sourceField.value=src.toLowerCase()==='any'?'':src;sourceField.disabled=src.toLowerCase()==='any';}
     const error=get('yrm-b11-fw-error');if(error){error.hidden=true;error.textContent='';}
     if(!dialog.open)dialog.showModal();
     dialog.querySelector('[data-b11-fw-field="port"]')?.focus();
   }
+  document.addEventListener('change',event=>{
+    const select=event.target instanceof Element?event.target.closest('[data-b11-fw-source-mode]'):null;
+    if(!select)return;
+    const field=select.closest('dialog')?.querySelector('[data-b11-fw-field="source"]');
+    if(field){field.disabled=select.value==='any';if(field.disabled)field.value='';}
+  },true);
   document.addEventListener('click',event=>{
     const node=event.target instanceof Element?event.target:null;
     if(!node)return;
@@ -559,7 +508,11 @@
     if(node.closest('[data-b11-fw-save]')){
       const d=fwDialog();if(!editingFwRow||!d)return;
       const values={};for(const key of ruleFields)values[key]=d.querySelector(`[data-b11-fw-field="${key}"]`)?.value.trim()||'';
+      values.source=d.querySelector('[data-b11-fw-source-mode]')?.value==='any'?'any':values.source;
       const error=get('yrm-b11-fw-error');
+      if(values.source!=='any' && !values.source){
+        if(error){error.textContent='Enter a source IP address or CIDR range.';error.hidden=false;}return;
+      }
       if(!/^\d{1,5}(?:-\d{1,5})?(?:,\d{1,5}(?:-\d{1,5})?)*$/.test(values.port)){
         if(error){error.textContent='Enter a valid port, list (80,443), or range (20-442).';error.hidden=false;}return;
       }

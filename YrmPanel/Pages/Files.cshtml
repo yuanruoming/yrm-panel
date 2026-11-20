@@ -12,7 +12,7 @@
 </div>
 @if (!string.IsNullOrWhiteSpace(Model.Notice))
 { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
-<section class="surface-card fm-explorer">
+<section class="fm-explorer yrm-flat-files">
   <div class="fm-columns">
     <aside class="fm-locations" aria-label="File locations">
       <div class="fm-locations-heading">MY FILES</div>
@@ -23,8 +23,8 @@
       {
         var relative = folderPath.TrimStart('/');
         var displayName = System.IO.Path.GetFileName(folderPath);
-        <a class="fm-location-link fm-location-child @(Model.Path == relative ? "is-active" : "")"
-           asp-page="/Files" asp-route-path="@relative">
+        <a class="fm-location-link fm-location-child @(Model.Path == relative && (Model.HttpContext.Request.Query["nav"] == "library") ? "is-active" : "")"
+           asp-page="/Files" asp-route-path="@relative" asp-route-nav="library">
           <svg class="ui-icon"><use href="#i-folder"/></svg><span>@displayName</span>
         </a>
       }
@@ -35,7 +35,7 @@
         {
           var relative = pinnedPath.TrimStart('/');
           <div class="yrm-b10-quick-item yrm-b11-quick-item">
-            <a class="fm-location-link @(Model.Path == relative ? "is-active" : "")" asp-page="/Files" asp-route-path="@relative" title="@pinnedPath">
+            <a class="fm-location-link @(Model.Path == relative && (Model.HttpContext.Request.Query["nav"] == "quick") ? "is-active" : "")" asp-page="/Files" asp-route-path="@relative" asp-route-nav="quick" title="@pinnedPath">
               <svg class="ui-icon"><use href="#i-folder"/></svg><span>@System.IO.Path.GetFileName(pinnedPath)</span>
             </a>
             <details class="explorer-item-menu yrm-b11-quick-menu">
@@ -106,7 +106,6 @@
                     @if (exists)
                     {
                       <a asp-page="/Files" asp-route-path="@folderPath.TrimStart('/')">Open</a>
-                      <button type="button" data-b12-properties data-b12-prop-name="@name" data-b12-prop-path="@folderPath" data-b12-prop-type="Folder" data-b12-prop-size="—" data-b12-prop-modified="—">Properties</button>
                       @if (matching is not null && matching.Managed)
                       {
                         <form method="post" asp-page-handler="Unshare" asp-route-path="@("@folders")" data-requires-admin="Remove SMB share">
@@ -141,6 +140,8 @@
                         <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Remove unavailable entry</button>
                       </form>
                     }
+                    <hr class="yrm-menu-divider" />
+                      <button type="button" data-b12-properties data-b12-prop-name="@name" data-b12-prop-path="@folderPath" data-b12-prop-type="Folder" data-b12-prop-size="—" data-b12-prop-modified="—">Properties</button>
                   </div>
                 </details>
               </div>
@@ -176,6 +177,7 @@
           @if (Model.View.Available)
           {
           <div class="yrm-b10-file-selection" id="yrm-b10-file-selection" aria-label="Selected file actions">
+            <button type="button" class="button button-secondary" data-b12-file-download disabled>Download</button>
             <button type="button" class="button button-secondary" data-b10-file-rename disabled>Rename</button>
             <button type="button" class="button button-secondary" data-b12-file-copy disabled>Copy To</button>
             <button type="button" class="button button-secondary" data-b10-file-move disabled>Move To</button>
@@ -216,20 +218,13 @@
                       { <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden">Open</a> }
                       else
                       { <button type="button" data-b12-open-file="@item.Name">Open</button> }
-                      <button type="button" data-b12-properties data-b12-prop-name="@item.Name"
-                        data-b12-prop-path="@absolute" data-b12-prop-type="@(item.IsDirectory ? "Folder" : "File")"
-                        data-b12-prop-size="@(item.IsDirectory ? "—" : Model.FormatSize(item.Size))"
-                        data-b12-prop-modified="@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")">Properties</button>
                       @if (!item.IsDirectory)
                       { <a asp-page="/Files" asp-page-handler="Download" asp-route-path="@currentRoute" asp-route-name="@item.Name" data-native-download>Download</a> }
                       <button type="button" data-copy-item="@item.Name">Copy To...</button>
                       @if (Model.View.CanWrite)
                       {
-                        <button type="button" data-rename-item="@item.Name">Rename</button>
                         <button type="button" data-move-item="@item.Name">Move To...</button>
-                        <form method="post" asp-page-handler="Delete" asp-route-path="@currentRoute" data-b10-row-delete data-confirm="Permanently delete @item.Name and its contents? This cannot be undone.">
-                          <input type="hidden" name="name" value="@item.Name"/><button type="submit" class="danger">Delete</button>
-                        </form>
+                        <button type="button" data-rename-item="@item.Name">Rename</button>
                       }
                       @if (item.IsDirectory && !Model.QuickAccess.Contains(absolute, StringComparer.Ordinal) && FileAccess.IsManaged(absolute))
                       {
@@ -268,6 +263,18 @@
                           </form>
                         }
                       }
+                      @if (Model.View.CanWrite)
+                      {
+                        <hr class="yrm-menu-divider" />
+                        <form method="post" asp-page-handler="Delete" asp-route-path="@currentRoute" data-b10-row-delete data-confirm="Permanently delete @item.Name and its contents? This cannot be undone.">
+                          <input type="hidden" name="name" value="@item.Name"/><button type="submit" class="danger">Delete</button>
+                        </form>
+                      }
+                      <hr class="yrm-menu-divider" />
+                      <button type="button" data-b12-properties data-b12-prop-name="@item.Name"
+                        data-b12-prop-path="@absolute" data-b12-prop-type="@(item.IsDirectory ? "Folder" : "File")"
+                        data-b12-prop-size="@(item.IsDirectory ? "—" : Model.FormatSize(item.Size))"
+                        data-b12-prop-modified="@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")">Properties</button>
                     </div>
                   </details>
                 </td>
