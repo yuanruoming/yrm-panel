@@ -344,10 +344,17 @@
         if (!response.ok) throw new Error(`Request failed (HTTP ${response.status}).`);
         const data=await response.json();
         if (!data || typeof data.ok!=='boolean') throw new Error('Invalid DDNS response.');
+        const failures=[];
         for (const record of (Array.isArray(data.records)?data.records:[])) {
           const row=Array.from(group?.querySelectorAll('[data-b9-ddns-record]')||[])
             .find(el=>el.dataset.b9DdnsRecord===record.id);
           if (!row)continue;
+          if (/^(failed|error)/i.test(record.status||'')) {
+            failures.push({
+              family:row.closest('td')?.cellIndex===2?'ipv4':'ipv6',
+              message:record.status
+            });
+          }
           const ip=row.querySelector('[data-b9-ddns-ip]');
           if (ip) ip.textContent=record.ipSource==='disabled'?'Disabled':record.ip||'Not checked';
           const marker=row.querySelector('[data-b11-family-state]');
@@ -372,16 +379,25 @@
         }
         if (status) {status.textContent=data.ok?'Normal':'Failed';status.dataset.b10State=data.ok?'normal':'failed';}
         if(!data.ok) {
-          window.dispatchEvent(new CustomEvent('yrm:notification',{detail:{
-            kind:'ddns',severity:'error',title:'DDNS update failed',
-            source:group?.dataset.b9DdnsProvider+' · '+group?.dataset.b9DdnsHostname,
-            message:data.message||'Provider update failed.'
-          }}));
+          // Prefer individual A / AAAA events instead of one duplicate group event.
+          for (const failure of (failures.length?failures:[{
+            family:'group',message:data.message||'Provider update failed.'
+          }])) {
+            window.dispatchEvent(new CustomEvent('yrm:notification',{detail:{
+              kind:'ddns',severity:'error',title:'DDNS update failed',
+              provider:group?.dataset.b9DdnsProvider,
+              domain:group?.dataset.b9DdnsHostname,family:failure.family,
+              source:group?.dataset.b9DdnsProvider+' · '+group?.dataset.b9DdnsHostname,
+              message:failure.message
+            }}));
+          }
         }
       } catch (err) {
         if (status) {status.textContent='Unavailable';status.dataset.b10State='unavailable';}
         window.dispatchEvent(new CustomEvent('yrm:notification',{detail:{
           kind:'ddns',severity:'error',title:'DDNS update unavailable',
+          provider:group?.dataset.b9DdnsProvider,
+          domain:group?.dataset.b9DdnsHostname,family:'group',
           source:group?.dataset.b9DdnsProvider+' · '+group?.dataset.b9DdnsHostname,
           message:String(err.message||err)
         }}));
@@ -599,4 +615,44 @@
   const selectObserver=new MutationObserver(initializeSelects);
   selectObserver.observe(document.body,{childList:true,subtree:true});
   initializeSelects();
+})();
+
+/* UI-only firewall scope explanations; enforcement remains in the existing host helper. */
+(() => {
+  'use strict';
+  function syncFirewallHelp() {
+    const dialog=document.getElementById('yrm-b11-fw-dialog');
+    if (!dialog) return;
+    const fields=dialog.querySelector('.yrm-b11-fw-fields');
+    if (!fields) return;
+    let note=dialog.querySelector('.yrm-ui-firewall-note');
+    if(!note){
+      note=document.createElement('p');
+      note.className='yrm-ui-firewall-note';
+      fields.insertAdjacentElement('afterend',note);
+    }
+    const scope=dialog.querySelector('[data-b11-fw-field="scope"]')?.value || 'host';
+    note.textContent=scope==='docker'
+      ? 'Docker: filtered with IPv4 iptables when supported, not ordinary UFW INPUT. This is not a general outbound rule.'
+      : 'Host: UFW host inbound rules. Docker published ports may use another path; this rule does not promise to cover them.';
+  }
+  document.addEventListener('change', e => {
+    if(e.target instanceof Element && e.target.closest('#yrm-b11-fw-dialog')) syncFirewallHelp();
+  }, true);
+  document.addEventListener('click', e => {
+    if(e.target instanceof Element && e.target.closest('[data-b11-fw-add],[data-b11-fw-edit]')) {
+      queueMicrotask(syncFirewallHelp);
+    }
+  }, true);
+  // Page contents are replaced by the desktop SPA. Avoid rebinding listeners per page.
+  const observer=new MutationObserver(mutations=>{
+    if(mutations.some(m=>[...m.addedNodes].some(node=>node instanceof Element &&
+         (node.id==='yrm-b11-fw-dialog' || node.querySelector?.('#yrm-b11-fw-dialog'))))) {
+      syncFirewallHelp();
+    }
+  });
+  const start=()=>{ observer.observe(document.getElementById('window-page')||document.body,
+    {childList:true,subtree:true}); syncFirewallHelp(); };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded', start, {once:true});
+  else start();
 })();

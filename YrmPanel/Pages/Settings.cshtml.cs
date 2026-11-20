@@ -88,6 +88,7 @@ public sealed class SettingsModel : PageModel
         : _accounts.Username;
     public bool HasWallpaper => _settings.GetWallpaper() is not null;
     public long WallpaperVersion => _settings.WallpaperVersion;
+    public IReadOnlyList<PanelSettingsStore.WallpaperHistoryItem> WallpaperHistory => _settings.ListWallpaperHistory();
     public IReadOnlyList<SystemdServiceState> Services { get; private set; } = [];
     public SambaOverview Sharing { get; private set; } = new(false, "Samba is unavailable.", "", false, []);
     public UpdateProgress UpdateStatus => _updates.Progress;
@@ -567,6 +568,47 @@ public sealed class SettingsModel : PageModel
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             Notice = "Error: Cannot save the wallpaper in the Panel data directory.";
+        }
+        return RedirectToPage(new { tab = "appearance" });
+    }
+
+    public IActionResult OnGetWallpaperHistoryImage(string? id)
+    {
+        var history = _settings.FindWallpaperHistoryImage(id);
+        if (history is null) return NotFound();
+        try
+        {
+            Response.Headers["Cache-Control"] = "private, max-age=600";
+            return File(System.IO.File.OpenRead(history.Value.Path), history.Value.Mime);
+        }
+        catch (IOException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return NotFound(); }
+    }
+
+    public async Task<IActionResult> OnPostRestoreWallpaperHistoryAsync(string? id)
+    {
+        try
+        {
+            await _settings.RestoreWallpaperHistoryAsync(id);
+            Notice = "Wallpaper restored from history.";
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            Notice = "Error: Could not restore this wallpaper.";
+        }
+        return RedirectToPage(new { tab = "appearance" });
+    }
+
+    public async Task<IActionResult> OnPostDeleteWallpaperHistoryAsync(string? id)
+    {
+        try
+        {
+            await _settings.DeleteWallpaperHistoryAsync(id);
+            Notice = "Wallpaper history item deleted.";
+        }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
+        {
+            Notice = "Error: Could not delete this wallpaper history item.";
         }
         return RedirectToPage(new { tab = "appearance" });
     }

@@ -447,7 +447,7 @@
           }
           <form id="v1-firewall-form" method="post" asp-page-handler="Firewall" asp-route-tab="security" asp-route-section="firewall" data-requires-admin="Save &amp; Apply firewall rule changes">
             <div class="yrm-b11-fw-top">
-              <div><strong>Host Firewall</strong><small>Ubuntu UFW · Rules are applied only when you save.</small></div>
+              <div><strong>Firewall</strong><small>Host: UFW · Docker: separate supported IPv4 iptables rules · Changes apply when saved.</small></div>
               <label class="yrm-b11-fw-status">Firewall<select name="firewallEnabled" aria-label="Firewall status">
                 <option value="true" selected="@Model.Firewall.Active">Active</option>
                 <option value="false" selected="@(!Model.Firewall.Active)">Inactive</option>
@@ -547,6 +547,34 @@
         </div>
         <p id="wallpaper-selection-name" class="muted wallpaper-helper">JPEG, PNG or WebP · Up to 8 MB</p>
         <p class="muted wallpaper-helper">The login background stays system-wide and does not expose your desktop wallpaper.</p>
+        @if (Model.WallpaperHistory.Count > 0)
+        {
+          <div class="yrm-ui-wallpaper-history">
+            <h4>Wallpaper History</h4>
+            <p class="muted">Previous desktop wallpapers are kept in the existing Panel data folder (up to 10).</p>
+            <div class="yrm-ui-history-list">
+              @foreach (var history in Model.WallpaperHistory)
+              {
+                <div class="yrm-ui-history-row">
+                  <img src="@Url.Page("/Settings", "WallpaperHistoryImage", new { id = history.Id })" alt="Saved desktop wallpaper" loading="lazy" />
+                  <div class="history-info"><strong>@history.SavedUtc.ToLocalTime().ToString("dd MMM yyyy HH:mm")</strong>
+                    <small>@((history.SizeBytes / 1048576d).ToString("0.0")) MiB</small></div>
+                  <div class="yrm-ui-history-actions">
+                    <form method="post" asp-page-handler="RestoreWallpaperHistory" asp-route-tab="appearance">
+                      <input type="hidden" name="id" value="@history.Id" />
+                      <button type="submit" class="button button-secondary">Restore</button>
+                    </form>
+                    <form method="post" asp-page-handler="DeleteWallpaperHistory" asp-route-tab="appearance"
+                      data-confirm="Delete this saved wallpaper from history?">
+                      <input type="hidden" name="id" value="@history.Id" />
+                      <button type="submit" class="button button-secondary">Delete</button>
+                    </form>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
       </section>
     }
     else if (activeTab == "about")

@@ -108,6 +108,91 @@ public sealed class PanelSettingsStore
         File.Move(temp, _settingsPath, true);
     }
 
+    public sealed record WallpaperHistoryItem(string Id, string Mime, long SizeBytes, DateTime SavedUtc);
+
+    private string WallpaperHistoryRoot => Path.Combine(_root, "wallpaper-history");
+
+    private static string WallpaperMime(string extension) => extension.ToLowerInvariant() switch
+    {
+        ".png" => "image/png",
+        ".jpg" => "image/jpeg",
+        ".webp" => "image/webp",
+        _ => "application/octet-stream"
+    };
+
+    // Only archive files managed in the existing Panel data directory.
+    // No new database, symlink traversal or arbitrary filesystem paths.
+    public IReadOnlyList<WallpaperHistoryItem> ListWallpaperHistory()
+    {
+        try
+        {
+            if (!Directory.Exists(WallpaperHistoryRoot)) return [];
+            return Directory.EnumerateFiles(WallpaperHistoryRoot)
+                .Where(path => IsWallpaperHistoryId(Path.GetFileName(path)))
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .Take(10)
+                .Select(path => new FileInfo(path))
+                .Select(file => new WallpaperHistoryItem(file.Name,
+                    WallpaperMime(file.Extension), file.Length, file.LastWriteTimeUtc))
+                .ToArray();
+        }
+        catch (IOException) { return []; }
+        catch (UnauthorizedAccessException) { return []; }
+    }
+
+    private static bool IsWallpaperHistoryId(string? id) =>
+        !string.IsNullOrEmpty(id) && System.Text.RegularExpressions.Regex.IsMatch(id,
+            @"^[0-9]{17}-[a-f0-9]{32}\.(jpg|png|webp)$",
+            System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    public (string Path, string Mime)? FindWallpaperHistoryImage(string? id)
+    {
+        if (!IsWallpaperHistoryId(id)) return null;
+        var path = Path.Combine(WallpaperHistoryRoot, id!);
+        return File.Exists(path) ? (path, WallpaperMime(Path.GetExtension(path))) : null;
+    }
+
+    private string? ArchiveCurrentWallpaper()
+    {
+        var current = GetWallpaper();
+        if (current is null) return null;
+        Directory.CreateDirectory(WallpaperHistoryRoot);
+        var extension = Path.GetExtension(current.Value.path);
+        var id = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff",
+            System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + extension;
+        var archive = Path.Combine(WallpaperHistoryRoot, id);
+        File.Copy(current.Value.path, archive, overwrite: false);
+        if (OperatingSystem.IsLinux()) File.SetUnixFileMode(archive,
+            UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        foreach (var old in Directory.EnumerateFiles(WallpaperHistoryRoot)
+            .Where(p => IsWallpaperHistoryId(Path.GetFileName(p)))
+            .OrderByDescending(File.GetLastWriteTimeUtc).Skip(10))
+            File.Delete(old);
+        return archive;
+    }
+
+    public async Task RestoreWallpaperHistoryAsync(string? id)
+    {
+        var image = FindWallpaperHistoryImage(id)
+            ?? throw new InvalidOperationException("Wallpaper history item is unavailable.");
+        var bytes = await File.ReadAllBytesAsync(image.Path);
+        using var stream = new MemoryStream(bytes);
+        await SetWallpaperAsync(stream, bytes.Length);
+    }
+
+    public async Task DeleteWallpaperHistoryAsync(string? id)
+    {
+        if (!IsWallpaperHistoryId(id))
+            throw new InvalidOperationException("Invalid wallpaper history item.");
+        await _gate.WaitAsync();
+        try
+        {
+            var image = FindWallpaperHistoryImage(id);
+            if (image is not null) File.Delete(image.Value.Path);
+        }
+        finally { _gate.Release(); }
+    }
+
     public (string path, string mime)? GetWallpaper()
     {
         foreach (var (extension, mime) in new[] {
@@ -143,9 +228,19 @@ public sealed class PanelSettingsStore
             await File.WriteAllBytesAsync(temp, bytes);
             if (OperatingSystem.IsLinux()) File.SetUnixFileMode(temp,
                 UnixFileMode.UserRead | UnixFileMode.UserWrite);
-            foreach (var ext in new[] { "jpg", "png", "webp" })
-                File.Delete(Path.Combine(_root, $"wallpaper.{ext}"));
-            File.Move(temp, Path.Combine(_root, $"wallpaper.{extension}"));
+            var archived = ArchiveCurrentWallpaper();
+            try
+            {
+                foreach (var ext in new[] { "jpg", "png", "webp" })
+                    File.Delete(Path.Combine(_root, $"wallpaper.{ext}"));
+                File.Move(temp, Path.Combine(_root, $"wallpaper.{extension}"));
+            }
+            catch
+            {
+                if (archived is not null && File.Exists(archived) && GetWallpaper() is null)
+                    File.Copy(archived, Path.Combine(_root, "wallpaper" + Path.GetExtension(archived)));
+                throw;
+            }
         }
         finally { _gate.Release(); }
     }
@@ -155,6 +250,7 @@ public sealed class PanelSettingsStore
         await _gate.WaitAsync();
         try
         {
+            ArchiveCurrentWallpaper();
             foreach (var ext in new[] { "jpg", "png", "webp" })
                 File.Delete(Path.Combine(_root, $"wallpaper.{ext}"));
         }

@@ -49,7 +49,6 @@
         }
         @if (Model.QuickAccess.Count == 0) { <small class="muted yrm-b10-quick-empty">Pin folders from More.</small> }
       </div>
-      <div class="yrm-b10-nav-divider"></div>
       <details class="fm-system-nav" data-persist-disclosure="yrm-panel:system-files-open">
         <summary><svg class="ui-icon"><use href="#i-harddrive"/></svg> System Files</summary>
         <a class="fm-location-link @(!Model.IsMyFolders && Model.Path == "" ? "is-active" : "")"

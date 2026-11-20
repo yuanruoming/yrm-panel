@@ -237,7 +237,8 @@
           void setTaskbarPin(id,!taskbarPins.includes(id));});
       }
       pin.title=taskbarPins.includes(id)?"Unpin from Taskbar":"Pin to Taskbar";
-      pin.textContent=taskbarPins.includes(id)?"◆":"◇";
+      pin.classList.toggle('is-pinned',taskbarPins.includes(id));
+      pin.innerHTML='<svg class="ui-icon" aria-hidden="true"><use href="#i-pin"></use></svg>';
       pin.setAttribute("aria-label",pin.title);
     });
   }
@@ -426,9 +427,26 @@
     const source=String(detail.source||'YRM Panel').slice(0,120);
     // Error details are supplied by the Panel, not arbitrary HTML. Redact common credential patterns.
     const message=String(detail.message||'Operation failed').replace(/((?:password|token|secret|api[_-]?key)\s*[:=]\s*)[^\s,&]+/ig,'$1[redacted]').slice(0,700);
-    const existing=notifications.find(n=>n.title===title&&n.source===source&&n.message===message);
-    if(existing)return; // Repeated DDNS checks should not flood the history.
-    notifications.unshift({title,source,message,time:Date.now(),read:!notificationDrawer.hidden});
+     const kind=String(detail.kind||'system').toLowerCase().slice(0,32);
+     const split=source.split(' · ');
+     const provider=String(detail.provider||split[0]||'').trim().toLowerCase();
+     const domain=String(detail.domain||split[1]||'').trim().toLowerCase();
+     const family=String(detail.family||detail.ipFamily||'all').toLowerCase();
+     // A DDNS retry updates the same provider/domain/family event, even if the error text changes.
+     // Unrelated system messages retain a message-specific identity.
+     const key=kind==='ddns'
+       ? ['ddns',title.toLowerCase(),provider,domain,family].join('|')
+       : [kind,title.toLowerCase(),source.toLowerCase(),message].join('|');
+     const existing=notifications.find(n=>n.key===key ||
+       (!n.key && n.title===title && n.source===source && n.message===message));
+     if(existing){
+       if(existing.message===message)return;
+       existing.key=key;existing.message=message;existing.time=Date.now();
+       existing.read=!notificationDrawer.hidden;
+       notifications=[existing,...notifications.filter(n=>n!==existing)];
+       saveNotifications();renderNotifications();return;
+     }
+     notifications.unshift({key,title,source,message,time:Date.now(),read:!notificationDrawer.hidden});
     notifications=notifications.slice(0,30);saveNotifications();renderNotifications();
   }
   window.addEventListener('yrm:notification',event=>pushNotification(event.detail));
@@ -437,7 +455,10 @@
       const error=record.querySelector('[data-b9-ddns-error]')?.textContent.trim();
       if(!error)return;
       const row=record.closest('[data-b9-ddns-provider]');
-      pushNotification({title:'DDNS update failed',
+       pushNotification({kind:'ddns',title:'DDNS update failed',
+        provider:row?.dataset.b9DdnsProvider||'Provider',
+        domain:row?.dataset.b9DdnsHostname||'Domain',
+        family:record.closest('td')?.cellIndex===2?'ipv4':'ipv6',
         source:`${row?.dataset.b9DdnsProvider||'Provider'} · ${row?.dataset.b9DdnsHostname||'Domain'}`,
         message:error});
     });
