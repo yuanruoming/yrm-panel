@@ -35,7 +35,7 @@ class Beta121Contracts(unittest.TestCase):
         self.assertIn('createPinnedTaskbarApp',js)
         self.assertIn('taskbarPins',js)
     def test_no_new_bespoke_helper_or_system_changes(self):
-        # This overlay only changes presentation and client behavior.
-        self.assertIn('<Version>1.0.0-beta.12.1</Version>',read('YrmPanel/YrmPanel.csproj'))
+        # Keep the existing BETA12.2 series; UI consolidation is not a new Beta.
+        self.assertIn('<Version>1.0.0-beta.12.2</Version>',read('YrmPanel/YrmPanel.csproj'))
 
 if __name__=='__main__': unittest.main()
