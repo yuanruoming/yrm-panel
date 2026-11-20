@@ -1,10 +1,15 @@
-"""BETA10 source contracts and non-destructive tests. Not a Linux integration test."""
+"""BETA10 feature contracts retained across later UI implementations.
+
+These are non-destructive source checks, not Linux integration tests.
+"""
 import pathlib
+import re
 import shutil
 import subprocess
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
 
 def source(path):
     return (ROOT / path).read_text(encoding='utf-8')
@@ -65,16 +70,47 @@ class ProductContracts(unittest.TestCase):
         self.assertIn('<summary>Update details</summary>', ui)
 
     def test_maximize_aligns_with_real_topbar(self):
+        """Test the current geometry, not a removed BETA10 CSS implementation.
+
+        In BETA12.1 the fixed workspace begins beneath the topbar. A maximized
+        window fills the workspace, rather than repeating a viewport subtraction.
+        """
         css = source('YrmPanel/wwwroot/css/v1-stability.css')
-        self.assertIn('padding:49px 0 0!important', css)
-        self.assertIn('height:calc(100dvh - 49px)!important', css)
+        desktop = source('YrmPanel/wwwroot/css/desktop.css')
+
+        # The last matching topbar height is the most recent declared override.
+        topbar_rules = re.findall(r'\.os-topbar\s*\{([^{}]*)\}', desktop)
+        heights = [int(height) for rule in topbar_rules
+                   for height in re.findall(r'(?<![\w-])height\s*:\s*(\d+)px\b', rule)]
+        self.assertTrue(heights, 'Topbar must declare a pixel height')
+        topbar_height = heights[-1]
+
+        stage = re.search(r'\.workspace-stage\s*\{([^{}]*)\}', css)
+        self.assertIsNotNone(stage, 'Workspace positioning rule is missing')
+        stage_css = stage.group(1)
+        self.assertRegex(stage_css, r'\bposition\s*:\s*fixed\s*!important')
+        inset = re.search(r'(?<![\w-])inset\s*:\s*(\d+)px\s+0\s+0\s*!important', stage_css)
+        self.assertIsNotNone(inset, 'Workspace must be inset below the taskbar')
+        self.assertEqual(int(inset.group(1)), topbar_height,
+                         'Workspace must start at the bottom of the topbar')
+        self.assertRegex(stage_css, r'(?<![\w-])padding\s*:\s*0\s*!important')
+
+        maximized = re.search(
+            r'\.workspace-stage\s*>\s*\.workspace-window\.is-maximized\s*\{([^{}]*)\}', css)
+        self.assertIsNotNone(maximized, 'Maximized workspace window rule is missing')
+        max_css = maximized.group(1)
+        self.assertRegex(max_css, r'(?<![\w-])top\s*:\s*0\s*!important')
+        self.assertRegex(max_css, r'(?<![\w-])left\s*:\s*0\s*!important')
+        self.assertRegex(max_css, r'(?<![\w-])width\s*:\s*100%\s*!important')
+        self.assertRegex(max_css, r'(?<![\w-])height\s*:\s*100%\s*!important')
         self.assertNotIn('height:calc(100dvh - 74px)!important', css)
 
     @unittest.skipUnless(shutil.which('node'), 'Node.js not available')
     def test_frontend_syntax(self):
         js = ROOT / 'YrmPanel/wwwroot/js/v1-stability.js'
-        result = subprocess.run(['node','--check',str(js)], capture_output=True, text=True)
+        result = subprocess.run(['node', '--check', str(js)], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == '__main__':
     unittest.main()
