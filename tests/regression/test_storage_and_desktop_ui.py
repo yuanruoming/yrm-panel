@@ -21,7 +21,7 @@ class ProductContracts(unittest.TestCase):
         view = source('YrmPanel/Pages/Settings.cshtml')
         self.assertNotIn('("services", "Services",', view)
         self.assertNotIn('("sharing", "File Sharing",', view)
-        self.assertIn('asp-page-handler="DdnsGroupCheck"', view)
+        self.assertIn('asp-page-handler="DdnsUpdateAll"', view)
 
     def test_storage_uses_subpages_and_never_lists_optical_media_as_volume(self):
         view = source('YrmPanel/Pages/Settings.cshtml')

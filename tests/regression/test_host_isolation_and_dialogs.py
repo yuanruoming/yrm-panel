@@ -53,8 +53,8 @@ class DdnsAndDialogs(unittest.TestCase):
         self.assertIn('GroupBy(p => new { Provider',ui)
         self.assertIn('asp-page-handler="DdnsEditGroup"',ui)
         self.assertNotIn('Test & Update',ui)
-        self.assertIn('Update Now',ui)
-        self.assertIn('asp-page-handler="DdnsGroupCheck"',ui)
+        self.assertIn('>Update</button>',ui)
+        self.assertIn('asp-page-handler="DdnsUpdateAll"',ui)
     def test_one_custom_confirmation_for_all_forms(self):
         ui=source('YrmPanel/Pages/Shared/_Layout.cshtml')
         js=source('YrmPanel/wwwroot/js/v1-confirm.js')

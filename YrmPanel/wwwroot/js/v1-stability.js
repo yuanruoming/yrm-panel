@@ -436,111 +436,177 @@
   storageTabObserver.observe(document.body,{childList:true,subtree:true});
   restoreStorageTab();
 
-  /* BETA11: a single firewall list + edit dialog. The existing v1-settings
-     form remains authoritative: its original hidden draft rows serialize
-     and validate the rules, and the server still controls UFW rollback. */
+  /* Unified firewall editor: one table, one dialog, one Save/Cancel draft.
+     Real enforcement is delegated to FirewallService and the privileged helper. */
   let currentFwRoot=null,editingFwRow=null,newFwRow=false,fwOldDirty='';
   const firewallRoot=()=>get('v1-firewall-rules');
-  const ruleFields=['scope','action','port','protocol','source'];
+  const ruleFields=['scope','direction','action','port','protocol','source','remarks'];
   const ruleValue=(row,key)=>row?.querySelector(`[data-fw="${key}"]`)?.value||'';
+  const showName={allow:'Allow',deny:'Deny',lan:'LAN only'};
   function paintFirewall(){
-    const body=get('yrm-b11-fw-body'),root=firewallRoot();
-    if (!body || !root)return;
-    const rows=Array.from(root.querySelectorAll('.v1-firewall-row'));
+    const body=get('yrm-b11-fw-body'),root=firewallRoot();if(!body||!root)return;
+    const rows=[...root.querySelectorAll('.v1-firewall-row')];
     const fragment=document.createDocumentFragment();
-    if(!rows.length){const tr=document.createElement('tr');const td=document.createElement('td');
-      td.colSpan=6;td.className='yrm-b11-empty';td.textContent='No firewall rules configured.';tr.append(td);fragment.append(tr);}
+    if(rows.length===0){const tr=document.createElement('tr'),td=document.createElement('td');
+      td.colSpan=6;td.className='yrm-b11-empty';td.textContent='No firewall rules configured.';
+      tr.append(td);fragment.append(tr);}
     for(const [index,row] of rows.entries()){
-      const tr=document.createElement('tr');
-      for(const key of ruleFields){
-        const td=document.createElement('td');td.textContent=ruleValue(row,key)||'—';
-        if(key==='action')td.className='yrm-b11-fw-action '+(ruleValue(row,key)==='deny'?'is-deny':'is-allow');
+      const tr=document.createElement('tr');tr.className='yrm-fw-table-row';tr.tabIndex=0;
+      tr.dataset.b11FwEdit=String(index);tr.setAttribute('aria-label',`Edit firewall rule ${index+1}`);
+      const cols=[ruleValue(row,'direction')||'inbound',ruleValue(row,'port'),
+        ruleValue(row,'protocol').toUpperCase(),ruleValue(row,'source')||'Any',
+        showName[ruleValue(row,'action')]||ruleValue(row,'action'),ruleValue(row,'remarks')];
+      for(const [i,value] of cols.entries()){
+        const td=document.createElement('td');td.textContent=value||'—';
+        if(i===4)td.className='yrm-b11-fw-action '+(ruleValue(row,'action')==='deny'?'is-deny':'is-allow');
+        if(i===0)td.textContent=value==='outbound'?'Outbound':'Inbound';
+        if(i===3&&value.toLowerCase()==='any')td.textContent='Any';
+        if(i===5){
+          td.className='yrm-fw-remark';
+          if(ruleValue(row,'scope')==='docker'){
+            const tag=document.createElement('small');tag.className='yrm-fw-legacy-badge';tag.textContent='Docker';
+            td.append(' ',tag);
+          }
+          const icon=document.createElement('span');icon.className='yrm-fw-row-edit';
+          icon.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 17-.5 3.5L7 20l11-11-3-3L4 17Zm9-10 3 3"/></svg>';
+          td.append(icon);
+        }
         tr.append(td);
       }
-      const td=document.createElement('td');td.className='yrm-b11-fw-row-actions';
-      const edit=document.createElement('button');edit.type='button';edit.className='yrm-b11-icon-action';edit.textContent='Edit';edit.dataset.b11FwEdit=String(index);
-      const remove=document.createElement('button');remove.type='button';remove.className='yrm-b11-icon-action is-delete';remove.textContent='Delete';remove.dataset.b11FwDelete=String(index);
-      td.append(edit,remove);tr.append(td);fragment.append(tr);
+      fragment.append(tr);
     }
     body.replaceChildren(fragment);
   }
   function initializeFirewall(){
     const root=firewallRoot();if(!root||root===currentFwRoot)return;
     currentFwRoot=root;
-    // v1-settings may finish generating initial draft rows in an earlier
-    // MutationObserver callback. Delay the first paint until that completes.
     new MutationObserver(paintFirewall).observe(root,{childList:true,subtree:true});
+    const checkbox=get('yrm-fw-enabled');
+    checkbox?.addEventListener('change',()=>{
+      const label=get('yrm-fw-status-text');if(label)label.textContent=checkbox.checked?'On':'Off';
+      const note=get('v1-fw-dirty');if(note)note.textContent='Unsaved changes';
+    });
     queueMicrotask(paintFirewall);
   }
-  function fwDialog(){return get('yrm-b11-fw-dialog');}
+  const fwDialog=()=>get('yrm-b11-fw-dialog');
   function closeFwEditor(){
     if(newFwRow&&editingFwRow?.isConnected){
       editingFwRow.querySelector('button.mini-button')?.click();
-      const dirty=get('v1-fw-dirty');if(dirty)dirty.textContent=fwOldDirty;
+      const note=get('v1-fw-dirty');if(note)note.textContent=fwOldDirty;
     }
     editingFwRow=null;newFwRow=false;
-    fwDialog()?.close();
-    paintFirewall();
+    if(fwDialog()?.open)fwDialog().close();paintFirewall();
+  }
+  function syncFwEditor(){
+    const dialog=fwDialog();if(!dialog)return;
+    const direction=dialog.querySelector('[data-b11-fw-field="direction"]')?.value||'inbound';
+    const scope=dialog.querySelector('[data-b11-fw-field="scope"]')?.value||'host';
+    const label=dialog.querySelector('[data-b11-fw-address-label]');
+    if(label)label.textContent=direction==='outbound'?'Destination IP / CIDR':'Source IP / CIDR';
+    const action=dialog.querySelector('[data-b11-fw-field="action"]');
+    if(action){
+      const option=action.querySelector('option[value="lan"]');if(option)option.disabled=scope!=='docker';
+      if(action.value==='lan'&&scope!=='docker'){action.value='allow';action.dispatchEvent(new Event('change'));}
+    }
+    const warning=dialog.querySelector('.yrm-fw-backend-warning');
+    if(warning)warning.hidden=scope!=='docker';
   }
   function openFwEditor(row,isNew){
     const dialog=fwDialog();if(!(dialog instanceof HTMLDialogElement)||!row)return;
     editingFwRow=row;newFwRow=isNew;
-    const title=get('yrm-b11-fw-title');if(title)title.textContent=isNew?'Add Firewall Rule':'Edit Firewall Rule';
+    const title=get('yrm-b11-fw-title');if(title)title.textContent=isNew?'Add Rule':'Edit Rule';
     for(const key of ruleFields){
       const input=dialog.querySelector(`[data-b11-fw-field="${key}"]`);
-      if(input){input.value=ruleValue(row,key);input.dispatchEvent(new Event('change',{bubbles:true}));}
+      if(input){input.value=ruleValue(row,key)||(key==='direction'?'inbound':'');
+        input.dispatchEvent(new Event('change',{bubbles:true}));}
     }
-    const src=ruleValue(row,'source')||'any';
-    const sourceMode=dialog.querySelector('[data-b11-fw-source-mode]');
-    const sourceField=dialog.querySelector('[data-b11-fw-field="source"]');
-    if(sourceMode) sourceMode.value=src.toLowerCase()==='any'?'any':'custom';
-    if(sourceField){sourceField.value=src.toLowerCase()==='any'?'':src;sourceField.disabled=src.toLowerCase()==='any';}
+    const source=ruleValue(row,'source')||'any';
+    const mode=dialog.querySelector('[data-b11-fw-source-mode]');
+    const input=dialog.querySelector('[data-b11-fw-field="source"]');
+    if(mode)mode.value=source.toLowerCase()==='any'?'any':'custom';
+    if(input){input.value=source.toLowerCase()==='any'?'':source;input.disabled=source.toLowerCase()==='any';}
     const error=get('yrm-b11-fw-error');if(error){error.hidden=true;error.textContent='';}
-    if(!dialog.open)dialog.showModal();
+    const del=dialog.querySelector('[data-b11-fw-delete-in-modal]');if(del)del.hidden=isNew;
+    dialog.querySelector('.yrm-fw-rule-advanced')?.removeAttribute('open');
+    syncFwEditor();if(!dialog.open)dialog.showModal();
     dialog.querySelector('[data-b11-fw-field="port"]')?.focus();
   }
   document.addEventListener('change',event=>{
-    const select=event.target instanceof Element?event.target.closest('[data-b11-fw-source-mode]'):null;
-    if(!select)return;
-    const field=select.closest('dialog')?.querySelector('[data-b11-fw-field="source"]');
-    if(field){field.disabled=select.value==='any';if(field.disabled)field.value='';}
+    const input=event.target instanceof Element?event.target:null;if(!input)return;
+    const mode=input.closest('[data-b11-fw-source-mode]');
+    if(mode){const target=mode.closest('dialog')?.querySelector('[data-b11-fw-field="source"]');
+      if(target){target.disabled=mode.value==='any';if(target.disabled)target.value='';}}
+    if(input.closest('[data-b11-fw-field="direction"],[data-b11-fw-field="scope"]'))syncFwEditor();
   },true);
   document.addEventListener('click',event=>{
-    const node=event.target instanceof Element?event.target:null;
-    if(!node)return;
+    const node=event.target instanceof Element?event.target:null;if(!node)return;
     if(node.closest('[data-b11-fw-add]')){
-      const root=firewallRoot();if(!root)return;
-      if(root.querySelectorAll('.v1-firewall-row').length>=50)return;
+      const root=firewallRoot();if(!root||root.querySelectorAll('.v1-firewall-row').length>=50)return;
       fwOldDirty=get('v1-fw-dirty')?.textContent||'';
       get('v1-firewall-form')?.querySelector('[data-fw-add]')?.click();
-      const row=root.querySelector('.v1-firewall-row:last-child');
-      openFwEditor(row,true);return;
+      openFwEditor(root.querySelector('.v1-firewall-row:last-child'),true);return;
     }
     const edit=node.closest('[data-b11-fw-edit]');
     if(edit){openFwEditor(firewallRoot()?.querySelectorAll('.v1-firewall-row')[Number(edit.dataset.b11FwEdit)],false);return;}
-    const remove=node.closest('[data-b11-fw-delete]');
-    if(remove){firewallRoot()?.querySelectorAll('.v1-firewall-row')[Number(remove.dataset.b11FwDelete)]?.querySelector('button.mini-button')?.click();paintFirewall();return;}
     if(node.closest('[data-b11-fw-cancel]')){closeFwEditor();return;}
+    if(node.closest('[data-b11-fw-discard]')){
+      window.dispatchEvent(new CustomEvent('yrm:firewall-restore'));paintFirewall();return;
+    }
+    if(node.closest('[data-b11-fw-delete-in-modal]')){
+      if(editingFwRow?.isConnected)editingFwRow.querySelector('button.mini-button')?.click();
+      editingFwRow=null;newFwRow=false;fwDialog()?.close();paintFirewall();return;
+    }
     if(node.closest('[data-b11-fw-save]')){
       const d=fwDialog();if(!editingFwRow||!d)return;
       const values={};for(const key of ruleFields)values[key]=d.querySelector(`[data-b11-fw-field="${key}"]`)?.value.trim()||'';
       values.source=d.querySelector('[data-b11-fw-source-mode]')?.value==='any'?'any':values.source;
       const error=get('yrm-b11-fw-error');
-      if(values.source!=='any' && !values.source){
-        if(error){error.textContent='Enter a source IP address or CIDR range.';error.hidden=false;}return;
-      }
-      if(!/^\d{1,5}(?:-\d{1,5})?(?:,\d{1,5}(?:-\d{1,5})?)*$/.test(values.port)){
-        if(error){error.textContent='Enter a valid port, list (80,443), or range (20-442).';error.hidden=false;}return;
-      }
+      const invalid=msg=>{if(error){error.hidden=false;error.textContent=msg;}return;};
+      if(values.source!=='any'&&!values.source)return invalid('Enter an IP address or CIDR range.');
+      const portPattern=/^\d{1,5}(?:-\d{1,5})?(?:,\d{1,5}(?:-\d{1,5})?)*$/;
+      if(!portPattern.test(values.port))return invalid('Enter a port, list (80,443), or range (20-442).');
+      if(values.port.split(',').some(segment=>{const [start,end=start]=segment.split('-').map(Number);return start<1||end>65535||start>end;}))
+        return invalid('Port must be between 1 and 65535.');
+      if(values.scope==='docker'&&values.direction==='outbound')return invalid('Docker outbound is not supported.');
+      if(values.scope==='host'&&values.action==='lan')return invalid('LAN only applies to Docker. Use an IP range for Ubuntu.');
+      if(values.scope==='docker'&&values.source!=='any')return invalid('Docker uses a preset LAN scope and Any IP.');
       for(const key of ruleFields){const original=editingFwRow.querySelector(`[data-fw="${key}"]`);
         if(original){original.value=values[key]||(key==='source'?'any':'');original.dispatchEvent(new Event('input',{bubbles:true}));}}
       editingFwRow=null;newFwRow=false;d.close();paintFirewall();
     }
   },true);
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Enter'&&event.key!==' ')return;
+    const row=event.target instanceof Element?event.target.closest('.yrm-fw-table-row'):null;
+    if(row){event.preventDefault();row.click();}
+  },true);
   document.addEventListener('cancel',event=>{if(event.target===fwDialog()){event.preventDefault();closeFwEditor();}},true);
   const fwObserver=new MutationObserver(initializeFirewall);
-  fwObserver.observe(document.body,{childList:true,subtree:true});
-  initializeFirewall();
+  fwObserver.observe(document.body,{childList:true,subtree:true});initializeFirewall();
+
+  /* My Files: collapsed by default; only the arrow toggles the folder tree.
+     The label itself always opens the My Files overview. */
+  const myFilesTreeKey='yrm-panel:files-nav-open';
+  function syncMyFilesTree(){
+    const button=document.querySelector('[data-my-files-toggle]');
+    const children=document.getElementById('yrm-my-files-children');
+    if(!button||!children)return;
+    let expanded=false;try{expanded=sessionStorage.getItem(myFilesTreeKey)==='1';}catch{}
+    children.hidden=!expanded;
+    button.setAttribute('aria-expanded',String(expanded));
+    button.setAttribute('aria-label',expanded?'Collapse My Files':'Expand My Files');
+  }
+  document.addEventListener('click',event=>{
+    const button=event.target instanceof Element?event.target.closest('[data-my-files-toggle]'):null;
+    if(!button)return;
+    const expanded=button.getAttribute('aria-expanded')!=='true';
+    const children=document.getElementById('yrm-my-files-children');if(children)children.hidden=!expanded;
+    button.setAttribute('aria-expanded',String(expanded));
+    button.setAttribute('aria-label',expanded?'Collapse My Files':'Expand My Files');
+    try{sessionStorage.setItem(myFilesTreeKey,expanded?'1':'0');}catch{}
+  },true);
+  new MutationObserver(syncMyFilesTree).observe(document.body,{childList:true,subtree:true});
+  syncMyFilesTree();
 
   /* Consistent, keyboard-operable dropdowns in DDNS and firewall editors.
      The original <select> is retained for native form submission and change
@@ -624,42 +690,3 @@
   initializeSelects();
 })();
 
-/* UI-only firewall scope explanations; enforcement remains in the existing host helper. */
-(() => {
-  'use strict';
-  function syncFirewallHelp() {
-    const dialog=document.getElementById('yrm-b11-fw-dialog');
-    if (!dialog) return;
-    const fields=dialog.querySelector('.yrm-b11-fw-fields');
-    if (!fields) return;
-    let note=dialog.querySelector('.yrm-ui-firewall-note');
-    if(!note){
-      note=document.createElement('p');
-      note.className='yrm-ui-firewall-note';
-      fields.insertAdjacentElement('afterend',note);
-    }
-    const scope=dialog.querySelector('[data-b11-fw-field="scope"]')?.value || 'host';
-    note.textContent=scope==='docker'
-      ? 'Docker: filtered with IPv4 iptables when supported, not ordinary UFW INPUT. This is not a general outbound rule.'
-      : 'Host: UFW host inbound rules. Docker published ports may use another path; this rule does not promise to cover them.';
-  }
-  document.addEventListener('change', e => {
-    if(e.target instanceof Element && e.target.closest('#yrm-b11-fw-dialog')) syncFirewallHelp();
-  }, true);
-  document.addEventListener('click', e => {
-    if(e.target instanceof Element && e.target.closest('[data-b11-fw-add],[data-b11-fw-edit]')) {
-      queueMicrotask(syncFirewallHelp);
-    }
-  }, true);
-  // Page contents are replaced by the desktop SPA. Avoid rebinding listeners per page.
-  const observer=new MutationObserver(mutations=>{
-    if(mutations.some(m=>[...m.addedNodes].some(node=>node instanceof Element &&
-         (node.id==='yrm-b11-fw-dialog' || node.querySelector?.('#yrm-b11-fw-dialog'))))) {
-      syncFirewallHelp();
-    }
-  });
-  const start=()=>{ observer.observe(document.getElementById('window-page')||document.body,
-    {childList:true,subtree:true}); syncFirewallHelp(); };
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded', start, {once:true});
-  else start();
-})();

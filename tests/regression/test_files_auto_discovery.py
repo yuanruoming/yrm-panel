@@ -27,5 +27,7 @@ class MyFilesContracts(unittest.TestCase):
     def test_no_duplicate_files_page_heading(self):
         view=source('YrmPanel/Pages/Files.cshtml')
         self.assertNotIn('<h1>Files',view)
-        self.assertIn('<h2>My Files</h2>',view)
+        self.assertIn('class="fm-location-crumb">My Files',view)
+        self.assertNotIn('class="fm-locations-heading">FILES',view)
+        self.assertIn('data-my-files-toggle',view)
 if __name__=='__main__':unittest.main()

@@ -78,7 +78,7 @@
     <a asp-page="/Settings" class="profile-menu-link"><svg class="ui-icon"><use href="#i-settings"/></svg> Settings</a>
     @if (OperatingSystem.IsLinux())
     {
-      <form method="post" asp-page="/Index" asp-page-handler="Reboot" data-requires-admin="Reboot the Linux server" data-confirm="Restart this server now? All connected services will briefly disconnect."><button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-refresh"/></svg> Restart server</button></form>
+      <form method="post" asp-page="/Index" asp-page-handler="Reboot" data-requires-admin="Reboot the Linux server" data-confirm="Restart this server now? All connected services will briefly disconnect."><button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-refresh"/></svg> Restart</button></form>
       <form method="post" asp-page="/Index" asp-page-handler="Shutdown" data-requires-admin="Shut down the Linux server" data-confirm="Shut down this server now? You will need to power it on again to reconnect."><button class="profile-menu-link profile-danger" type="submit"><svg class="ui-icon"><use href="#i-power"/></svg> Shut down</button></form>
     }
     <form method="post" asp-page="/Account/Logout"><button class="profile-menu-link" type="submit"><svg class="ui-icon"><use href="#i-logout"/></svg> Sign out</button></form>

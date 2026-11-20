@@ -464,6 +464,31 @@ public sealed class SettingsModel : PageModel
         return RedirectToPage(new { tab = "ddns" });
     }
 
+    // The toolbar's Update button checks all enabled profiles. This uses the
+    // existing provider updater and changes no DDNS configuration or DNS records
+    // unless an update is actually required by that provider.
+    public async Task<IActionResult> OnPostDdnsUpdateAllAsync()
+    {
+        var profiles = (await _ddns.ListAsync(HttpContext.RequestAborted))
+            .Where(p => p.Enabled && p.IpSource != "disabled")
+            .Take(50).ToArray();
+        if (profiles.Length == 0)
+        {
+            Notice = "No enabled DDNS records to update.";
+            return RedirectToPage(new { tab = "ddns" });
+        }
+        var failed = 0;
+        foreach (var profile in profiles)
+        {
+            var result = await _ddns.UpdateAsync(profile.Id, true, HttpContext.RequestAborted);
+            if (result.Contains("Failed", StringComparison.OrdinalIgnoreCase) ||
+                result.StartsWith("Error:", StringComparison.OrdinalIgnoreCase)) failed++;
+        }
+        Notice = failed > 0 ? $"Error: {failed} of {profiles.Length} DNS records failed. Check the status below."
+            : $"Checked {profiles.Length} DNS records.";
+        return RedirectToPage(new { tab = "ddns" });
+    }
+
     public async Task<IActionResult> OnPostDdnsGroupCheckAsync(string hostname, string provider)
     {
         var profiles = await _ddns.ListAsync(HttpContext.RequestAborted);

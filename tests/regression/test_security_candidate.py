@@ -124,7 +124,7 @@ class FirewallTests(TestCase):
              mock.patch.object(firewall,'ufw_status',return_value=(True,False,'Status: inactive')):
             message=firewall.apply(json.dumps([rule]))
         self.assertIn('applied',message)
-        self.assertEqual(firewall.load(),[dict(rule,port='445')])
+        self.assertEqual(firewall.load(),[dict(rule,port='445',direction='inbound',remarks='')])
         self.assertTrue(any('ufw' in call[0] for call in calls))
 
     def test_reject_duplicate_draft_before_mutation(self):
@@ -191,9 +191,10 @@ class PackageContractTests(TestCase):
 
     def test_firewall_is_in_security_not_network(self):
         razor=(ROOT/'YrmPanel/Pages/Settings.cshtml').read_text()
-        self.assertIn('("security", "Security"',razor)
-        self.assertIn('activeTab == "security"',razor)
-        self.assertIn('Save &amp; Apply',razor)
+        self.assertIn('("security", "Firewall"',razor)
+        self.assertIn('activeTab is "security" or "certificates"',razor)
+        self.assertIn('data-b11-fw-discard',razor)
+        self.assertIn('>Save</button>',razor)
 
     def test_no_arbitrary_root_shell_api(self):
         service=(ROOT/'YrmPanel/Services/PrivilegedCommandService.cs').read_text()

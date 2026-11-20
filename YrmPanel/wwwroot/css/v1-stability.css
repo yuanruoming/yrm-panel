@@ -361,8 +361,35 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 
 /* Flat applications: one navigation rail and one content surface per application.
    Do not wrap grids, tables, or sections in additional decorative cards. */
-.server-settings-content{min-width:0;}
-.settings-rc41{grid-template-columns:205px minmax(0,1fr);gap:22px;}
+/* Two-tone desktop settings: fixed dark navigation, gray working area. */
+.window-page:has(.settings-rc41){padding:0!important;}
+.settings-rc41{display:grid;grid-template-columns:196px minmax(0,1fr);gap:0;min-height:100%;}
+.settings-rc41 .server-settings-nav{background:#181a1d;border-right:1px solid #383b41;padding:15px 10px;align-self:stretch;position:relative;top:auto;}
+.settings-rc41 .settings-nav-link{border-radius:7px;min-height:36px;padding:9px 11px;color:#c5c7ce;}
+.settings-rc41 .settings-nav-link.is-active{background:#343e4c;color:#e6eef8;}
+.settings-rc41 .server-settings-content{min-width:0;background:#2a2c31;padding:18px 23px;}
+.settings-rc41 .yrm-b10-storage-tabs{margin-top:0;}
+.yrm-settings-toolbar,.yrm-app-actions{display:flex;align-items:center;justify-content:flex-end;gap:9px;margin:0 0 14px;}
+.yrm-app-actions .button,.yrm-settings-toolbar .button{margin:0;}
+.yrm-settings-toolbar form{margin:0;}
+.yrm-ddns-header-actions{min-height:36px;}
+.yrm-b11-ddns-table{min-width:550px;}
+.yrm-b11-ddns-table th:nth-child(1){width:18%;}
+.yrm-b11-ddns-table th:nth-child(2){width:30%;}
+.yrm-b11-ddns-table th:nth-child(3),.yrm-b11-ddns-table th:nth-child(4){width:17%;}
+.yrm-b11-ddns-table th:nth-child(5){width:18%;}
+.yrm-b11-ddns-table .yrm-b11-action-row{justify-content:flex-end;}
+.settings-wallpaper-card .v1-wallpaper-preview{display:block;width:100%;height:clamp(185px,31vh,315px);object-fit:cover;border-radius:8px;margin:8px 0 12px;}
+.settings-wallpaper-card .wallpaper-helper{margin:4px 0 8px;}
+.settings-wallpaper-card .yrm-ui-wallpaper-history{margin-top:12px;}
+.settings-update-card .yrm-update-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
+.settings-update-card .yrm-update-overview>div{padding:12px 5px;}
+@media(max-width:850px){
+  .settings-rc41{grid-template-columns:1fr;gap:0;}
+  .settings-rc41 .server-settings-nav{display:flex;flex-wrap:nowrap;overflow-x:auto;min-height:0;border-right:0;border-bottom:1px solid #383b41;padding:8px;}
+  .settings-rc41 .server-settings-content{padding:15px;}
+  .settings-rc41 .settings-nav-link{flex:none;white-space:nowrap;}
+}
 .yrm-flat-panel{background:transparent;border:0;border-radius:0;padding:0;margin:0 0 24px;min-width:0;}
 .yrm-flat-panel h3{margin:0 0 10px;font-size:15px;}
 .yrm-flat-panel form:not(.yrm-b11-action-row form){min-width:0;}
@@ -417,7 +444,25 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-docker-table td,.yrm-docker-table th{border-bottom:1px solid rgba(160,185,209,.15);}
 .yrm-docker-table .action-group{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:nowrap;}
 .yrm-docker-table .action-group form{margin:0;}
-@media(max-width:850px){.settings-rc41{grid-template-columns:1fr;gap:8px}.yrm-flat-files .fm-locations{border-right:0;padding:8px}.yrm-flat-files .fm-content{padding:8px 3px}.yrm-b11-ddns-table{min-width:720px}}
+@media(max-width:850px){.settings-rc41{grid-template-columns:1fr;gap:0}.yrm-flat-files .fm-locations{border-right:0;padding:8px}.yrm-flat-files .fm-content{padding:8px 3px}.yrm-b11-ddns-table{min-width:720px}}
+
+/* The file manager is a work surface, not a nested presentation card. */
+.window-page:has(.yrm-flat-files){padding:0!important;}
+.yrm-flat-files{padding:0!important;}
+.yrm-flat-files .fm-columns{min-height:100%;}
+.yrm-flat-files .fm-locations{padding:14px 9px!important;background:#181a1d;border-right:1px solid #393c42;}
+.yrm-flat-files .fm-content{padding:15px 19px!important;background:#2a2c31;}
+.fm-my-files-header{display:flex;align-items:center;gap:2px;min-width:0;}
+.fm-my-files-header>.fm-location-link{flex:1;min-width:0;}
+.fm-my-files-toggle{background:transparent;color:#b9c7d7;border:0;cursor:pointer;display:grid;place-items:center;width:23px;height:31px;flex:none;border-radius:5px;}
+.fm-my-files-toggle:hover{background:#363b44;}
+.fm-my-files-toggle .ui-icon{width:14px;height:14px;transition:transform .14s;}
+.fm-my-files-toggle[aria-expanded=true] .ui-icon{transform:rotate(90deg);}
+.fm-my-files-children{padding-left:12px;max-height:min(400px,42vh);overflow:auto;}
+.fm-my-files-children[hidden]{display:none!important;}
+.fm-location-crumb{font-weight:600;font-size:14px;color:#e6e8ec;}
+.fm-page-title{margin-bottom:12px;}
+@media(max-width:850px){.yrm-flat-files .fm-locations{padding:8px!important;}.yrm-flat-files .fm-content{padding:12px!important;}}
 
 /* Actual switches: input is still a real semantic form control. */
 .yrm-ddns-editor label.yrm-b11-toggle-line,
@@ -672,26 +717,53 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-notif-trigger:hover, .yrm-notif-trigger[aria-expanded="true"] {
   background: rgba(255,255,255,.14) !important;
 }
-/* Firewall is a single visible list, but its Host and Docker backends remain distinct. */
-.yrm-b11-fw-table { table-layout: fixed; min-width: 650px; width: 100%; }
-.yrm-b11-fw-table th:nth-child(1) { width: 14%; }
-.yrm-b11-fw-table th:nth-child(2) { width: 13%; }
-.yrm-b11-fw-table th:nth-child(3) { width: 20%; }
-.yrm-b11-fw-table th:nth-child(4) { width: 12%; }
-.yrm-b11-fw-table th:nth-child(5) { width: 24%; }
-.yrm-b11-fw-table th:nth-child(6) { width: 17%; }
-.yrm-b11-fw-table td { overflow-wrap: anywhere; vertical-align: middle; }
-.yrm-b11-fw-row-actions { white-space: nowrap; }
-.yrm-b11-fw-fields .yrm-b11-fw-source { grid-column: auto; }
-.yrm-b11-fw-fields .yrm-b11-fw-source-address { grid-column: auto; }
-.yrm-b11-fw-fields input:disabled { opacity: .58; cursor: not-allowed; }
-/* Stable editor columns on desktop; real one-column form on narrow screens. */
-.yrm-b11-fw-dialog { overflow: auto; max-height: calc(100dvh - 28px); width: min(580px,calc(100vw - 28px)); max-width: 580px; }
-.yrm-b11-fw-fields { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px 16px; }
-.yrm-b11-fw-dialog .yrm-b11-select { width: 100%; min-width: 0; }
-.yrm-b11-fw-dialog .yrm-b11-select-toggle { width: 100%; }
-.yrm-b11-fw-table { min-width: 590px; }
-.yrm-ui-firewall-note { margin: 12px 0 0; font-size: 11px; line-height: 1.5; color: #aab0b8; }
+/* Firewall layout: one status, one rule table, one Save/Cancel footer. */
+.yrm-fw-workspace{display:flex;flex-direction:column;min-height:440px;max-width:100%;}
+.yrm-fw-status-line{display:flex;align-items:center;justify-content:space-between;padding:10px 0 17px;border-bottom:1px solid #44474d;gap:14px;}
+.yrm-fw-status-line>strong,.yrm-fw-rules-heading>strong{font-size:15px;color:#e7e9ed;font-weight:600;}
+.yrm-fw-enable{display:flex!important;align-items:center;gap:11px;position:relative;cursor:pointer;color:#d5d8dd!important;font-size:13px!important;}
+.yrm-fw-enable input[type=checkbox]{position:absolute;width:1px;height:1px;opacity:0;}
+.yrm-fw-switch{display:block;width:41px;height:23px;border-radius:22px;background:#50545e;position:relative;transition:background .15s;}
+.yrm-fw-switch::after{content:'';position:absolute;width:17px;height:17px;left:3px;top:3px;border-radius:50%;background:white;transition:transform .15s;}
+.yrm-fw-enable input:checked~.yrm-fw-switch{background:#5496d8;}
+.yrm-fw-enable input:checked~.yrm-fw-switch::after{transform:translateX(18px);}
+.yrm-fw-enable input:focus-visible~.yrm-fw-switch{outline:2px solid #d7edff;outline-offset:3px;}
+.yrm-fw-rules-heading{display:flex;align-items:center;justify-content:space-between;padding:14px 0 11px;gap:12px;}
+.yrm-fw-rule-scroll{flex:1;overflow:auto;min-height:250px;}
+.yrm-b11-fw-table{width:100%;min-width:625px;table-layout:fixed;border-collapse:collapse;}
+.yrm-b11-fw-table th{font-size:11px;white-space:nowrap;color:#b5bdca;background:#30333a;border-top:1px solid #41444d;border-bottom:1px solid #41444d;}
+.yrm-b11-fw-table th:nth-child(1){width:16%;}
+.yrm-b11-fw-table th:nth-child(2){width:12%;}
+.yrm-b11-fw-table th:nth-child(3){width:13%;}
+.yrm-b11-fw-table th:nth-child(4){width:23%;}
+.yrm-b11-fw-table th:nth-child(5){width:15%;}
+.yrm-b11-fw-table th:nth-child(6){width:21%;}
+.yrm-b11-fw-table td{overflow-wrap:anywhere;vertical-align:middle;font-size:12px;padding:12px 9px;border-bottom:1px solid #41444d;}
+.yrm-fw-table-row{cursor:pointer;}
+.yrm-fw-table-row:hover,.yrm-fw-table-row:focus-visible{background:#373d46;outline:none;}
+.yrm-fw-remark{position:relative;padding-right:30px!important;}
+.yrm-fw-row-edit{position:absolute;right:8px;top:50%;transform:translateY(-50%);color:#b9cbe0;opacity:0;}
+.yrm-fw-table-row:hover .yrm-fw-row-edit,.yrm-fw-table-row:focus .yrm-fw-row-edit{opacity:1;}
+.yrm-fw-row-edit svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.7;}
+.yrm-fw-legacy-badge{display:inline-block;border:1px solid #55606f;padding:2px 4px;border-radius:4px;color:#aebdcb;margin-left:4px;}
+.yrm-fw-footer{display:flex;justify-content:flex-end;gap:10px;align-items:center;padding:14px 0 4px;margin-top:13px;border-top:1px solid #44474d;}
+.yrm-fw-footer #v1-fw-dirty{flex:1;color:#f6c486;font-size:12px;}
+.yrm-fw-footer .button{min-width:88px;}
+.yrm-fw-technical{margin-top:8px;color:#8c98a7;font-size:11px;}
+.yrm-fw-technical>summary{cursor:pointer;}
+.yrm-b11-fw-dialog{overflow:auto;max-height:calc(100dvh - 30px);width:min(565px,calc(100vw - 28px));max-width:565px;}
+.yrm-b11-fw-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px 16px;}
+.yrm-b11-fw-fields label{display:grid;gap:7px;color:#ccd3da;font-size:12px;min-width:0;}
+.yrm-b11-fw-fields .yrm-b11-fw-source,.yrm-b11-fw-fields .yrm-b11-fw-source-address{grid-column:auto;}
+.yrm-b11-fw-fields input:disabled{opacity:.55;cursor:not-allowed;}
+.yrm-b11-fw-dialog .yrm-b11-select,.yrm-b11-fw-dialog .yrm-b11-select-toggle{width:100%;min-width:0;}
+.yrm-fw-rule-advanced{grid-column:1/-1;margin-top:1px;font-size:11px;color:#b3bdca;}
+.yrm-fw-rule-advanced>summary{cursor:pointer;}
+.yrm-fw-rule-advanced label{margin-top:12px;}
+.yrm-fw-rule-advanced small{display:block;margin-top:9px;line-height:1.4;}
+.yrm-fw-rule-remove{color:#efadb6;border:0;background:transparent;margin-top:12px;padding:5px;cursor:pointer;}
+.yrm-fw-unavailable{padding:15px 5px;color:#dcb4b5;}
+@media(max-width:620px){.yrm-b11-fw-fields{grid-template-columns:minmax(0,1fr);} .yrm-fw-remark{padding-right:9px!important;}}
 /* Wallpaper history uses existing settings storage and flat single-row entries. */
 .yrm-ui-wallpaper-history { border-top:1px solid var(--yrm-shell-border); margin-top:18px; padding-top:13px; }
 .yrm-ui-wallpaper-history > h4 { margin:0 0 6px; font-size:13px; }

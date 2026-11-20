@@ -7,23 +7,25 @@
         ("storage", "Storage", "i-harddrive"),
         ("network", "Network", "i-globe"),
         ("ddns", "Dynamic DNS", "i-globe"),
-        ("security", "Security", "i-shield"),
+        ("security", "Firewall", "i-shield"),
+        ("certificates", "Certificates", "i-shield"),
         ("appearance", "Appearance", "i-folder"),
         ("about", "About & Updates", "i-grid")
     };
-    var activeTab = sections.Any(s => s.Item1 == Model.Tab) ? Model.Tab : "overview";
+    var activeTab = Model.Tab == "security" && Model.SecuritySection == "certificates"
+        ? "certificates" : sections.Any(s => s.Item1 == Model.Tab) ? Model.Tab : "overview";
     var info = Model.Info;
     var snapshot = Model.Snapshot;
+    var latestBuild = Model.LastUpdateCheck?.LatestHash ?? "";
 }
 @if (!string.IsNullOrWhiteSpace(Model.Notice) && Model.Tab != "about")
 { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
 <div class="server-settings-layout settings-rc41">
   <nav class="server-settings-nav" aria-label="Settings sections">
-    <strong class="settings-navigation-title">Settings</strong>
     @foreach (var tab in sections)
     {
       <a class="settings-nav-link @(activeTab == tab.Item1 ? "is-active" : "")"
-         asp-page="/Settings" asp-route-tab="@tab.Item1">
+         asp-page="/Settings" asp-route-tab="@(tab.Item1 == "certificates" ? "security" : tab.Item1)" asp-route-section="@(tab.Item1 == "security" ? "firewall" : (tab.Item1 == "certificates" ? "certificates" : null))">
         <svg class="ui-icon"><use href="@("#" + tab.Item3)"></use></svg>
         @tab.Item2
       </a>
@@ -32,7 +34,7 @@
   <div class="server-settings-content">
     @if (activeTab == "overview")
     {
-      <div class="settings-section-heading"><h2>Overview</h2><p>Your Linux server at a glance.</p></div>
+
       <section class="yrm-flat-device">
         <div class="settings-device-avatar"><svg class="ui-icon"><use href="#i-server"/></svg></div>
         <div><p class="eyebrow">DEVICE</p><h3>@info.Hostname</h3><p class="muted">@info.OperatingSystem</p></div>
@@ -46,7 +48,7 @@
     }
     else if (activeTab == "storage")
     {
-      <div class="settings-section-heading"><h2>Storage</h2><p>Storage spaces and disk hardware.</p></div>
+
       <nav class="yrm-b10-storage-tabs" aria-label="Storage sections">
         <button type="button" class="is-active" data-b10-storage-tab="volumes" aria-pressed="true">Storage Spaces</button>
         <button type="button" data-b10-storage-tab="disks" aria-pressed="false">Physical Disks</button>
@@ -163,12 +165,11 @@
           </article>
         }
         @if (!Model.StorageDevices.Any(x => x.Type == "disk")) { <p class="muted">No physical disks reported by lsblk.</p> }
-        <p class="muted yrm-storage-note">Ubuntu retains the actual filesystems and /etc/fstab entries even when the Panel is removed.</p>
       </section>
     }
     else if (activeTab == "network")
     {
-      <div class="settings-section-heading"><h2>Network</h2><p>Read-only addresses from your Linux network interfaces.</p></div>
+
       <div class="settings-stack">
         @foreach (var adapter in info.Adapters.Where(x => !Model.IsVirtualAdapter(x.Name)))
         {
@@ -212,13 +213,16 @@
     }
     else if (activeTab == "ddns")
     {
-      <div class="settings-section-heading yrm-section-heading-actions"><div><h2>Dynamic DNS</h2><p>Automatically keep your hostnames in sync.</p></div>
+      <div class="yrm-settings-toolbar yrm-ddns-header-actions">
+        <form method="post" asp-page-handler="DdnsUpdateAll" asp-route-tab="ddns">
+          <button class="button button-secondary" type="submit" disabled="@(Model.DdnsProfiles.Count == 0)">Update</button>
+        </form>
         <button class="button button-primary" type="button" data-b9-ddns-add>+ Add Provider</button>
       </div>
       <section class="yrm-flat-panel yrm-b11-ddns-panel">
         <div class="yrm-b11-table-wrap">
           <table class="yrm-b11-table yrm-b11-ddns-table">
-            <thead><tr><th>Provider</th><th>Domain</th><th>IPv4</th><th>IPv6</th><th>Last Update</th><th class="yrm-b11-actions-head">Actions</th></tr></thead>
+            <thead><tr><th>Provider</th><th>Domain</th><th>IPv4</th><th>IPv6</th><th class="yrm-b11-actions-head">Actions</th></tr></thead>
             <tbody>
             @foreach (var group in Model.DdnsProfiles.GroupBy(p => new { Provider = p.Provider.ToLowerInvariant(), Hostname = p.Hostname.ToLowerInvariant() }))
             {
@@ -250,14 +254,8 @@
                     }
                   </td>
                 }
-                <td class="yrm-b11-last-update" data-b11-last-update>@(lastRun is { } updated ? updated.ToLocalTime().ToString("dd MMM yyyy HH:mm") : "Never")</td>
                 <td class="yrm-b11-ddns-actions">
                   <div class="yrm-b11-action-row">
-                    <form method="post" asp-page-handler="DdnsGroupCheck" asp-route-tab="ddns" data-b9-ddns-check>
-                      <input type="hidden" name="hostname" value="@group.Key.Hostname" />
-                      <input type="hidden" name="provider" value="@group.Key.Provider" />
-                      <button type="submit" class="button button-secondary">Update Now</button>
-                    </form>
                     <button type="button" class="button button-secondary" data-yrm-ddns-edit="yrm-b10-ddns-edit-@group.First().Id">Edit</button>
                     <form method="post" asp-page-handler="DdnsDeleteGroup" asp-route-tab="ddns" data-confirm="Remove this DDNS configuration? Existing DNS records will not be deleted.">
                       <input type="hidden" name="hostname" value="@group.Key.Hostname" />
@@ -413,83 +411,79 @@
           </form>
       </dialog>
     }
-    else if (activeTab == "security")
+    else if (activeTab is "security" or "certificates")
     {
-      <div class="settings-section-heading"><h2>Security</h2><p>Firewall rules and the Panel HTTPS identity.</p></div>
-      <nav class="yrm-subtabs" aria-label="Security sections">
-        <a class="yrm-subtab @(Model.SecuritySection == "firewall" ? "is-active" : "")" asp-page="/Settings" asp-route-tab="security" asp-route-section="firewall">Firewall</a>
-        <a class="yrm-subtab @(Model.SecuritySection == "certificates" ? "is-active" : "")" asp-page="/Settings" asp-route-tab="security" asp-route-section="certificates">Certificates</a>
-      </nav>
       @if (Model.SecuritySection == "firewall")
       {
-      <section class="yrm-flat-panel">
-        <div class="settings-row-top"><h3>Firewall</h3>
-          @if (Model.Firewall.Available) { <span class="tag">@(Model.Firewall.Active ? "Active" : "Inactive")</span> }
-          else { <span class="tag">Unavailable</span> }
-        </div>
         @if (!Model.Firewall.Available)
         {
-          <p>UFW is unavailable. Install or repair UFW before editing firewall rules.</p>
-          <details><summary>Technical details</summary><pre class="v1-fw-status">@Model.Firewall.Status</pre></details>
+          <div class="yrm-fw-unavailable" role="alert">Firewall is unavailable. <details><summary>Technical details</summary><pre>@Model.Firewall.Status</pre></details></div>
         }
         else
         {
           @if (!string.IsNullOrWhiteSpace(Model.Firewall.PendingConfirmation))
           {
             <div class="yrm-firewall-pending">
-              <strong>Confirm the server is reachable</strong>
-              <p>UFW was enabled. Confirm within 120 seconds to prevent automatic rollback.</p>
+              <strong>Confirm connectivity</strong>
+              <p>Keep firewall enabled within 120 seconds or changes will roll back.</p>
               <form method="post" asp-page-handler="FirewallConfirm" asp-route-tab="security" asp-route-section="firewall">
                 <input type="hidden" name="nonce" value="@Model.Firewall.PendingConfirmation" />
-                <button class="button button-primary" type="submit">Keep Firewall Enabled</button>
+                <button class="button button-primary" type="submit">Keep Enabled</button>
               </form>
             </div>
           }
-          <form id="v1-firewall-form" method="post" asp-page-handler="Firewall" asp-route-tab="security" asp-route-section="firewall" data-requires-admin="Save &amp; Apply firewall rule changes">
-            <div class="yrm-b11-fw-top">
-              <div><strong>Firewall</strong><small>Host: UFW · Docker: separate supported IPv4 iptables rules · Changes apply when saved.</small></div>
-              <label class="yrm-b11-fw-status">Firewall<select name="firewallEnabled" aria-label="Firewall status">
-                <option value="true" selected="@Model.Firewall.Active">Active</option>
-                <option value="false" selected="@(!Model.Firewall.Active)">Inactive</option>
-              </select></label>
+          <form id="v1-firewall-form" class="yrm-fw-workspace" method="post" asp-page-handler="Firewall" asp-route-tab="security" asp-route-section="firewall" data-requires-admin="Apply firewall changes">
+            <div class="yrm-fw-status-line">
+              <strong>Firewall Status</strong>
+              <label class="yrm-fw-enable" for="yrm-fw-enabled">
+                <span id="yrm-fw-status-text">@(Model.Firewall.Active ? "On" : "Off")</span>
+                <input id="yrm-fw-enabled" type="checkbox" name="firewallEnabled" value="true" checked="@Model.Firewall.Active" role="switch" aria-label="Enable firewall" />
+                <input type="hidden" name="firewallEnabled" value="false" />
+                <span class="yrm-fw-switch" aria-hidden="true"></span>
+              </label>
             </div>
-            <div class="yrm-b11-fw-toolbar">
-              <strong>Firewall Rules</strong>
+            <div class="yrm-fw-rules-heading">
+              <strong>Rules</strong>
               <button type="button" class="button button-secondary" data-b11-fw-add>+ Add Rule</button>
             </div>
-            <div class="yrm-b11-table-wrap"><table class="yrm-b11-table yrm-b11-fw-table">
-              <thead><tr><th>Scope</th><th>Action</th><th>Ports</th><th>Protocol</th><th>Source</th><th class="yrm-b11-actions-head">Actions</th></tr></thead>
+            <div class="yrm-fw-rule-scroll"><table class="yrm-b11-table yrm-b11-fw-table">
+              <thead><tr><th>Direction</th><th>Port</th><th>Protocol</th><th>IP Address</th><th>Permission</th><th>Remarks</th></tr></thead>
               <tbody id="yrm-b11-fw-body"><tr><td colspan="6" class="muted">No rules configured.</td></tr></tbody>
             </table></div>
-            <div id="v1-firewall-rules" hidden data-initial="@(System.Text.Json.JsonSerializer.Serialize(Model.Firewall.Rules.Select(x=>new {scope=x.Scope,action=x.Action,port=x.Port,protocol=x.Protocol,source=x.Source})))"></div>
+            <div id="v1-firewall-rules" hidden data-initial="@(System.Text.Json.JsonSerializer.Serialize(Model.Firewall.Rules.Select(x=>new {scope=x.Scope,direction=x.Direction,action=x.Action,port=x.Port,protocol=x.Protocol,source=x.Source,remarks=x.Remarks})))"></div>
             <input type="hidden" id="v1-fw-json" name="rulesJson" value="[]" />
             <button type="button" hidden data-fw-add aria-hidden="true" tabindex="-1">Add draft rule</button>
-            <div class="yrm-b11-fw-footer"><span id="v1-fw-dirty" class="muted"></span><button class="button button-primary" type="submit">Save &amp; Apply</button></div>
+            <div class="yrm-fw-footer">
+              <span id="v1-fw-dirty" aria-live="polite"></span>
+              <button type="button" class="button button-secondary" data-b11-fw-discard>Cancel</button>
+              <button type="submit" class="button button-primary">Save</button>
+            </div>
           </form>
           <dialog id="yrm-b11-fw-dialog" class="yrm-ddns-editor yrm-b11-fw-dialog" aria-labelledby="yrm-b11-fw-title">
             <div class="panel-modal-head"><strong id="yrm-b11-fw-title">Firewall Rule</strong><button type="button" data-b11-fw-cancel aria-label="Close">×</button></div>
             <div class="yrm-b11-fw-fields">
-              <label>Scope<select data-b11-fw-field="scope"><option value="host">Host (UFW)</option><option value="docker">Docker</option></select></label>
-              <label>Action<select data-b11-fw-field="action"><option value="allow">Allow</option><option value="deny">Deny</option><option value="lan">LAN only</option></select></label>
-              <label>Ports<input data-b11-fw-field="port" placeholder="80,443 or 20-442" inputmode="text" /></label>
+              <label>Direction<select data-b11-fw-field="direction"><option value="inbound">Inbound</option><option value="outbound">Outbound</option></select></label>
+              <label>Permission<select data-b11-fw-field="action"><option value="allow">Allow</option><option value="deny">Deny</option><option value="lan">LAN only (Docker)</option></select></label>
+              <label>Port<input data-b11-fw-field="port" placeholder="80,443 or 20-442" inputmode="numeric" /></label>
               <label>Protocol<select data-b11-fw-field="protocol"><option value="tcp">TCP</option><option value="udp">UDP</option></select></label>
-              <label class="yrm-b11-fw-source">Source
-                <select data-b11-fw-source-mode aria-label="Source mode"><option value="any">Any</option><option value="custom">Custom IP / CIDR</option></select>
+              <label class="yrm-b11-fw-source">IP Address
+                <select data-b11-fw-source-mode aria-label="Address mode"><option value="any">Any</option><option value="custom">Custom IP / CIDR</option></select>
               </label>
-              <label class="yrm-b11-fw-source-address">Source IP / CIDR
-                <input data-b11-fw-field="source" placeholder="192.168.1.0/24" disabled />
+              <label class="yrm-b11-fw-source-address"><span data-b11-fw-address-label>Source IP / CIDR</span>
+                <input data-b11-fw-field="source" placeholder="192.168.0.0/24" disabled />
               </label>
+              <label>Remarks<input data-b11-fw-field="remarks" maxlength="60" placeholder="Optional" /></label>
+              <details class="yrm-fw-rule-advanced"><summary>Advanced</summary>
+                <label>Backend<select data-b11-fw-field="scope"><option value="host">Ubuntu (UFW)</option><option value="docker">Docker (IPv4 inbound)</option></select></label>
+                <small>Docker publishes ports through a separate forwarding path. Docker outbound filtering is not supported here.</small>
+              </details>
             </div>
             <p class="yrm-inline-error" id="yrm-b11-fw-error" hidden></p>
-            <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-b11-fw-cancel>Cancel</button><button type="button" class="button button-primary" data-b11-fw-save>Save Rule</button></div>
+            <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-b11-fw-cancel>Cancel</button><button type="button" class="button button-primary" data-b11-fw-save>Done</button></div>
+            <button type="button" class="yrm-fw-rule-remove" data-b11-fw-delete-in-modal hidden>Delete Rule</button>
           </dialog>
-          <details class="yrm-firewall-advanced"><summary>Advanced details</summary>
-            <pre class="v1-fw-status">@Model.Firewall.Status</pre>
-            <p>Ports: 80,443 or 20-442. Source: any, a single IP or CIDR (192.168.0.0/24). Docker filtering currently supports IPv4 with compatible iptables only.</p>
-            <p>New UFW activation includes temporary remote-access protection and rolls back unless confirmed.</p>
-          </details>
+          <details class="yrm-fw-technical"><summary>Advanced details</summary><pre class="v1-fw-status">@Model.Firewall.Status</pre></details>
         }
-      </section>
       }
       else
       {
@@ -530,9 +524,9 @@
     }
     else if (activeTab == "appearance")
     {
-      <div class="settings-section-heading"><h2>Appearance</h2><p>Customize your desktop without changing the shared login screen.</p></div>
+
       <section class="yrm-flat-panel settings-wallpaper-card">
-        <div class="settings-row-top"><h3>Desktop Wallpaper</h3><span class="muted">Personal desktop</span></div>
+        <div class="settings-row-top"><h3>Desktop Wallpaper</h3></div>
         <img class="v1-wallpaper-preview" id="wallpaper-preview" src="@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))" alt="Wallpaper preview" />
         <div class="v1-wallpaper-mode"><button type="button" class="mini-button" data-wallpaper-fit>Full image</button> · Toggle actual desktop crop</div>
         <div class="wallpaper-actions">
@@ -546,12 +540,10 @@
           </form>
         </div>
         <p id="wallpaper-selection-name" class="muted wallpaper-helper">JPEG, PNG or WebP · Up to 8 MB</p>
-        <p class="muted wallpaper-helper">The login background stays system-wide and does not expose your desktop wallpaper.</p>
         @if (Model.WallpaperHistory.Count > 0)
         {
           <div class="yrm-ui-wallpaper-history">
             <h4>Wallpaper History</h4>
-            <p class="muted">Previous desktop wallpapers are kept in the existing Panel data folder (up to 10).</p>
             <div class="yrm-ui-history-list">
               @foreach (var history in Model.WallpaperHistory)
               {
@@ -579,23 +571,17 @@
     }
     else if (activeTab == "about")
     {
-      <div class="settings-section-heading"><h2>About &amp; Updates</h2><p>Version information and system updates.</p></div>
-      <section class="yrm-flat-panel settings-simple-card">
-        <div class="yrm-about-identity"><img src="~/images/yrm-panel-mark.png" alt="YRM PANEL icon" width="54" height="54" /><div><p class="eyebrow">YRM PANEL</p><h3>@info.PanelVersion.Split('+')[0]</h3></div></div>
-        <p class="muted">Linux server management · ASP.NET Core 10</p>
-        <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel" target="_blank" rel="noopener noreferrer">Source and releases ↗</a>
-      </section>
+
       <section class="yrm-flat-panel settings-update-card">
-        <div class="settings-row-top"><h3>System Update</h3><span class="tag">@Model.UpdateChannel channel</span></div>
+        <div class="settings-row-top"><h3>Updates</h3><span class="tag">@Model.UpdateChannel</span></div>
         <div class="yrm-update-overview">
-          <div><small>Installed version</small><strong>@info.PanelVersion.Split('+')[0]</strong></div>
-          <div><small>Latest release</small><strong>@(Model.LastUpdateCheck?.Tag ?? "Not checked")</strong></div>
+          <div><small>Current Version</small><strong>@info.PanelVersion.Split('+')[0]</strong></div>
+          <div><small>@(Model.UpdateChannel == "stable" ? "Available Version" : "Latest Dev Build")</small><strong>@(Model.UpdateChannel == "stable" ? (Model.LastUpdateCheck?.Tag ?? "Not checked") : (Model.LastUpdateCheck?.Available == true && latestBuild.Length >= 8 ? latestBuild[..8] : "Not checked"))</strong></div>
         </div>
         <div class="yrm-update-tracker" id="v1-update-progress" role="status" aria-live="polite">
           <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@(Model.UpdateStatus.State == "running" ? "Updating" : Model.LastUpdateCheck?.HasUpdate == true ? "Update Available" : Model.UpdateStatus.State == "failed" ? "Update Failed" : Model.LastUpdateCheck?.Available == true ? "Up to Date" : "Not Checked")</strong><span id="yrm-update-percent"></span></div>
           <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress" hidden><span id="yrm-update-bar-fill"></span></div>
           <p id="yrm-update-message" class="muted">@(Model.UpdateStatus.State == "running" ? "Updating YRM PANEL." : Model.LastUpdateCheck?.HasUpdate == true ? Model.LastUpdateCheck.Message : Model.LastUpdateCheck?.Available == true ? "Your installed build is up to date." : Model.UpdateStatus.Message)</p>
-          <p id="yrm-update-time" class="yrm-update-time muted"></p>
           <button type="button" id="yrm-update-reload" class="button button-primary" hidden>Reload Panel</button>
         </div>
 
@@ -608,8 +594,8 @@
             @if (Model.UpdateStatus.State == "running")
             { <button class="button button-primary" disabled type="button">Updating...</button> }
             else if (Model.LastUpdateCheck?.HasUpdate == true)
-            { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" data-v1-update type="submit">Update Now</button></form> }
-            else { <button class="button button-primary" disabled type="button" title="Check for updates first">Update Now</button> }
+            { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" data-v1-update type="submit">Update</button></form> }
+            else { <button class="button button-primary" disabled type="button" title="Check for updates first">Update</button> }
           }
         </div>
 

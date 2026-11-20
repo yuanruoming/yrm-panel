@@ -2,12 +2,13 @@ using System.Text.Json;
 
 namespace YrmPanel.Services;
 
-public sealed record FirewallRule(string Scope, string Action, string Port, string Protocol, string Source);
+public sealed record FirewallRule(string Scope, string Action, string Port, string Protocol, string Source,
+    string Direction = "inbound", string Remarks = "");
 public sealed record FirewallOverview(bool Available, string Status, bool DockerSupported,
     IReadOnlyList<FirewallRule> Rules, string Message, bool Active = false,
     string PendingConfirmation = "");
 
-/// <summary>All firewall edits remain a browser draft until Save & Apply.</summary>
+/// <summary>All firewall edits remain a browser draft until Save.</summary>
 public sealed class FirewallService
 {
     private readonly PrivilegedCommandService _commands;
@@ -31,7 +32,9 @@ public sealed class FirewallService
             foreach (var item in root.GetProperty("rules").EnumerateArray())
                 rules.Add(new FirewallRule(item.GetProperty("scope").GetString() ?? "host",
                     item.GetProperty("action").GetString() ?? "allow", item.GetProperty("port").ToString(),
-                    item.GetProperty("protocol").GetString() ?? "tcp", item.GetProperty("source").GetString() ?? "any"));
+                    item.GetProperty("protocol").GetString() ?? "tcp", item.GetProperty("source").GetString() ?? "any",
+                    item.TryGetProperty("direction", out var direction) ? direction.GetString() ?? "inbound" : "inbound",
+                    item.TryGetProperty("remarks", out var remarks) ? remarks.GetString() ?? "" : ""));
             return new(available, root.GetProperty("status").GetString() ?? "Unknown",
                 root.GetProperty("dockerSupported").GetBoolean(), rules,
                 available ? "Firewall status loaded." : "UFW is not installed or status is unavailable.", active, pending);

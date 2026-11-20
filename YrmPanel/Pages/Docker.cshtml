@@ -1,10 +1,7 @@
 @page
 @model YrmPanel.Pages.DockerModel
 @{ ViewData["Title"] = "Docker"; }
-<div class="page-heading yrm-flat-page-heading">
-  <div><h1>Docker</h1></div>
-  <a class="button button-secondary" asp-page="/Docker">Refresh</a>
-</div>
+<div class="yrm-app-actions"><a class="button button-secondary" asp-page="/Docker">Refresh</a></div>
 @if (!string.IsNullOrWhiteSpace(Model.Notice))
 { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:", StringComparison.OrdinalIgnoreCase) || Model.Notice.Contains("denied", StringComparison.OrdinalIgnoreCase) ? "error" : "success")">@Model.Notice</div> }
 @if (!Model.Docker.Available)
@@ -49,5 +46,5 @@ else
       </tbody>
     </table>
   </div>
-  @if (Model.Docker.Containers.Count == 0) { <div class="empty-hint">No containers.</div> }
+
 }

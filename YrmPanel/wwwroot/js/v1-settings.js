@@ -18,10 +18,12 @@
     const root=$('v1-firewall-rules');if(!root||root.children.length>=50)return;
     const row=document.createElement('div');row.className='v1-firewall-row';
     row.append(field('scope',data.scope||'host',[['host','Host'],['docker','Docker']]));
+    row.append(field('direction',data.direction||'inbound',[['inbound','Inbound'],['outbound','Outbound']]));
     row.append(field('action',data.action||'allow',actions.map(x=>[x,x[0].toUpperCase()+x.slice(1)])));
     row.append(field('port',data.port||'',null,'80,443 or 20-442'));
     row.append(field('protocol',data.protocol||'tcp',[['tcp','TCP'],['udp','UDP']]));
     row.append(field('source',data.source||'any',null,'any · IP · CIDR'));
+    row.append(field('remarks',data.remarks||'',null,'Optional remarks'));
     const del=document.createElement('button');del.type='button';del.className='mini-button';del.textContent='×';del.title='Remove rule';
     del.addEventListener('click',()=>{row.remove();markDirty();});row.append(del);root.append(row);
     row.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',markDirty));
@@ -52,7 +54,7 @@
         if(!note){note=document.createElement('div');note.className='yrm-inline-error';form.append(note);}
         note.textContent='Use valid ports (80,443) or range (20-442).';return;
       }
-      draft.push({scope:value('scope'),action:value('action'),port,protocol:value('protocol'),source:value('source')||'any'});
+      draft.push({scope:value('scope'),direction:value('direction'),action:value('action'),port,protocol:value('protocol'),source:value('source')||'any',remarks:value('remarks')||''});
     }
     const output=$('v1-fw-json');if(output)output.value=JSON.stringify(draft);
   },true);
@@ -81,8 +83,7 @@
       available?(availability.message||'A new build is available.'):
       state==='failed'?(p?.message||'Update failed.'):
       availability?.available===true?'Your installed build is up to date.':'Check for updates to compare builds.';
-    if(stamp){const date=p?.at?new Date(p.at):null;
-      stamp.textContent=date&&!Number.isNaN(date.getTime())&&(completed||state==='failed')?`Last update: ${date.toLocaleString()}`:'';}
+    if(stamp)stamp.textContent=''; // Version information matters more than timestamps.
     if(bar){bar.hidden=!(active||awaitingReload);bar.classList.toggle('is-indeterminate',active&&!(phase==='downloading'&&p?.percent!=null&&Number.isFinite(Number(p.percent))));}
     const actualPercent=active&&phase==='downloading'&&p?.percent!=null&&Number.isFinite(Number(p.percent))?Math.max(0,Math.min(100,Number(p.percent))):null;
     if(fill)fill.style.width=awaitingReload?'100%':actualPercent===null?'0%':`${actualPercent}%`;
@@ -170,6 +171,16 @@
     root.dataset.initialized='1';
     try{const rows=JSON.parse(root.dataset.initial||'[]');for(const rule of rows)addFirewallRow(rule);}catch{}
   }
+  // One-click Cancel on the main firewall page restores the server draft
+  // without issuing any network command. The status checkbox is reset too.
+  window.addEventListener('yrm:firewall-restore',()=>{
+    const root=$('v1-firewall-rules');if(!root)return;
+    let values=[];try{values=JSON.parse(root.dataset.initial||'[]');}catch{}
+    root.replaceChildren();for(const entry of values)addFirewallRow(entry);
+    const checkbox=$('yrm-fw-enabled');if(checkbox)checkbox.checked=checkbox.defaultChecked;
+    const label=$('yrm-fw-status-text');if(label&&checkbox)label.textContent=checkbox.checked?'On':'Off';
+    const dirty=$('v1-fw-dirty');if(dirty)dirty.textContent='';
+  });
   initializeDraft();initializeDdns();
   new MutationObserver(()=>{initializeDraft();initializeDdns();}).observe(document.body,{childList:true,subtree:true});
 })();

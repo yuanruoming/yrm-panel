@@ -3,7 +3,7 @@
 @{ ViewData["Title"] = "Applications";
    var groups = Model.Docker.Containers.GroupBy(c => string.IsNullOrWhiteSpace(c.Project) ? c.Name : c.Project)
       .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase).ToArray(); }
-<div class="page-heading"><div><p class="eyebrow">APPLICATIONS</p><h1>Apps<span class="accent-period">.</span></h1></div><button class="button button-primary" type="button" data-open-add-app>＋ Add app</button></div>
+<div class="yrm-app-actions"><button class="button button-primary" type="button" data-open-add-app>+ Add App</button></div>
 @if (!string.IsNullOrWhiteSpace(Model.Notice)) { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
 @if (!Model.Docker.Available) { <p class="muted">Docker unavailable: @Model.Docker.Error</p> }
 <div class="unified-app-grid">
@@ -41,7 +41,7 @@
       }
     }
     @if (Model.Shortcuts.Count == 0 && groups.Length == 0)
-    { <div class="unified-empty">No applications yet. Add a web shortcut or start a Docker container.</div> }
+    { <div class="unified-empty">No applications.</div> }
 </div>
 <dialog id="application-editor-dialog" class="panel-modal" aria-labelledby="application-editor-title">
     <div class="panel-modal-head"><strong id="application-editor-title">Add app</strong><button type="button" data-close-dialog="application-editor-dialog">×</button></div>

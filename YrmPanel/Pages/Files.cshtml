@@ -12,10 +12,15 @@
 <section class="fm-explorer yrm-flat-files">
   <div class="fm-columns">
     <aside class="fm-locations" aria-label="File locations">
-      <div class="fm-locations-heading">FILES</div>
-      <a class="fm-location-link @(Model.IsMyFolders ? "is-active" : "")" asp-page="/Files" asp-route-path="@("@folders")">
-        <svg class="ui-icon"><use href="#i-folder"/></svg> My Files
-      </a>
+      <div class="fm-my-files-header">
+        <button type="button" class="fm-my-files-toggle" data-my-files-toggle aria-controls="yrm-my-files-children" aria-expanded="false" title="Show or hide folders" aria-label="Expand My Files">
+          <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
+        <a class="fm-location-link @(Model.IsMyFolders ? "is-active" : "")" asp-page="/Files" asp-route-path="@("@folders")">
+          <svg class="ui-icon"><use href="#i-folder"/></svg> My Files
+        </a>
+      </div>
+      <div class="fm-my-files-children" id="yrm-my-files-children" hidden>
       @foreach (var folderPath in Model.MyFiles)
       {
         var relative = folderPath.TrimStart('/');
@@ -25,6 +30,7 @@
           <svg class="ui-icon"><use href="#i-folder"/></svg><span>@displayName</span>
         </a>
       }
+      </div>
       <div class="yrm-b10-nav-divider"></div>
       <div class="fm-locations-heading yrm-b10-quick-label">QUICK ACCESS</div>
       <div class="yrm-b10-quick-links">
@@ -70,7 +76,7 @@
       @if (Model.IsMyFolders)
       {
         <div class="fm-page-title">
-          <div><h2>My Files</h2></div>
+          <div class="fm-location-crumb">My Files</div>
           <div class="fm-action-row">
             <button type="button" class="button button-primary" data-open-new-folder>＋ New Folder</button>
           </div>
@@ -161,7 +167,7 @@
           {
             <form method="post" asp-page-handler="Upload" asp-route-path="@currentRoute" enctype="multipart/form-data" class="explorer-upload fm-upload-form">
               <input name="upload" id="fm-upload-file" type="file" class="fm-visually-hidden" multiple required />
-              <button type="button" class="button button-secondary" data-file-picker="fm-upload-file">Choose Files</button>
+              <button type="button" class="button button-secondary" data-file-picker="fm-upload-file">Upload</button>
               
               <span id="fm-upload-progress" class="fm-upload-progress" aria-live="polite" hidden></span>
             </form>

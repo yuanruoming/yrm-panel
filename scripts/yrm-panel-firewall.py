@@ -67,20 +67,28 @@ def validate(value):
     port = value.get('port')
     proto = value.get('protocol')
     source = value.get('source') or 'any'
+    remarks = value.get('remarks', '')
+    if not isinstance(remarks, str) or len(remarks) > 60 or any(ord(c) < 32 for c in remarks):
+        raise ValueError('Remarks must be plain text with at most 60 characters.')
+    direction = value.get('direction', 'inbound')
+    if direction not in ('inbound', 'outbound'):
+        raise ValueError('Direction must be Inbound or Outbound.')
     if scope not in ('host', 'docker') or action not in ('allow', 'deny', 'lan'):
         raise ValueError('Unsupported firewall scope or action.')
     if proto not in ('tcp', 'udp'):
         raise ValueError('Protocol must be TCP or UDP.')
     port, spans = parse_ports(port)
-    if scope == 'host' and action == 'lan': raise ValueError('Use a source network for host rules.')
+    if scope == 'host' and action == 'lan': raise ValueError('Use an address range for host rules.')
+    if scope == 'docker' and direction == 'outbound':
+        raise ValueError('Docker outbound filtering is not supported by the current backend.')
     if scope == 'docker' and source != 'any': raise ValueError('Docker rules use a preset LAN scope.')
     if source != 'any':
         try: source = str(ipaddress.ip_network(source, strict=False))
-        except ValueError: raise ValueError('Source must be a valid IPv4/IPv6 CIDR.')
-    if scope == 'host' and action == 'deny' and any(
+        except ValueError: raise ValueError('IP address must be valid IPv4/IPv6 or CIDR.')
+    if scope == 'host' and direction == 'inbound' and action == 'deny' and any(
             low <= protected <= high for low, high in spans for protected in management_ports()):
         raise ValueError('Refusing to block SSH or Panel management ports.')
-    return {'scope':scope, 'action':action, 'port':port, 'protocol':proto, 'source':source}
+    return {'scope':scope, 'direction':direction, 'action':action, 'port':port, 'protocol':proto, 'source':source, 'remarks':remarks.strip()}
 
 
 def ufw_status():
@@ -202,6 +210,10 @@ def load():
 
 
 def ufw_args(rule, port):
+    # Keep historical inbound arguments byte-for-byte compatible so older
+    # YRM-managed UFW entries can still be removed during upgrades.
+    if rule.get('direction', 'inbound') == 'outbound':
+        return [rule['action'], 'out', 'to', rule['source'], 'port', port, 'proto', rule['protocol']]
     return [rule['action'], 'from', rule['source'], 'to', 'any', 'port', port, 'proto', rule['protocol']]
 
 
@@ -271,7 +283,7 @@ def apply(payload):
         data, requested = body, None
     if not isinstance(data, list) or len(data) > 50: raise ValueError('Maximum 50 rules.')
     new = [validate(rule) for rule in data]
-    ids = [(r['scope'],r['protocol'],r['port'],r['source']) for r in new]
+    ids = [(r['scope'],r['direction'],r['protocol'],r['port'],r['source']) for r in new]
     if len(ids) != len(set(ids)): raise ValueError('Duplicate port/scope rules are not supported.')
     available, original_active, _ = ufw_status()
     if not available:
