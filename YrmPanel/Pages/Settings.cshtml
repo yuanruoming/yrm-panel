@@ -246,11 +246,11 @@
                       var isFailed = profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase);
                       var isOk = profile.LastStatus is "Updated" or "Unchanged" or "IP unchanged";
                       var state = isOff ? "Off" : isFailed ? "Failed" : isOk ? "Normal" : "Not checked";
-                      <div data-b9-ddns-record="@profile.Id" title="@profile.LastStatus" class="yrm-b11-ip-result">
+                      <div data-b9-ddns-record="@profile.Id" title="@profile.LastStatus" class="yrm-b11-ip-result" data-b12-ddns-detail tabindex="0" role="button" aria-label="View @profile.RecordType update details">
                         <span class="yrm-b11-ip-state @(isFailed ? "is-failed" : isOff ? "is-off" : isOk ? "is-normal" : "is-unknown")" data-b11-family-state>@state</span>
                         <small data-b9-ddns-ip title="Detected IP">@(isOff ? "Disabled" : profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</small>
                         <span data-b9-ddns-checked hidden>@(profile.LastRun is { } checkedAt ? checkedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm") : "Not checked yet")</span>
-                        <span data-b9-ddns-error hidden="@(!isFailed)">@(isFailed ? profile.LastStatus : "")</span>
+                        <span data-b9-ddns-error hidden>@(isFailed ? profile.LastStatus : "")</span>
                       </div>
                     }
                   </td>
@@ -278,6 +278,11 @@
         </div>
         @if (Model.DdnsProfiles.Count == 0) { <p class="muted yrm-b11-empty">No DDNS providers configured.</p> }
       </section>
+      <dialog id="yrm-b12-ddns-detail" class="yrm-ddns-editor yrm-b12-ddns-detail" aria-label="DNS update details">
+        <div class="panel-modal-head"><strong>DNS Update Details</strong><button type="button" data-b12-ddns-close aria-label="Close">×</button></div>
+        <pre id="yrm-b12-ddns-message" class="yrm-b12-ddns-message"></pre>
+        <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-b12-ddns-close>Close</button></div>
+      </dialog>
       @foreach (var group in Model.DdnsProfiles.GroupBy(p => new { Provider = p.Provider.ToLowerInvariant(), Hostname = p.Hostname.ToLowerInvariant() }))
       {
         var primary = group.First();

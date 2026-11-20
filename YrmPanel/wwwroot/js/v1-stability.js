@@ -226,9 +226,10 @@
       return;
     }
     if (target.closest('[data-b10-file-clear]')) {setFileSelection(null);return;}
-    const action=target.closest('[data-b10-file-rename],[data-b10-file-move],[data-b10-file-delete]');
+    const action=target.closest('[data-b10-file-rename],[data-b10-file-move],[data-b10-file-delete],[data-b12-file-copy]');
     if (!action || !selectedFileRow?.isConnected)return;
     if (action.matches('[data-b10-file-rename]'))selectedFileRow.querySelector('[data-rename-item]')?.click();
+    if (action.matches('[data-b12-file-copy]'))selectedFileRow.querySelector('[data-copy-item]')?.click();
     if (action.matches('[data-b10-file-move]'))selectedFileRow.querySelector('[data-move-item]')?.click();
     if (action.matches('[data-b10-file-delete]'))selectedFileRow.querySelector('[data-b10-row-delete]')?.requestSubmit();
   },true);
@@ -237,12 +238,58 @@
   });
   selectionObserver.observe(document.body,{childList:true,subtree:true});
 
+  // Native Files context and More share the existing source action buttons.
+  // Properties are read-only; they do not request administrator privileges.
+  document.addEventListener('click',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    if (!node)return;
+    if (node.closest('[data-b12-props-close]')){
+      get('yrm-b12-file-properties')?.close();return;
+    }
+    const props=node.closest('[data-b12-properties]');
+    if (props){
+      for(const key of ['name','path','type','size','modified']){
+        const cell=get('yrm-b12-prop-'+key);
+        if(cell)cell.textContent=props.getAttribute('data-b12-prop-'+key)||'—';
+      }
+      const dialog=get('yrm-b12-file-properties');
+      if(dialog instanceof HTMLDialogElement && !dialog.open)dialog.showModal();
+    }
+    const open=node.closest('[data-b12-open-file]');
+    if(open){
+      const tableRow=open.closest('[data-b10-file-row]');
+      tableRow?.querySelector('[data-open-file]')?.dispatchEvent(new MouseEvent('dblclick',{
+        bubbles:true,cancelable:true}));
+    }
+  },true);
+
   // Read-only folders still expose More; copying a path requires no sudo.
   document.addEventListener('click',event=>{
     const button=event.target instanceof Element ? event.target.closest('[data-b10-copy-path]') : null;
     if (!button)return;
     const path=button.dataset.b10CopyPath||'';
     if (path)void navigator.clipboard?.writeText(path).catch(()=>{});
+  },true);
+
+  function showDdnsDetail(element) {
+    const dialog=get('yrm-b12-ddns-detail');
+    if (!(dialog instanceof HTMLDialogElement) || !element) return;
+    const details=element.querySelector('[data-b9-ddns-error]')?.textContent.trim()
+      || element.getAttribute('title') || 'No update has been attempted.';
+    const message=get('yrm-b12-ddns-message');
+    if (message) message.textContent=details;
+    if (!dialog.open) dialog.showModal();
+  }
+  document.addEventListener('click',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    if (node?.closest('[data-b12-ddns-close]'))get('yrm-b12-ddns-detail')?.close();
+    else if (node?.closest('[data-b12-ddns-detail]'))showDdnsDetail(node.closest('[data-b12-ddns-detail]'));
+  },true);
+  document.addEventListener('keydown',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    if (node?.matches('[data-b12-ddns-detail]') && (event.key==='Enter'||event.key===' ')){
+      event.preventDefault();showDdnsDetail(node);
+    }
   },true);
 
   /* DDNS: Add/Edit stays in the current desktop window; passwords remain
@@ -327,8 +374,9 @@
           const error=row.querySelector('[data-b9-ddns-error]');
           if (error) {
             const failed=/^(failed|error)/i.test(record.status||'');
-            error.hidden=!failed;
+            error.hidden=true;
             error.textContent=failed?record.status:'';
+            row.title=failed?record.status:(record.status||'');
           }
         }
         if (status) {status.textContent=data.ok?'Normal':'Failed';status.dataset.b10State=data.ok?'normal':'failed';}

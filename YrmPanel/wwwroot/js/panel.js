@@ -23,6 +23,9 @@
   const homeButton = $("taskbar-home");
   const MAX_TABS = 6;
   const tabs = new Map();
+  let taskbarPins = [];
+  let taskbarShortcuts = [];
+  let taskbarCsrf = "";
   let activeUrl = null;
   let navigationId = 0;
   let pinnedEnabled = false;
@@ -113,9 +116,133 @@
     const path = url?.split("?")[0];
     return ({"/Docker":"i-docker-symbol","/Services":"i-server","/Applications":"i-grid","/Settings":"i-settings","/Files":"i-folder","/Shares":"i-globe","/Features":"i-grid"})[path] || "i-grid";
   };
+  const taskbarBuiltin = new Map([
+    ["/Applications", {name:"Apps",url:"/Applications"}],
+    ["/Docker", {name:"Docker",url:"/Docker"}],
+    ["/Files", {name:"Files",url:"/Files"}],
+    ["/Settings", {name:"Settings",url:"/Settings"}]
+  ]);
+  const taskbarId = url => canonicalPath((url || "").split("?")[0]);
+  function taskbarInfo(id) {
+    if (taskbarBuiltin.has(id)) return taskbarBuiltin.get(id);
+    if (id.startsWith("docker:")) return {name:id.slice(7),url:"/Docker"};
+    return taskbarShortcuts.find(link => link.id === id) || null;
+  }
+  function findRunningTab(id) {
+    const dest = taskbarInfo(id)?.url;
+    if (!dest) return null;
+    for (const url of tabs.keys()) {
+      if (taskbarId(url) === taskbarId(dest)) return url;
+    }
+    return null;
+  }
+  async function loadTaskbarPins() {
+    try {
+      const response = await fetch("/Settings?handler=TaskbarPins", {credentials:"same-origin",cache:"no-store"});
+      if (!response.ok) return;
+      const data = await response.json();
+      taskbarPins = Array.isArray(data.pins) ? data.pins.filter(x => typeof x === "string") : [];
+      taskbarShortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+      taskbarCsrf = typeof data.token === "string" ? data.token : "";
+      renderTabs();
+      updateLauncherPins();
+    } catch { /* Shell remains usable while disconnected. */ }
+  }
+  async function setTaskbarPin(id, shouldPin) {
+    if (!taskbarBuiltin.has(id) || !taskbarCsrf) return;
+    const body = new URLSearchParams({id,pinned:String(shouldPin)});
+    try {
+      const response = await fetch("/Settings?handler=TaskbarPin",{
+        method:"POST",body,credentials:"same-origin",cache:"no-store",
+        headers:{"RequestVerificationToken":taskbarCsrf,"Accept":"application/json"}
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await loadTaskbarPins();
+    } catch { errorToast("Could not update Taskbar pin. Please retry."); }
+  }
+  function createPinnedTaskbarApp(id) {
+    const info=taskbarInfo(id);
+    if (!info) return null;
+    const running=findRunningTab(id);
+    const button=document.createElement("button");button.type="button";
+    button.className="taskbar-pin-app" + (running?" is-running":"") + (running===activeUrl?" is-active":"");
+    button.dataset.taskbarId=id;
+    button.setAttribute("aria-label",`${info.name}, ${running?"running":"pinned"}`);
+    button.title=`${info.name} · Right-click for Taskbar options`;
+    const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","ui-icon");
+    const use=document.createElementNS("http://www.w3.org/2000/svg","use");
+    use.setAttribute("href",`#${id.startsWith("docker:")?"i-docker-symbol":id.startsWith("link:")?"i-globe":iconName(info.url)}`);
+    svg.append(use);button.append(svg);
+    button.addEventListener("click",()=>{
+      if (id.startsWith("link:")) { window.open(info.url,"_blank","noopener,noreferrer"); return; }
+      if (running && running===activeUrl) showDesktop();
+      else void openPage(running||info.url);
+    });
+    return button;
+  }
+  let taskbarMenu=null;
+  function closeTaskbarMenu() {taskbarMenu?.remove();taskbarMenu=null;}
+  function openTaskbarMenu(target,x,y) {
+    closeTaskbarMenu();
+    const id=target.dataset.taskbarId || target.dataset.taskbarApp;
+    if (!id || !taskbarBuiltin.has(id)) return;
+    const running=findRunningTab(id), pinned=taskbarPins.includes(id);
+    const menu=document.createElement("div");menu.className="yrm-taskbar-context";menu.setAttribute("role","menu");
+    const item=document.createElement("button");item.type="button";
+    item.textContent=pinned?"Unpin from Taskbar":"Pin to Taskbar";
+    item.addEventListener("click",()=>{closeTaskbarMenu();void setTaskbarPin(id,!pinned);});
+    menu.append(item);
+    if (running) {
+      const close=document.createElement("button");close.type="button";close.textContent="Close window";
+      close.addEventListener("click",()=>{closeTaskbarMenu();closeTab(running);});menu.append(close);
+    }
+    document.body.append(menu);taskbarMenu=menu;
+    const rect=menu.getBoundingClientRect();
+    menu.style.left=Math.max(5,Math.min(innerWidth-rect.width-5,x))+"px";
+    menu.style.top=Math.max(49,Math.min(innerHeight-rect.height-5,y))+"px";
+    item.focus();
+  }
+  document.addEventListener("contextmenu",event=>{
+    const element=event.target instanceof Element?event.target.closest("[data-taskbar-id],[data-taskbar-app]"):null;
+    if (!element)return;
+    event.preventDefault();openTaskbarMenu(element,event.clientX,event.clientY);
+  });
+  document.addEventListener("keydown",event=>{
+    const element=event.target instanceof Element?event.target.closest("[data-taskbar-id],[data-taskbar-app]"):null;
+    if (element && (event.key==="ContextMenu"||(event.shiftKey&&event.key==="F10"))){
+      event.preventDefault();const rect=element.getBoundingClientRect();openTaskbarMenu(element,rect.left,rect.bottom);return;
+    }
+    if (event.key==="Escape")closeTaskbarMenu();
+  });
+  document.addEventListener("pointerdown",event=>{
+    if (taskbarMenu && !taskbarMenu.contains(event.target))closeTaskbarMenu();
+  });
+  function updateLauncherPins() {
+    launcher?.querySelectorAll("a.launcher-app").forEach(link=>{
+      const id=taskbarId(new URL(link.href,location.href).pathname);
+      if (!taskbarBuiltin.has(id))return;
+      let cell=link.closest(".yrm-launcher-cell");
+      if (!cell) {
+        cell=document.createElement("div");cell.className="yrm-launcher-cell";
+        link.replaceWith(cell);cell.append(link);
+      }
+      let pin=cell.querySelector("button.yrm-launcher-taskbar-pin");
+      if (!pin) {
+        pin=document.createElement("button");pin.type="button";pin.className="yrm-launcher-taskbar-pin";
+        pin.dataset.taskbarApp=id;
+        cell.append(pin);
+        pin.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();
+          void setTaskbarPin(id,!taskbarPins.includes(id));});
+      }
+      pin.title=taskbarPins.includes(id)?"Unpin from Taskbar":"Pin to Taskbar";
+      pin.textContent=taskbarPins.includes(id)?"◆":"◇";
+      pin.setAttribute("aria-label",pin.title);
+    });
+  }
   function createTab(name, url) {
     const tab = document.createElement("div");
     tab.className = "taskbar-tab";
+    tab.dataset.taskbarId=taskbarId(url);
     if (url === activeUrl) tab.classList.add("is-active");
     const opener = document.createElement("button");
     opener.type = "button";
@@ -142,7 +269,19 @@
   function renderTabs() {
     if (!tabsHost) return;
     const nodes = [];
-    for (const [url, tab] of tabs) nodes.push(createTab(tab.title, url));
+    const occupied = new Set();
+    for (const id of taskbarPins) {
+      const pin = createPinnedTaskbarApp(id);
+      if (!pin) continue;
+      nodes.push(pin);
+      const running=findRunningTab(id);
+      if (running) occupied.add(running);
+    }
+    if (nodes.length && tabs.size>occupied.size) {
+      const divider=document.createElement("span");divider.className="taskbar-divider";
+      nodes.push(divider);
+    }
+    for (const [url, tab] of tabs) if (!occupied.has(url)) nodes.push(createTab(tab.title,url));
     tabsHost.replaceChildren(...nodes);
     homeButton?.classList.toggle("is-active", activeUrl === null);
   }
@@ -246,6 +385,18 @@
     });
   }
   harvestDesktopNotices();
+  // Existing Apps pin forms store the same server-side pins. Since these now
+  // belong to the Taskbar, their accessible labels must not say "desktop".
+  const updateAppPinLabels=()=>document.querySelectorAll('#window-page .app-pin-button').forEach(button=>{
+    const form=button.closest('form');
+    const pinned=form?.querySelector('input[name="pinned"]')?.value==='false';
+    button.title=pinned?'Unpin from Taskbar':'Pin to Taskbar';
+    button.setAttribute('aria-label',button.title);
+  });
+  updateAppPinLabels();
+  const appPinObserver=new MutationObserver(updateAppPinLabels);
+  if (page)appPinObserver.observe(page,{childList:true,subtree:false});
+
   // App dialogs and file dialogs are delegated because Razor content is loaded via Fetch.
   async function listFolders(path) {
     const tree = document.querySelector("#new-folder-tree");
@@ -297,7 +448,39 @@
       }
     } catch (error) { if (tree) tree.textContent = error.message; }
   }
+  async function listActionFolders(path) {
+    const host=$("yrm-b12-action-tree"), field=$("file-action-value");
+    if (!host || !field) return;
+    host.replaceChildren();
+    const rel=(path||"").replace(/^\/+|\/+$/g,"");
+    try {
+      const response=await fetch(`/Files?handler=Tree&path=${encodeURIComponent(rel)}`,{
+        credentials:"same-origin",cache:"no-store"});
+      const data=await response.json();
+      if (!response.ok)throw new Error(data.error||"Cannot browse folder.");
+      field.value=data.path;
+      const rights=$("yrm-b12-action-rights");
+      if (rights)rights.textContent=data.canManage?`Destination: ${data.absolute}`:
+        `Read-only destination: ${data.absolute}`;
+      const submit=$("file-action-form")?.querySelector('button[type="submit"]');
+      if (submit)submit.disabled=!data.canManage;
+      const add=(label,nextPath)=>{
+        const button=document.createElement("button");button.type="button";
+        button.className="explorer-tree-item";button.textContent=label;
+        button.addEventListener("click",()=>void listActionFolders(nextPath));host.append(button);
+      };
+      if (data.path)add("↰  Parent folder",data.path.split("/").slice(0,-1).join("/"));
+      for (const name of data.folders||[])add(`📁  ${name}`,data.path?`${data.path}/${name}`:name);
+      if (!data.folders?.length)host.append(document.createTextNode("No subfolders."));
+    } catch(error){host.textContent=error.message;}
+  }
   function openDialog(id) { const node = $(id); if (node && !node.open) node.showModal(); }
+  document.addEventListener("input", event=>{
+    if (event.target?.id!=="file-action-value")return;
+    const form=$("file-action-form");
+    const submit=form?.querySelector('button[type="submit"]');
+    if (submit)submit.disabled=!event.target.value.trim();
+  });
   document.addEventListener("click", (event) => {
     const button = event.target.closest?.("button");
     if (!button) return;
@@ -308,20 +491,27 @@
       void listFolders(initial);
       return;
     }
-    if (button.dataset.renameItem || button.dataset.moveItem) {
+    if (button.dataset.renameItem || button.dataset.moveItem || button.dataset.copyItem) {
       const rename = button.hasAttribute("data-rename-item");
+      const copy = button.hasAttribute("data-copy-item");
       const form = $("file-action-form");
       if (!form) return;
-      const item = rename ? button.dataset.renameItem : button.dataset.moveItem;
+      const item = rename ? button.dataset.renameItem : copy ? button.dataset.copyItem : button.dataset.moveItem;
       const path = new URLSearchParams(location.search).get("path") || "";
-      form.action = `/Files?handler=${rename ? "Rename" : "Move"}&path=${encodeURIComponent(path)}`;
+      form.action = `/Files?handler=${rename ? "Rename" : copy ? "Copy" : "Move"}&path=${encodeURIComponent(path)}`;
       $("file-action-name").value = item;
       const input = $("file-action-value");
       input.name = rename ? "newName" : "destination";
       input.value = rename ? item : "";
-      $("file-action-title").textContent = rename ? `Rename ${item}` : `Move ${item}`;
-      $("file-action-label").textContent = rename ? "New name" : "Destination path (relative to /)";
+      $("file-action-title").textContent = rename ? `Rename ${item}` : `${copy ? "Copy" : "Move"} ${item} to...`;
+      const chooser = $("yrm-b12-action-picker");
+      if (chooser) chooser.hidden=rename;
+      input.maxLength=rename?255:1024;
+      const submit=form.querySelector('button[type="submit"]');
+      if (submit)submit.disabled=!rename;
+      $("file-action-label").textContent = rename ? "New name" : "Destination folder (relative to /)";
       openDialog("file-action-dialog");
+      if (!rename)void listActionFolders(path);
       return;
     }
     if (button.hasAttribute("data-share-folder")) {
@@ -462,6 +652,7 @@
   }
   setPageShell(activeUrl === null, body.dataset.initialTitle || "Desktop");
   renderTabs();
+  void loadTaskbarPins();
 
   homeButton?.addEventListener("click", () => showDesktop());
   $("window-minimize")?.addEventListener("click", () => showDesktop());
@@ -548,6 +739,7 @@
         }
       }
       if (["/Settings","/Applications"].includes(canonicalPath(submittedUrl.split("?")[0]))) void refreshDesktop();
+      if (canonicalPath(submittedUrl.split("?")[0]) === "/Applications") void loadTaskbarPins();
       windowScroll.scrollTop = 0;
       const title = doc.body.dataset.initialTitle || "Application";
       if (tabs.has(activeUrl)) { tabs.get(activeUrl).title = title; tabs.get(activeUrl).fragment = null; }

@@ -187,6 +187,96 @@ public sealed class FileManagerService
         else throw new IOException("Item not found.");
     }
 
+    // Copy is non-destructive: originals remain in place and no existing item
+    // is overwritten. Work in a temporary sibling and publish only on success.
+    public async Task CopyAsync(string root, string? relative, string name,
+        string destinationRelative, CancellationToken ct)
+    {
+        ValidateName(name);
+        var sourceDir = Resolve(root, relative, true);
+        var source = Resolve(root, Combine(relative, name), true);
+        var destDir = ResolveWritable(root, destinationRelative);
+        var target = Path.Combine(destDir, name);
+        EnsureAbsent(target);
+        var attrs = File.GetAttributes(source);
+        if (attrs.HasFlag(FileAttributes.ReparsePoint))
+            throw new UnauthorizedAccessException("Cannot copy a symbolic link.");
+        var isDirectory = attrs.HasFlag(FileAttributes.Directory);
+        if (isDirectory && (destDir == source || destDir.StartsWith(source + "/", StringComparison.Ordinal)))
+            throw new IOException("Cannot copy a directory inside itself.");
+        if (sourceDir == destDir) throw new IOException("The copy destination is the current folder.");
+        var temp = Path.Combine(destDir, ".yrm-copy-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            if (!isDirectory)
+            {
+                await CopyFileAsync(source, temp, ct);
+                ct.ThrowIfCancellationRequested();
+                EnsureAbsent(target);
+                File.Move(temp, target);
+                return;
+            }
+            // Never silently follow symlinks or cross another mounted filesystem.
+            EnsureNoNestedMounts(source);
+            Directory.CreateDirectory(temp);
+            var stack = new Stack<(string Source, string Dest)>();
+            stack.Push((source, temp));
+            var seen = 0;
+            while (stack.Count > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+                var (current, output) = stack.Pop();
+                foreach (var child in Directory.EnumerateFileSystemEntries(current))
+                {
+                    if (++seen > 100000) throw new IOException("Too many items to copy.");
+                    var entryAttrs = File.GetAttributes(child);
+                    if (entryAttrs.HasFlag(FileAttributes.ReparsePoint))
+                        throw new UnauthorizedAccessException("The folder contains symbolic links.");
+                    var dest = Path.Combine(output, Path.GetFileName(child));
+                    if (entryAttrs.HasFlag(FileAttributes.Directory))
+                    {
+                        Directory.CreateDirectory(dest);
+                        stack.Push((child, dest));
+                    }
+                    else await CopyFileAsync(child, dest, ct);
+                }
+            }
+            ct.ThrowIfCancellationRequested();
+            EnsureAbsent(target);
+            Directory.Move(temp, target);
+        }
+        finally
+        {
+            // Only our randomly named temporary item can be cleaned up.
+            if (File.Exists(temp)) File.Delete(temp);
+            else if (Directory.Exists(temp)) Directory.Delete(temp, recursive: true);
+        }
+    }
+
+    private static async Task CopyFileAsync(string source, string destination, CancellationToken ct)
+    {
+        await using var input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read,
+            1024 * 128, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write,
+            FileShare.None, 1024 * 128, FileOptions.Asynchronous);
+        await input.CopyToAsync(output, ct);
+        await output.FlushAsync(ct);
+    }
+
+    private static void EnsureNoNestedMounts(string directory)
+    {
+        var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+        foreach (var line in File.ReadLines("/proc/self/mountinfo"))
+        {
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 5) continue;
+            var mount = parts[4].Replace("\\040", " ").Replace("\\011", "\t")
+                .Replace("\\012", "\n").Replace("\\134", "\\");
+            if (mount == path || mount.StartsWith(path + "/", StringComparison.Ordinal))
+                throw new IOException("Cannot copy mounted filesystems or folders containing mounts.");
+        }
+    }
+
     public bool Exists(string root, string? relative, string name)
     {
         ValidateName(name);

@@ -45,6 +45,39 @@ public sealed class SettingsModel : PageModel
         _certificates = certificates;
     }
 
+    private static readonly HashSet<string> TaskbarApps = new(StringComparer.Ordinal)
+    { "/Applications", "/Docker", "/Files", "/Settings" };
+
+    // A single administrator's pins live in the existing Panel settings.json.
+    // They survive switching browsers and do not require another taskbar database.
+    public IActionResult OnGetTaskbarPins()
+    {
+        Response.Headers["Cache-Control"] = "no-store";
+        var settings = _settings.Read();
+        var antiforgery = HttpContext.RequestServices
+            .GetRequiredService<Microsoft.AspNetCore.Antiforgery.IAntiforgery>();
+        var csrf = antiforgery.GetAndStoreTokens(HttpContext).RequestToken;
+        return new JsonResult(new {
+            pins = settings.PinnedApps.ToArray(),
+            shortcuts = settings.Shortcuts.Select((item, index) => new {
+                id = "link:" + index, name = item.Name, url = item.Url
+            }).ToArray(),
+            token = csrf
+        });
+    }
+
+    public async Task<IActionResult> OnPostTaskbarPinAsync(string id, bool pinned)
+    {
+        if (!TaskbarApps.Contains(id)) return BadRequest(new { error = "Unknown application." });
+        try
+        {
+            await _settings.SetPinnedAsync(id, pinned);
+            return new JsonResult(new { ok = true });
+        }
+        catch (InvalidOperationException ex)
+        { return BadRequest(new { error = ex.Message }); }
+    }
+
     [BindProperty(SupportsGet = true)] public string Tab { get; set; } = "overview";
     [BindProperty(SupportsGet = true)] public string Section { get; set; } = "firewall";
     public string SecuritySection => Section == "certificates" ? "certificates" : "firewall";

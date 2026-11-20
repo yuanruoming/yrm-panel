@@ -295,6 +295,20 @@ public sealed class FilesModel : PageModel
     public IActionResult OnPostMove(string name, string destination)
     { Notice = Act(() => _files.Move("system", CurrentRelative, name, destination), "Moved."); return Back(); }
 
+    public async Task<IActionResult> OnPostCopyAsync(string name, string destination)
+    {
+        try
+        {
+            await _files.CopyAsync("system", CurrentRelative, name, destination,
+                HttpContext.RequestAborted);
+            Notice = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or
+                                   ArgumentException or NotSupportedException or OperationCanceledException)
+        { Notice = "Error: " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
+
     public IActionResult OnGetExists(string name)
     {
         try { return new JsonResult(new { exists = _files.Exists("system", CurrentRelative, name) }); }

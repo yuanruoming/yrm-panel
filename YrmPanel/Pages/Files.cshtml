@@ -105,6 +105,8 @@
                   <div class="explorer-actions-popover">
                     @if (exists)
                     {
+                      <a asp-page="/Files" asp-route-path="@folderPath.TrimStart('/')">Open</a>
+                      <button type="button" data-b12-properties data-b12-prop-name="@name" data-b12-prop-path="@folderPath" data-b12-prop-type="Folder" data-b12-prop-size="—" data-b12-prop-modified="—">Properties</button>
                       @if (matching is not null && matching.Managed)
                       {
                         <form method="post" asp-page-handler="Unshare" asp-route-path="@("@folders")" data-requires-admin="Remove SMB share">
@@ -181,6 +183,7 @@
           <div class="yrm-b10-file-selection" id="yrm-b10-file-selection" hidden>
             <span id="yrm-b10-selected-name">1 selected</span>
             <button type="button" class="button button-secondary" data-b10-file-rename>Rename</button>
+            <button type="button" class="button button-secondary" data-b12-file-copy>Copy To</button>
             <button type="button" class="button button-secondary" data-b10-file-move>Move</button>
             <button type="button" class="button button-danger" data-b10-file-delete>Delete</button>
             <button type="button" class="mini-button" data-b10-file-clear aria-label="Clear selection">×</button>
@@ -208,12 +211,21 @@
                 <td class="explorer-menu-cell">
                   <details class="explorer-item-menu"><summary aria-label="File actions" title="Actions">⋯</summary>
                     <div class="explorer-actions-popover">
+                      @if (item.IsDirectory)
+                      { <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden">Open</a> }
+                      else
+                      { <button type="button" data-b12-open-file="@item.Name">Open</button> }
+                      <button type="button" data-b12-properties data-b12-prop-name="@item.Name"
+                        data-b12-prop-path="@absolute" data-b12-prop-type="@(item.IsDirectory ? "Folder" : "File")"
+                        data-b12-prop-size="@(item.IsDirectory ? "—" : Model.FormatSize(item.Size))"
+                        data-b12-prop-modified="@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")">Properties</button>
                       @if (!item.IsDirectory)
                       { <a asp-page="/Files" asp-page-handler="Download" asp-route-path="@currentRoute" asp-route-name="@item.Name" data-native-download>Download</a> }
+                      <button type="button" data-copy-item="@item.Name">Copy To...</button>
                       @if (Model.View.CanWrite)
                       {
                         <button type="button" data-rename-item="@item.Name">Rename</button>
-                        <button type="button" data-move-item="@item.Name">Move</button>
+                        <button type="button" data-move-item="@item.Name">Move To...</button>
                         <form method="post" asp-page-handler="Delete" asp-route-path="@currentRoute" data-b10-row-delete data-confirm="Permanently delete @item.Name and its contents? This cannot be undone.">
                           <input type="hidden" name="name" value="@item.Name"/><button type="submit" class="danger">Delete</button>
                         </form>
@@ -268,6 +280,17 @@
     </div>
   </div>
 </section>
+<dialog id="yrm-b12-file-properties" class="panel-modal fm-small-dialog" aria-labelledby="yrm-b12-props-heading">
+  <div class="panel-modal-head"><strong id="yrm-b12-props-heading">Properties</strong><button type="button" data-b12-props-close aria-label="Close">×</button></div>
+  <dl class="yrm-b12-props-grid">
+    <dt>Name</dt><dd id="yrm-b12-prop-name"></dd>
+    <dt>Location</dt><dd id="yrm-b12-prop-path"></dd>
+    <dt>Type</dt><dd id="yrm-b12-prop-type"></dd>
+    <dt>Size</dt><dd id="yrm-b12-prop-size"></dd>
+    <dt>Modified</dt><dd id="yrm-b12-prop-modified"></dd>
+  </dl>
+  <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-b12-props-close>Close</button></div>
+</dialog>
 <dialog id="file-preview-dialog" class="panel-modal fm-preview-dialog" aria-labelledby="file-preview-title">
   <div class="panel-modal-head"><strong id="file-preview-title">Preview</strong><button type="button" data-close-dialog="file-preview-dialog" aria-label="Close">×</button></div>
   <div id="file-preview-body" class="fm-preview-body"></div>
@@ -331,6 +354,11 @@
     @Html.AntiForgeryToken()
     <input type="hidden" name="name" id="file-action-name"/>
     <div class="form-stack"><label id="file-action-label">New name</label><input id="file-action-value" name="newName" required maxlength="255"/></div>
+    <div id="yrm-b12-action-picker" class="yrm-b12-action-picker" hidden>
+      <p class="muted" id="yrm-b12-target-note">Choose an existing destination folder. Source files are preserved when copying.</p>
+      <div id="yrm-b12-action-tree" class="explorer-tree yrm-b12-action-tree" aria-label="Choose destination folder"></div>
+      <p class="muted" id="yrm-b12-action-rights" aria-live="polite"></p>
+    </div>
     <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-close-dialog="file-action-dialog">Cancel</button><button type="submit" class="button button-primary">Save</button></div>
   </form>
 </dialog>

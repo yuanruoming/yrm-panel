@@ -454,3 +454,37 @@ body>.explorer-actions-popover button,body>.explorer-actions-popover a{font-size
 body>.explorer-actions-popover button+button{margin-top:2px;}
 @media(max-width:850px){.yrm-b10-quick-links{display:flex;flex-wrap:wrap;}.yrm-b11-quick-item{max-width:220px;}.yrm-b11-fw-fields{grid-template-columns:1fr;}}
 @media(max-width:600px){.yrm-b11-fw-top,.yrm-b11-fw-toolbar{align-items:flex-start;}.yrm-b11-list-heading{gap:12px;}.yrm-b11-fw-dialog{overflow:auto;max-height:calc(100dvh - 25px);}}
+
+/* BETA12: DDNS errors are details, never multi-line table content. */
+.yrm-b11-ddns-table .yrm-b11-ip-result{display:flex;flex-direction:column;align-items:flex-start;gap:5px;min-width:0;max-width:100%;cursor:pointer;}
+.yrm-b11-ddns-table .yrm-b11-ip-result [data-b9-ddns-error]{display:none!important;}
+.yrm-b11-ddns-table .yrm-b11-ip-result:focus-visible{outline:2px solid #80bdf1;outline-offset:3px;border-radius:4px;}
+.yrm-b11-ddns-table .yrm-b11-ddns-row{height:58px;}
+.yrm-b12-ddns-detail{max-width:min(460px,calc(100vw - 30px));}
+.yrm-b12-ddns-message{font:inherit;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;max-height:40vh;overflow:auto;}
+.yrm-b10-file-selection [data-b12-file-copy]{min-width:70px;}
+
+/* BETA12 Taskbar pins: persistent server-side; desktop wallpaper remains clear. */
+.taskbar-pin-app{position:relative;display:grid;place-items:center;flex:0 0 36px;height:34px;border:1px solid transparent;border-radius:10px;background:rgba(255,255,255,.045);color:#bfdaf1;cursor:pointer;}
+.taskbar-pin-app .ui-icon{width:19px;height:19px;}
+.taskbar-pin-app:hover,.taskbar-pin-app.is-active{background:rgba(111,170,225,.23);border-color:rgba(164,211,251,.22);}
+.taskbar-pin-app.is-running::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);height:3px;width:13px;border-radius:6px;background:#8ac7f3;}
+.yrm-taskbar-context{position:fixed;z-index:600;display:grid;min-width:190px;padding:6px;border:1px solid #40566d;border-radius:10px;background:#202b3a;box-shadow:0 15px 40px #0008;}
+.yrm-taskbar-context button{border:0;background:transparent;text-align:left;color:#e5f0fa;padding:10px 12px;font:inherit;font-size:12px;cursor:pointer;border-radius:6px;}
+.yrm-taskbar-context button:hover,.yrm-taskbar-context button:focus-visible{background:#3b516a;}
+.launcher-grid>.launcher-app{position:relative;}
+.yrm-launcher-taskbar-pin{margin-left:-16px;align-self:start;margin-top:4px;position:relative;z-index:2;width:24px;height:24px;border:0;border-radius:7px;background:#273a50;color:#bddaf5;cursor:pointer;font-size:15px;}
+.yrm-launcher-taskbar-pin:hover{background:#47627e;}
+
+.yrm-launcher-cell{position:relative;min-width:0;}
+.yrm-launcher-cell>.launcher-app{display:flex;width:100%;box-sizing:border-box;}
+.yrm-launcher-cell>.yrm-launcher-taskbar-pin{position:absolute;right:2px;top:2px;margin:0;}
+.yrm-b12-action-picker{border:1px solid rgba(151,183,213,.18);border-radius:10px;padding:10px;margin-top:8px;}
+.yrm-b12-action-picker[hidden]{display:none!important;}
+.yrm-b12-action-tree{max-height:180px;min-height:70px;overflow:auto;display:flex;flex-direction:column;gap:3px;}
+.yrm-b12-action-tree>.explorer-tree-item{text-align:left;width:100%;}
+#file-action-dialog{width:min(560px,calc(100vw - 28px));}
+
+.yrm-b12-props-grid{display:grid;grid-template-columns:110px minmax(0,1fr);gap:10px 15px;font-size:12px;line-height:1.5;margin:18px 0;}
+.yrm-b12-props-grid dt{color:#91a9c0;}
+.yrm-b12-props-grid dd{margin:0;overflow-wrap:anywhere;color:#e6f0fa;}

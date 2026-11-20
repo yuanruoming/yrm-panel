@@ -14,15 +14,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - name: Validate privileged helpers and regression tests
-        run: |
-          python3 -m py_compile scripts/yrm-panel-samba.py scripts/yrm-panel-mount.py
-          python3 -m unittest discover -s tests -p 'test_beta*.py'
-          python3 -m unittest discover -s tests -p 'test_release.py'
-          python3 -m unittest discover -s tests -p 'test_ui_contracts.py'
+      - name: Validate Python, JavaScript, Bash and regression contracts
+        run: bash scripts/verify-v1.sh
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
+      - name: Verify real Linux file copy behavior
+        run: dotnet run --project tests/FileCopySmoke/FileCopySmoke.csproj -c Release
       - name: Build self-contained Linux binaries
         shell: bash
         run: |
