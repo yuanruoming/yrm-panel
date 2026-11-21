@@ -1,0 +1,100 @@
+name: CI real-Linux browser E2E
+# Runs the real published panel on an Ubuntu runner (real PAM, real sudo-less
+# Linux user, real Kestrel HTTPS) and drives it with a browser.
+# It never publishes a release. Use it on a branch before merging to master.
+on:
+  push:
+    branches-ignore: [main, master]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: yrm-panel-e2e-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  e2e:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      E2E_USER: yrme2e
+      E2E_PASS: E2e-Pass-12345-xyz
+      E2E_URL: https://127.0.0.1:6081
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pamtester openssl
+      - name: Create the Linux test account and PAM service
+        run: |
+          sudo useradd -m -s /bin/bash "$E2E_USER"
+          echo "$E2E_USER:$E2E_PASS" | sudo chpasswd
+          printf '#%%PAM-1.0\nauth       include      common-auth\naccount    include      common-account\n' \
+            | sudo tee /etc/pam.d/yrm-panel >/dev/null
+      - name: Publish the panel exactly like the release workflow
+        run: |
+          dotnet publish YrmPanel/YrmPanel.csproj -c Release -r linux-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:PublishTrimmed=false -o publish/e2e
+          sudo rm -rf /opt/yrm-e2e && sudo mkdir -p /opt/yrm-e2e
+          sudo cp -a publish/e2e/. /opt/yrm-e2e/
+          sudo chmod -R a+rX /opt/yrm-e2e
+          sudo chmod +x /opt/yrm-e2e/YrmPanel
+      - name: Prepare data directory, TLS identity and fixture files
+        run: |
+          sudo install -d -o "$E2E_USER" -g "$E2E_USER" -m 0700 /var/tmp/yrm-e2e-data /var/tmp/yrm-e2e-data/keys /var/tmp/yrm-e2e-data/tls
+          sudo -u "$E2E_USER" openssl req -x509 -nodes -newkey rsa:2048 -sha256 -days 2 \
+            -keyout /var/tmp/yrm-e2e-data/tls/server.key -out /var/tmp/yrm-e2e-data/tls/server.crt \
+            -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+          sudo -u "$E2E_USER" bash -c '
+            set -e
+            F=/home/'"$E2E_USER"'/e2e-fixture
+            mkdir -p "$F/alpha" "$F/beta/inner-folder" "$F/many"
+            printf "hello notes" > "$F/notes.txt"
+            printf "inside alpha" > "$F/alpha/inner.txt"
+            printf "inside beta" > "$F/beta/b.txt"
+            base64 -d > "$F/pic.png" <<< "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+            for i in $(seq -w 0 3199); do : > "$F/many/f$i.txt"; done
+          '
+          sudo chmod 755 /home/"$E2E_USER"
+      - name: Start the panel as the Linux account
+        run: |
+          sudo -u "$E2E_USER" env \
+            HOME=/home/$E2E_USER \
+            YRM_PANEL_DATA_DIR=/var/tmp/yrm-e2e-data \
+            YRM_PANEL_USER=$E2E_USER \
+            Panel__Bind=127.0.0.1 Panel__HttpPort=6080 Panel__HttpsPort=6081 \
+            Docker__Enabled=false \
+            bash -c 'cd /opt/yrm-e2e && nohup ./YrmPanel > /var/tmp/yrm-e2e.log 2>&1 &'
+          for i in $(seq 1 40); do
+            code=$(curl -ks -o /dev/null -w '%{http_code}' "$E2E_URL/Account/Login" || true)
+            [ "$code" = 200 ] && exit 0
+            sleep 1
+          done
+          echo 'Panel did not start'; cat /var/tmp/yrm-e2e.log; exit 1
+      - name: Install Playwright
+        working-directory: tests/e2e
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Run browser and HTTP end-to-end checks
+        working-directory: tests/e2e
+        env:
+          E2E_FIXTURE: /home/yrme2e/e2e-fixture
+        run: node files-e2e.mjs
+      - name: Panel log (on failure)
+        if: failure()
+        run: sudo cat /var/tmp/yrm-e2e.log | tail -n 150
+      - name: Upload screenshots (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: tests/e2e/out
+          if-no-files-found: ignore

@@ -109,6 +109,20 @@ try
             "second selected folder included in ZIP");
     }
     Console.WriteLine("PASS: Files My Files root ZIP (multiple parents, preserved folders)");
+
+    // A folder larger than the old 3000-entry raw cut-off must still list the
+    // alphabetically first items (folders first), never an arbitrary subset.
+    var big = Path.Combine(fixture, "big-folder");
+    Directory.CreateDirectory(Path.Combine(big, "zdir"));
+    for (var i = 0; i < 3500; i++)
+        await File.WriteAllTextAsync(Path.Combine(big, $"f{i:D4}.txt"), "x");
+    var bigView = fileManager.Browse("system", big.TrimStart('/'));
+    Expect(bigView.Available, "large folder browse is available");
+    Expect(bigView.Items.Count == 1000, "large folder returns the 1000-row window");
+    Expect(bigView.Items[0].Name == "zdir" && bigView.Items[0].IsDirectory, "folders sort before files in a large folder");
+    Expect(bigView.Items[1].Name == "f0000.txt" && bigView.Items[^1].Name == "f0998.txt",
+        "large folder lists the alphabetically first files");
+    Console.WriteLine("PASS: Files large-folder listing is sorted before truncation");
 }
 finally
 {

@@ -256,6 +256,11 @@ public sealed class FilesModel : PageModel
             var items = names?.Where(n => !string.IsNullOrWhiteSpace(n))
                 .Distinct(StringComparer.Ordinal).ToArray() ?? [];
             if (items.Length == 0) return BadRequest("No files selected.");
+            // ZipArchive writes its headers and central directory synchronously.
+            // Kestrel rejects synchronous writes by default, so allow them for this
+            // streamed response only.
+            var bodyControl = HttpContext.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpBodyControlFeature>();
+            if (bodyControl is not null) bodyControl.AllowSynchronousIO = true;
             Response.ContentType = "application/zip";
             Response.Headers["Content-Disposition"] =
                 $"attachment; filename=\"yrm-files-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip\"";

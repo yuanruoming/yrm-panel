@@ -149,13 +149,17 @@ builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.AddPolicy("login", context =>
-        RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 8,
-                Window = TimeSpan.FromMinutes(5),
-                QueueLimit = 0
-            }));
+        // Only password submissions count. Viewing or refreshing the login page
+        // must never lock the owner out.
+        !HttpMethods.IsPost(context.Request.Method)
+            ? RateLimitPartition.GetNoLimiter("login-view")
+            : RateLimitPartition.GetFixedWindowLimiter(context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 8,
+                    Window = TimeSpan.FromMinutes(5),
+                    QueueLimit = 0
+                }));
 });
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 4L * 1024 * 1024 * 1024 + 1024 * 1024);
 var app = builder.Build();

@@ -13,6 +13,10 @@ public sealed class FileManagerService
     private static readonly HashSet<string> SystemFolders = new(StringComparer.Ordinal)
     { "bin", "boot", "dev", "etc", "lib", "lib64", "lost+found", "proc", "root", "run", "sbin", "snap", "sys", "usr" };
 
+    // Upper bound on visible entries examined per folder before sorting; the
+    // sorted result is still limited to 1000 rows for the UI.
+    private const int MaxScannedEntries = 20000;
+
     [DllImport("libc", EntryPoint = "access", SetLastError = true)]
     private static extern int LinuxAccess([MarshalAs(UnmanagedType.LPUTF8Str)] string path, int mode);
 
@@ -44,8 +48,11 @@ public sealed class FileManagerService
             var directory = Resolve(root, relative, true);
             if (!Directory.Exists(directory)) throw new IOException("Folder not found.");
             var items = new List<FileItem>();
-            foreach (var path in Directory.EnumerateFileSystemEntries(directory).Take(3000))
+            foreach (var path in Directory.EnumerateFileSystemEntries(directory))
             {
+                // Truncate only after sorting. Cutting the raw enumeration (arbitrary
+                // order) would silently omit items from very large folders.
+                if (items.Count >= MaxScannedEntries) break;
                 var entryName = Path.GetFileName(path);
                 // ext4 filesystem housekeeping must not clutter ordinary NAS browsing.
                 // Never delete or modify the actual lost+found directory.
