@@ -105,20 +105,34 @@ public sealed class FilesModel : PageModel
         else
         {
             View = _files.Browse("system", CurrentRelative, Hidden);
-            // Only hide the Panel's obsolete installer artifacts in this user's home.
-            // This changes file visibility, never deletes files or blocks Show hidden files.
-            if (!Hidden && View.Available && string.Equals(Absolute,
-                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('/'), StringComparison.Ordinal))
-            {
-                View = View with { Items = View.Items.Where(item => !IsPanelInstallArtifact(item.Name)).ToArray() };
-            }
+            // Hide known YRMPanel installation leftovers from top-level Linux home
+            // folders (including the selected file user, not only the service HOME).
+            // This is presentation-only: never delete, move, or alter these files.
+            if (View.Available && IsUserHomeDirectory(Absolute))
+                View = View with { Items = View.Items.Where(item =>
+                    item.IsDirectory || !IsPanelInstallArtifact(item.Name)).ToArray() };
         }
         Samba = await _samba.ListAsync(HttpContext.RequestAborted);
     }
 
+    private static bool IsUserHomeDirectory(string absolute)
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('/');
+        if (string.Equals(absolute, home, StringComparison.Ordinal)) return true;
+        // The panel runs as a service, and its HOME can differ from the Linux
+        // user's /home/<username> being browsed. Limit the fallback to the
+        // top-level home itself: do not hide normal project install.sh files.
+        if (!OperatingSystem.IsLinux()) return false;
+        if (absolute == "/root") return true;
+        return absolute.StartsWith("/home/", StringComparison.Ordinal) &&
+            absolute.Length > "/home/".Length &&
+            absolute.IndexOf('/', "/home/".Length) < 0;
+    }
+
     private static bool IsPanelInstallArtifact(string name) =>
-        string.Equals(name, "install.sh", StringComparison.Ordinal) ||
-        string.Equals(name, "systemctl show yrm-panel.service -p ProtectSystem -p ReadWritePaths -p PrivateTmp -p PrivateMounts", StringComparison.Ordinal);
+        name is "install.sh" or "uninstall.sh" or "yrm-panel-update-trigger.sh" ||
+        // A previously executed diagnostic command accidentally became a filename.
+        name.StartsWith("systemctl show yrm-panel.service", StringComparison.OrdinalIgnoreCase);
 
     // The visible My Files root is derived from real directories, not a parallel
     // 'registered folders' database. Historical bookmarks are read for compatibility.

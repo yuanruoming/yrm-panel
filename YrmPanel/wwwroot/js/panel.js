@@ -928,6 +928,81 @@
     try { await navigator.clipboard.writeText($("docker-log-output")?.textContent || ""); showToast("Logs copied."); }
     catch { showToast("Copy failed. Select the text to copy.", "error"); }
   });
+  // Keep short-lived, same-origin Files responses ready while the pointer is
+  // over a folder. This is a bounded cache for navigation, not a separate file
+  // database; any mutation/Refresh clears it. Other apps retain normal fetch.
+  const filesPageCache = new Map();
+  const filesCacheLifetime = 4500;
+  async function fetchWorkspacePage(url, refresh = false) {
+    if (canonicalPath(url.split('?')[0]) !== '/Files')
+      return fetch(url, {credentials:'same-origin',headers:{'Accept':'text/html'},cache:'no-store'});
+    if (refresh) filesPageCache.delete(url);
+    const now = Date.now();
+    let entry = filesPageCache.get(url);
+    if (entry && now - entry.at >= filesCacheLifetime) {
+      filesPageCache.delete(url); entry = null;
+    }
+    if (!entry) {
+      const pending = fetch(url,{credentials:'same-origin',headers:{'Accept':'text/html'},cache:'no-store'});
+      entry = {at:now,promise:pending};
+      filesPageCache.set(url,entry);
+      pending.catch(() => {if (filesPageCache.get(url) === entry) filesPageCache.delete(url);});
+      if (filesPageCache.size > 7) filesPageCache.delete(filesPageCache.keys().next().value);
+    }
+    return (await entry.promise).clone();
+  }
+  let filesPrefetchTimer = null;
+  document.addEventListener('pointerover', event => {
+    if (!activeUrl?.startsWith('/Files')) return;
+    const anchor = event.target instanceof Element ? event.target.closest(
+      '.fm-explorer [data-fm-inline-folder],.fm-explorer [data-fm-tree-folder],.fm-explorer .fm-locations a[href],.fm-explorer .fm-breadcrumbs a[href]') : null;
+    if (!anchor || (event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget))) return;
+    const url = internalUrl(anchor.href);
+    if (!url || url === activeUrl || canonicalPath(url.split('?')[0]) !== '/Files' ||
+        new URL(url,location.origin).searchParams.has('handler')) return;
+    if (filesPrefetchTimer !== null) clearTimeout(filesPrefetchTimer);
+    filesPrefetchTimer = setTimeout(() => {
+      filesPrefetchTimer = null;
+      void fetchWorkspacePage(url).catch(() => {});
+    }, 100);
+  }, true);
+  document.addEventListener('pointerout', event => {
+    if (filesPrefetchTimer === null || !(event.target instanceof Element)) return;
+    const anchor = event.target.closest('a[href]');
+    if (anchor && !(event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget))) {
+      clearTimeout(filesPrefetchTimer); filesPrefetchTimer = null;
+    }
+  }, true);
+
+  // A Files navigation changes the breadcrumb, toolbar actions and directory
+  // rows, NOT the whole workspace pane. Keep the scroll host and sibling DOM.
+  function reconcileFilesContent(oldContent, newContent) {
+    const oldPath = oldContent.querySelector('.fm-unified-path');
+    const freshPath = newContent.querySelector('.fm-unified-path');
+    const oldTools = oldContent.querySelector('.fm-compact-toolbar');
+    const freshTools = newContent.querySelector('.fm-compact-toolbar');
+    const oldDirectory = oldContent.querySelector('[data-fm-directory-view]');
+    const freshDirectory = newContent.querySelector('[data-fm-directory-view]');
+    if (!oldPath || !freshPath || !oldTools || !freshTools || !oldDirectory || !freshDirectory)
+      return false;
+    const oldCrumbs = oldPath.querySelector('.fm-breadcrumbs');
+    const freshCrumbs = freshPath.querySelector('.fm-breadcrumbs');
+    if (!oldCrumbs || !freshCrumbs) return false;
+    if (oldCrumbs.innerHTML !== freshCrumbs.innerHTML)
+      oldCrumbs.replaceChildren(...Array.from(freshCrumbs.childNodes,node=>document.importNode(node,true)));
+    const oldRefresh = oldPath.querySelector('.fm-history-refresh');
+    const freshRefresh = freshPath.querySelector('.fm-history-refresh');
+    if (oldRefresh && freshRefresh) oldRefresh.href = freshRefresh.href;
+    if (oldTools.innerHTML !== freshTools.innerHTML)
+      oldTools.replaceChildren(...Array.from(freshTools.childNodes,node=>document.importNode(node,true)));
+    // Replace the entries only; the directory's wrapper, layout, toolbar,
+    // sidebar and window survive the navigation. No artificial fade/spinner.
+    oldDirectory.replaceChildren(...Array.from(freshDirectory.childNodes,node=>document.importNode(node,true)));
+    oldDirectory.querySelector('.responsive-table')?.scrollTo({top:0,left:0});
+    window.dispatchEvent(new Event('yrm-panel:files-view-changed'));
+    return true;
+  }
+
   // Preserve Files/Settings navigation DOM when loading an inner view.
   // The server may return a full Razor document, but only the working pane
   // changes. This avoids collapsing and rebuilding the sidebar on every click.
@@ -954,6 +1029,9 @@
       if(currentDialog&&freshDialog)currentDialog.replaceWith(document.importNode(freshDialog,true));
     }
     if(incoming==='/Files'){
+      // File preview, bulk actions and uploads read the live directory path
+      // from this surviving root; never leave it at the previous folder.
+      oldRoot.dataset.filesCurrentPath = newRoot.dataset.filesCurrentPath;
       const oldFolders=oldNav.querySelector('#yrm-my-files-children');
       const freshFolders=newNav.querySelector('#yrm-my-files-children');
       if(oldFolders&&freshFolders){
@@ -977,7 +1055,8 @@
       link.classList.toggle('is-active',selected.has(link.getAttribute('href'))||
         (requestedPath!==null&&requestedPath!=='@folders'&&linkPath===requestedPath));
     });
-    oldContent.replaceWith(document.importNode(newContent,true));
+    if (incoming !== '/Files' || !reconcileFilesContent(oldContent,newContent))
+      oldContent.replaceWith(document.importNode(newContent,true));
     // Replace route-sensitive dialogs and notices, keeping the original sidebar.
     for (const child of Array.from(page.children)) if (child !== oldRoot) child.remove();
     for (const child of Array.from(remotePage.children)) {
@@ -993,7 +1072,7 @@
       canonicalPath(activeUrl.split("?")[0]) === canonicalPath(url.split("?")[0]);
     if (!sameWorkspace) appWindow?.classList.add("is-loading");
     try {
-      const response = await fetch(url, {credentials: "same-origin", headers: {"Accept":"text/html"}, cache: "no-store"});
+      const response = await fetchWorkspacePage(url,refresh);
       if (response.redirected && new URL(response.url).pathname.startsWith("/Account/")) {
         location.assign(response.url); return;
       }
@@ -1027,7 +1106,7 @@
       if (!reconcileWorkspaceView(remotePage,url)) page.replaceChildren(fragment);
       harvestNotices(page);
       scanDdnsFailures();
-      windowScroll.scrollTop = 0;
+      if (!sameWorkspace) windowScroll.scrollTop = 0;
       setPageShell(false, title);
       renderTabs();
       closePopup(launcher, launcherButton);
@@ -1105,6 +1184,7 @@
     event.preventDefault();
     // Clicking Refresh on the currently open Razor Page fetches new server data.
     const refresh = url === activeUrl && !!anchor.closest("#window-page");
+    if (refresh && url.startsWith('/Files')) filesPageCache.clear();
     void openPage(url, {refresh});
   });
   document.addEventListener('click',event=>{
@@ -1138,6 +1218,7 @@
     // Confirmation is handled once by v1-confirm.js before sudo authorization.
     if (actionPending) return; // Avoid overlapping state-changing POST requests from this shell.
     actionPending = true;
+    filesPageCache.clear();
     const submittedUrl = activeUrl;
     const requestId = ++navigationId;
     const button = event.submitter instanceof HTMLButtonElement ? event.submitter : null;
@@ -1172,6 +1253,8 @@
       const fragment = document.createDocumentFragment();
       for (const node of Array.from(remotePage.childNodes)) fragment.append(document.importNode(node, true));
       if (!reconcileWorkspaceView(remotePage,targetUrl)) page.replaceChildren(fragment);
+      if (canonicalPath(submittedUrl.split('?')[0]) === '/Files')
+        window.dispatchEvent(new Event('yrm-panel:files-data-changed'));
       harvestNotices(page);
       scanDdnsFailures();
       // Refresh Files on next opening after any disk mount-state change.
@@ -1185,7 +1268,7 @@
         desktopNeedsRefresh = true;
         void loadTaskbarPins();
       }
-      windowScroll.scrollTop = 0;
+      if (canonicalPath(submittedUrl.split('?')[0]) !== '/Files') windowScroll.scrollTop = 0;
       const title = doc.body.dataset.initialTitle || "Application";
       if (tabs.has(activeUrl)) { tabs.get(activeUrl).title = title; tabs.get(activeUrl).fragment = null; }
       setPageShell(false, title);

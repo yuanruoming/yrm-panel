@@ -24,7 +24,13 @@ class DesktopUiAndBatch(unittest.TestCase):
     def test_shell_keeps_file_settings_navigation_without_url_reload(self):
         shell=source('YrmPanel/wwwroot/js/panel.js')
         self.assertIn('function reconcileWorkspaceView(remotePage, targetUrl)',shell)
+        self.assertIn('function reconcileFilesContent(oldContent, newContent)',shell)
+        self.assertIn('oldDirectory.replaceChildren(',shell)
+        self.assertIn('oldRoot.dataset.filesCurrentPath = newRoot.dataset.filesCurrentPath',shell)
+        self.assertIn("if (incoming !== '/Files' || !reconcileFilesContent(oldContent,newContent))",shell)
         self.assertIn('oldContent.replaceWith(document.importNode(newContent,true))',shell)
+        self.assertIn('fetchWorkspacePage(url,refresh)',shell)
+        self.assertIn('filesPageCache.clear()',shell)
         self.assertIn('if (!reconcileWorkspaceView(remotePage,url)) page.replaceChildren(fragment);',shell)
         self.assertIn('if (!sameWorkspace) appWindow?.classList.add("is-loading")',shell)
         layout=source('YrmPanel/Pages/Shared/_Layout.cshtml')

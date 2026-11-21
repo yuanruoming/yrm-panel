@@ -4,6 +4,7 @@
 (() => {
   'use strict';
   const cache = new Map();
+  const pendingLoads = new Map();
   const pending = new Map();
   const clickDelay = 240; // Hold the first click until a possible double-click is ruled out.
   const route = (path, library = false) => {
@@ -13,18 +14,25 @@
     return url.pathname + url.search;
   };
   async function loadFolders(path) {
-    if (cache.has(path)) return cache.get(path);
-    const url = new URL('/Files', location.origin);
-    url.searchParams.set('handler', 'Tree');
-    url.searchParams.set('path', path);
-    const response = await fetch(url, {credentials: 'same-origin', cache: 'no-store', headers: {'Accept': 'application/json'}});
-    if (!response.ok || response.redirected) throw new Error(`Could not read folder (HTTP ${response.status}).`);
-    const data = await response.json();
-    if (!Array.isArray(data?.folders)) throw new Error('Invalid folder response.');
-    const folders = (Array.isArray(data.folderNodes) ? data.folderNodes : data.folders.map(name => ({name})))
-      .filter(item => item && typeof item.name === 'string' && item.name && item.name !== '.' && item.name !== '..');
-    cache.set(path, folders);
-    return folders;
+    const cached = cache.get(path);
+    if (cached && Date.now() - cached.at < 6000) return cached.folders;
+    if (pendingLoads.has(path)) return pendingLoads.get(path);
+    const task = (async () => {
+      const url = new URL('/Files', location.origin);
+      url.searchParams.set('handler', 'Tree');
+      url.searchParams.set('path', path);
+      const response = await fetch(url, {credentials: 'same-origin', cache: 'no-store', headers: {'Accept': 'application/json'}});
+      if (!response.ok || response.redirected) throw new Error(`Could not read folder (HTTP ${response.status}).`);
+      const data = await response.json();
+      if (!Array.isArray(data?.folders)) throw new Error('Invalid folder response.');
+      const folders = (Array.isArray(data.folderNodes) ? data.folderNodes : data.folders.map(name => ({name})))
+        .filter(item => item && typeof item.name === 'string' && item.name && item.name !== '.' && item.name !== '..');
+      cache.set(path, {folders, at:Date.now()});
+      if (cache.size > 64) cache.delete(cache.keys().next().value);
+      return folders;
+    })();
+    pendingLoads.set(path, task);
+    try {return await task;} finally {if(pendingLoads.get(path) === task) pendingLoads.delete(path);}
   }
   function folderNode(path, name, library) {
     const wrapper = document.createElement('div');
@@ -176,6 +184,29 @@
     cancelClick(action.surface);
     void action.toggle();
   }, true);
+  // Prefetch child names on intent so first expansion can paint immediately.
+  // No rendering, icon rotation or loading animation happens on hover.
+  let hoverTimer = null;
+  document.addEventListener('pointerover', event => {
+    if (!(event.target instanceof Element)) return;
+    const folder = event.target.closest('[data-fm-tree-folder],tr[data-fm-inline-root]');
+    if (!folder || (event.relatedTarget instanceof Node && folder.contains(event.relatedTarget))) return;
+    const path = folder.dataset.fmTreePath || folder.dataset.fmInlineRoot;
+    if (!path) return;
+    if (hoverTimer !== null) clearTimeout(hoverTimer);
+    hoverTimer = setTimeout(() => {
+      hoverTimer = null;
+      void loadFolders(path).catch(() => {});
+    }, 110);
+  }, true);
+  document.addEventListener('pointerout', event => {
+    if (hoverTimer === null || !(event.target instanceof Element)) return;
+    const folder = event.target.closest('[data-fm-tree-folder],tr[data-fm-inline-root]');
+    if (folder && !(event.relatedTarget instanceof Node && folder.contains(event.relatedTarget))) {
+      clearTimeout(hoverTimer); hoverTimer = null;
+    }
+  }, true);
+  window.addEventListener('yrm-panel:files-data-changed', () => cache.clear());
   document.addEventListener('click', event => {
     if (event.target instanceof Element && event.target.closest('.fm-history-refresh')) cache.clear();
   });

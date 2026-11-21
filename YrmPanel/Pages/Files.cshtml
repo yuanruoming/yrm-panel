@@ -132,6 +132,7 @@
             </a>
           }
         </div>
+      <div class="fm-directory-view" data-fm-directory-view>
       @if (Model.IsMyFolders)
       {
                 @if (Model.MyFiles.Count == 0)
@@ -246,7 +247,14 @@
                       <svg class="ui-icon fm-folder-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>@item.Name</span>
                     </a>
                   }
-                  else { <span class="fm-folder-chevron-spacer" aria-hidden="true"></span><span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" title="@item.Name" >@item.Name</button> }
+                  else
+                  {
+                    <span class="fm-file-entry" title="@item.Name">
+                      <span class="fm-folder-chevron-spacer" aria-hidden="true"></span>
+                      <span class="explorer-file-icon" aria-hidden="true">▤</span>
+                      <button type="button" class="fm-file-open" data-open-file="@item.Name" title="@item.Name">@item.Name</button>
+                    </span>
+                  }
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared folder">Shared</small> }
                 </td>
                 <td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
@@ -320,6 +328,7 @@
           @if (Model.View.Items.Count == 0) { <div class="empty-hint compact-empty">This folder is empty.</div> }
         }
       }
+      </div>
     </div>
   </div>
 </section>

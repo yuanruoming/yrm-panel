@@ -247,6 +247,35 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertIn('.fm-tree-preview-row>td{padding:0!important;background:transparent!important;', css)
         self.assertIn('user-select:none;', css)
 
+    def test_progressive_files_panel_and_known_installer_remnants(self):
+        view = content('YrmPanel/Pages/Files.cshtml')
+        model = content('YrmPanel/Pages/Files.cshtml.cs')
+        css = content('YrmPanel/wwwroot/css/v1-stability.css')
+        shell = content('YrmPanel/wwwroot/js/panel.js')
+        tree = content('YrmPanel/wwwroot/js/v1-tree-navigation.js')
+        # Never change the existing single-click/double-click contract.
+        self.assertIn("const clickDelay = 240", tree)
+        self.assertIn("document.addEventListener('dblclick'", tree)
+        self.assertIn("link.append(chevron,icon,label)", tree)
+        # Files gets a stable listing host; the preview path must follow it.
+        self.assertIn('data-fm-directory-view', view)
+        self.assertIn('data-files-current-path="@currentRoute"', view)
+        self.assertIn('reconcileFilesContent(oldContent,newContent)', shell)
+        self.assertIn('oldRoot.dataset.filesCurrentPath = newRoot.dataset.filesCurrentPath', shell)
+        self.assertIn('if (!sameWorkspace) windowScroll.scrollTop = 0;', shell)
+        self.assertIn('filesPageCache.size > 7', shell)
+        self.assertIn('pendingLoads.set(path, task)', tree)
+        # Never rewrite file sizes, names or filesystem entries to hide artifacts.
+        self.assertIn('IsUserHomeDirectory(Absolute)', model)
+        self.assertIn('item.IsDirectory || !IsPanelInstallArtifact(item.Name)', model)
+        self.assertIn('name.StartsWith("systemctl show yrm-panel.service"', model)
+        self.assertIn('name is "install.sh" or "uninstall.sh"', model)
+        self.assertNotIn('if (!Hidden && View.Available', model)
+        # Long names stay alongside their glyphs and reveal the full tooltip.
+        self.assertIn('class="fm-file-entry" title="@item.Name"', view)
+        self.assertIn('fm-file-entry>.fm-file-open{min-width:0;overflow:hidden;text-overflow:ellipsis;', css)
+        self.assertIn('.fm-directory-view>.responsive-table', css)
+
     def test_about_restores_version_without_dev_badge(self):
         view = content('YrmPanel/Pages/Settings.cshtml')
         self.assertIn('class="yrm-updates-current"', view)
