@@ -235,7 +235,7 @@
     const target=event.target;
     if (!(target instanceof Element))return;
     const row=target.closest('[data-b10-file-row]');
-    if(row&&!target.closest('.explorer-item-menu,form,details,summary,input,textarea,select')){
+    if(row&&!target.closest('.explorer-item-menu,form,details,summary,input,textarea,select,[data-fm-expand]')){
       setFileSelection(row,{toggle:event.ctrlKey||event.metaKey,range:event.shiftKey,add:event.ctrlKey||event.metaKey});
       return;
     }

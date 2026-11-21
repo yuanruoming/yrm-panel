@@ -943,7 +943,7 @@
       filesPageCache.delete(url); entry = null;
     }
     if (!entry) {
-      const pending = fetch(url,{credentials:'same-origin',headers:{'Accept':'text/html'},cache:'no-store'});
+      const pending = fetch(url,{credentials:'same-origin',headers:{'Accept':'text/html',...(refresh?{'X-YRM-Refresh':'1'}:{})},cache:'no-store'});
       entry = {at:now,promise:pending};
       filesPageCache.set(url,entry);
       pending.catch(() => {if (filesPageCache.get(url) === entry) filesPageCache.delete(url);});

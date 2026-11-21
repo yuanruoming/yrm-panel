@@ -18,6 +18,7 @@ public sealed class SettingsModel : PageModel
     private readonly FirewallService _firewall;
     private readonly DdnsService _ddns;
     private readonly PanelCertificateService _certificates;
+    private readonly FilesNavigationSnapshot _filesNavigation;
 
     public SettingsModel(
         PanelSettingsStore settings,
@@ -30,7 +31,8 @@ public sealed class SettingsModel : PageModel
         StorageDeviceService devices,
         FirewallService firewall,
         DdnsService ddns,
-        PanelCertificateService certificates)
+        PanelCertificateService certificates,
+        FilesNavigationSnapshot filesNavigation)
     {
         _settings = settings;
         _accounts = accounts;
@@ -43,6 +45,7 @@ public sealed class SettingsModel : PageModel
         _firewall = firewall;
         _ddns = ddns;
         _certificates = certificates;
+        _filesNavigation = filesNavigation;
     }
 
     private static readonly HashSet<string> TaskbarApps = new(StringComparer.Ordinal)
@@ -254,6 +257,7 @@ public sealed class SettingsModel : PageModel
     {
         var result = await _devices.MountAsync(uuid, mountPath, automatic, adminPassword, HttpContext.RequestAborted);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        if (result.Ok) _filesNavigation.Invalidate();
         return RedirectToPage(new { tab = "storage" });
     }
 
@@ -286,6 +290,7 @@ public sealed class SettingsModel : PageModel
         }
         var result = await _devices.UnmountAsync(root, uuid, adminPassword, ct);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        if (result.Ok) _filesNavigation.Invalidate();
         return RedirectToPage(new { tab = "storage" });
     }
 
@@ -295,6 +300,7 @@ public sealed class SettingsModel : PageModel
         // The privileged helper re-examines partition tables, signatures and mounts.
         var result = await _devices.InitializeAsync(diskPath, confirmation, adminPassword, HttpContext.RequestAborted);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        if (result.Ok) _filesNavigation.Invalidate();
         return RedirectToPage(new { tab = "storage" });
     }
 
@@ -303,6 +309,7 @@ public sealed class SettingsModel : PageModel
     {
         var result = await _devices.CompleteAsync(partitionPath, confirmation, adminPassword, HttpContext.RequestAborted);
         Notice = result.Ok ? result.Message : "Error: " + result.Message;
+        if (result.Ok) _filesNavigation.Invalidate();
         return RedirectToPage(new { tab = "storage" });
     }
 
@@ -739,7 +746,9 @@ public sealed class SettingsModel : PageModel
         if (history is null) return NotFound();
         try
         {
-            Response.Headers["Cache-Control"] = "private, max-age=600";
+            // History filenames contain a unique ID and their bytes are immutable.
+            // Let the browser keep them between visits rather than re-downloading.
+            Response.Headers["Cache-Control"] = "private, max-age=31536000, immutable";
             return File(System.IO.File.OpenRead(history.Value.Path), history.Value.Mime);
         }
         catch (IOException) { return NotFound(); }

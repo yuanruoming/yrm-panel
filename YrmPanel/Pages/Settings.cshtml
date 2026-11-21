@@ -695,7 +695,7 @@
                 <form method="post" asp-page-handler="RestoreWallpaperHistory" asp-route-tab="appearance">
                   <input type="hidden" name="id" value="@history.Id" />
                   <button type="submit" class="yrm-wallpaper-recent-item" title="Use this wallpaper" aria-label="Apply previously used wallpaper">
-                    <img src="@Url.Page("/Settings", "WallpaperHistoryImage", new { id = history.Id })" alt="Previously used wallpaper" loading="lazy" />
+                    <img src="@Url.Page("/Settings", "WallpaperHistoryImage", new { id = history.Id })" alt="Previously used wallpaper" loading="eager" decoding="async" />
                   </button>
                 </form>
               }

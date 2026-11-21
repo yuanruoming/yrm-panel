@@ -228,7 +228,7 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertNotIn('fm-my-files-chevron', css)
         self.assertIn('fm-my-files-folder{width:16px;height:16px;flex:0 0 16px;transform:none;transition:none;}', css)
         self.assertIn('asp-route-path="@@folders"', view)
-        # The file table and recursively generated tree use a single folder link.
+        # One folder link and one separately operable chevron per directory.
         self.assertEqual(view.count('data-fm-inline-folder'), 2)
         self.assertNotIn('data-fm-inline-toggle', view)
         self.assertNotIn('fm-inline-toggle-spacer', view)
@@ -237,10 +237,11 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertNotIn('fm-tree-toggle', tree)
         self.assertIn("const row = target.closest('tr[data-fm-inline-root]')", tree)
         self.assertIn("const nested = target.closest('[data-fm-tree-folder]')", tree)
-        self.assertIn("event.detail > 1", tree)
+        self.assertIn("target?.closest('[data-fm-expand]')", tree)
         self.assertIn("document.addEventListener('dblclick'", tree)
-        self.assertIn("action.anchor.click()", tree)
-        self.assertIn("action.surface.isConnected", tree)
+        self.assertIn("anchor.click()", tree)
+        self.assertNotIn('clickDelay = 240', tree)
+        self.assertNotIn('pending.set(action.surface', tree)
         self.assertIn("document.addEventListener('dblclick'", actions)
         self.assertIn("button.dataset.fmNavigate='1'", actions)
         self.assertNotIn("anchor.dataset.yrmOpenOnDouble", actions)
@@ -253,10 +254,12 @@ class RoundTwoContracts(unittest.TestCase):
         css = content('YrmPanel/wwwroot/css/v1-stability.css')
         shell = content('YrmPanel/wwwroot/js/panel.js')
         tree = content('YrmPanel/wwwroot/js/v1-tree-navigation.js')
-        # Never change the existing single-click/double-click contract.
-        self.assertIn("const clickDelay = 240", tree)
+        # Latest contract: chevron only expands, folder single-selects/double-opens.
+        self.assertNotIn("const clickDelay = 240", tree)
         self.assertIn("document.addEventListener('dblclick'", tree)
-        self.assertIn("link.append(chevron,icon,label)", tree)
+        self.assertIn("header.append(expand,link)", tree)
+        self.assertEqual(view.count('data-fm-expand'), 2)
+        self.assertIn('link.append(icon,label)', tree)
         # Files gets a stable listing host; the preview path must follow it.
         self.assertIn('data-fm-directory-view', view)
         self.assertIn('data-files-current-path="@currentRoute"', view)

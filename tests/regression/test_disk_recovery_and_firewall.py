@@ -129,7 +129,7 @@ class UiIntegration(TestCase):
         self.assertIn("listFolders('')",js)
         self.assertNotIn('This folder will be created in the current location',files)
         self.assertNotIn('Parent location</span>',files)
-        self.assertNotIn('Double-click to open',files)
+        self.assertIn('title="Double-click to open"',files)
         # Existing custom upload remains functional from My Files.
         self.assertIn('class="fm-visually-hidden" id="fm-root-upload-file" type="file"',files)
         self.assertIn('data-file-picker="fm-root-upload-file"',files)

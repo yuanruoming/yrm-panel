@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using System.Diagnostics;
 using YrmPanel.Services;
 
 namespace YrmPanel.Pages;
@@ -12,15 +13,18 @@ public sealed class FilesModel : PageModel
     private readonly SambaManagementService _samba;
     private readonly MyFoldersStore _folders;
     private readonly StorageDeviceService _devices;
+    private readonly FilesNavigationSnapshot _navigation;
 
     public FilesModel(FileManagerService files, StorageManagementService storage,
-        SambaManagementService samba, MyFoldersStore folders, StorageDeviceService devices)
+        SambaManagementService samba, MyFoldersStore folders, StorageDeviceService devices,
+        FilesNavigationSnapshot navigation)
     {
         _files = files;
         _storage = storage;
         _samba = samba;
         _folders = folders;
         _devices = devices;
+        _navigation = navigation;
     }
 
     [BindProperty(SupportsGet = true)] public string Path { get; set; } = "";
@@ -84,8 +88,13 @@ public sealed class FilesModel : PageModel
     {
         if (!Request.Query.ContainsKey("path")) Path = FolderHome;
         if (Path == "/") Path = "";
+        var started = Stopwatch.GetTimestamp();
         QuickAccess = _folders.ListPins();
-        var discovered = await _devices.ListAsync(HttpContext.RequestAborted);
+        // A genuine Refresh bypasses the short-lived navigation snapshot.
+        var refresh = Request.Headers["X-YRM-Refresh"].ToString() == "1";
+        var (discovered, samba) = await _navigation.GetAsync(HttpContext.RequestAborted, refresh);
+        var catalogMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+
         PhysicalDisks = discovered.Where(d => d.Type == "disk").ToArray();
         MountedVolumes = discovered
             .Where(device => device.MountPoint.Length > 0 && device.CanMount &&
@@ -98,6 +107,7 @@ public sealed class FilesModel : PageModel
             .OrderBy(device => device.Path, StringComparer.Ordinal)
             .ToArray();
         MyFiles = DiscoverMyFiles();
+        var foldersMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds - catalogMs;
         if (IsMyFolders)
         {
             View = new FileView("system", "", true, null, []);
@@ -112,7 +122,10 @@ public sealed class FilesModel : PageModel
                 View = View with { Items = View.Items.Where(item =>
                     item.IsDirectory || !IsPanelInstallArtifact(item.Name)).ToArray() };
         }
-        Samba = await _samba.ListAsync(HttpContext.RequestAborted);
+        Samba = samba;
+        var browseMs = Stopwatch.GetElapsedTime(started).TotalMilliseconds - catalogMs - foldersMs;
+        Response.Headers["Server-Timing"] = FormattableString.Invariant(
+            $"catalog;dur={catalogMs:0.0},folders;dur={foldersMs:0.0},browse;dur={browseMs:0.0}");
     }
 
     private static bool IsUserHomeDirectory(string absolute)
@@ -132,7 +145,9 @@ public sealed class FilesModel : PageModel
     private static bool IsPanelInstallArtifact(string name) =>
         name is "install.sh" or "uninstall.sh" or "yrm-panel-update-trigger.sh" ||
         // A previously executed diagnostic command accidentally became a filename.
-        name.StartsWith("systemctl show yrm-panel.service", StringComparison.OrdinalIgnoreCase);
+        name.StartsWith("systemctl show yrm-panel.service", StringComparison.OrdinalIgnoreCase) ||
+        // The actual diagnostic orphan is missing the leading 's'.
+        name.StartsWith("ystemctl show yrm-panel.service", StringComparison.OrdinalIgnoreCase);
 
     // The visible My Files root is derived from real directories, not a parallel
     // 'registered folders' database. Historical bookmarks are read for compatibility.
@@ -693,6 +708,7 @@ public sealed class FilesModel : PageModel
         }
         var name = string.IsNullOrWhiteSpace(shareName) ? folder : shareName.Trim();
         Notice = await _samba.SaveAsync(name, full, readOnly, adminPassword, HttpContext.RequestAborted);
+        if (!Notice.StartsWith("Error:", StringComparison.Ordinal)) _navigation.Invalidate();
         return Back();
     }
 
@@ -702,6 +718,7 @@ public sealed class FilesModel : PageModel
         // A removed share is already reflected by the next server-side listing.
         // Keep failures visible; avoid the redundant green "removed" notification.
         Notice = message.StartsWith("Error:", StringComparison.Ordinal) ? message : null;
+        if (Notice is null) _navigation.Invalidate();
         return Back();
     }
 

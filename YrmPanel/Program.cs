@@ -86,6 +86,7 @@ builder.Services.AddSingleton<DdnsService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DdnsService>());
 builder.Services.AddSingleton<ServerInfoService>();
 builder.Services.AddSingleton<SambaManagementService>();
+builder.Services.AddSingleton<FilesNavigationSnapshot>();
 builder.Services.AddSingleton<SystemdStatusService>();
 builder.Services.AddSingleton<SystemPowerService>();
 builder.Services.AddSingleton<ISystemMetricsService>(sp =>

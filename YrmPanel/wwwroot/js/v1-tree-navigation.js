@@ -1,12 +1,10 @@
-/* Files folder navigation: one static folder icon, one row, two deliberate actions.
-   Single click toggles its children; double click navigates to that folder.
-   Preserve native links for navigation in the desktop shell and without JavaScript. */
+/* Files folder navigation: immediate chevron expand, static folder icon.
+   Clicking a folder selects it; double-click navigates without a fixed delay.
+   Keep native links for desktop-shell navigation and no-JS fallback. */
 (() => {
   'use strict';
   const cache = new Map();
   const pendingLoads = new Map();
-  const pending = new Map();
-  const clickDelay = 240; // Hold the first click until a possible double-click is ruled out.
   const route = (path, library = false) => {
     const url = new URL('/Files', location.origin);
     url.searchParams.set('path', path);
@@ -45,14 +43,21 @@
     link.href = route(path, library);
     link.dataset.fmTreeFolder = '';
     link.dataset.fmTreePath = path;
-    link.setAttribute('aria-expanded', 'false');
-    link.title = 'Click to expand or collapse; double-click to open';
+    link.title = 'Double-click to open';
+    const expand = document.createElement('button');
+    expand.type = 'button';
+    expand.className = 'fm-folder-expand';
+    expand.dataset.fmExpand = '';
+    expand.dataset.fmTreePath = path;
+    expand.setAttribute('aria-expanded', 'false');
+    expand.setAttribute('aria-label', 'Expand or collapse ' + name);
     const chevron = document.createElementNS('http://www.w3.org/2000/svg','svg');
     chevron.classList.add('ui-icon', 'fm-folder-chevron');
     chevron.setAttribute('aria-hidden','true');
     const arrow = document.createElementNS('http://www.w3.org/2000/svg','use');
     arrow.setAttribute('href','#i-chevron');
     chevron.append(arrow);
+    expand.append(chevron);
     const icon = document.createElementNS('http://www.w3.org/2000/svg','svg');
     icon.classList.add('ui-icon', 'fm-folder-icon');
     icon.setAttribute('aria-hidden','true');
@@ -61,8 +66,8 @@
     icon.append(use);
     const label = document.createElement('span');
     label.textContent = name;
-    link.append(chevron,icon,label);
-    header.append(link);
+    link.append(icon,label);
+    header.append(expand,link);
     const descendants = document.createElement('div');
     descendants.className = 'fm-tree-descendants';
     descendants.hidden = true;
@@ -81,6 +86,7 @@
     if (!path) return;
     const expanding = row.getAttribute('aria-expanded') !== 'true';
     row.setAttribute('aria-expanded', String(expanding));
+    row.querySelector(':scope > .explorer-name [data-fm-expand]')?.setAttribute('aria-expanded', String(expanding));
     let preview = row.nextElementSibling;
     if (!expanding) {
       if (preview?.classList.contains('fm-tree-preview-row')) preview.hidden = true;
@@ -110,79 +116,67 @@
       preview.hidden = false;
     } catch (error) {
       row.setAttribute('aria-expanded', 'false');
+      row.querySelector(':scope > .explorer-name [data-fm-expand]')?.setAttribute('aria-expanded', 'false');
       console.warn('Files folder preview could not load:', error);
     }
   }
-  async function toggleNested(link) {
-    const wrapper = link.closest('.fm-tree-node');
+  async function toggleNested(expand) {
+    const wrapper = expand.closest('.fm-tree-node');
     const children = wrapper?.querySelector(':scope > .fm-tree-descendants');
     if (!children) return;
-    const expanding = link.getAttribute('aria-expanded') !== 'true';
-    link.setAttribute('aria-expanded', String(expanding));
+    const expanding = expand.getAttribute('aria-expanded') !== 'true';
+    expand.setAttribute('aria-expanded', String(expanding));
     children.hidden = !expanding;
     if (!expanding || children.dataset.loaded === '1') {
       if (expanding && children.dataset.hasChildren === '0') children.hidden = true;
       return;
     }
     try {
-      const folders = await loadFolders(link.dataset.fmTreePath || '');
-      if (!children.isConnected || link.getAttribute('aria-expanded') !== 'true') return;
-      renderChildren(children, folders, link.dataset.fmTreePath || '', false);
+      const folders = await loadFolders(expand.dataset.fmTreePath || '');
+      if (!children.isConnected || expand.getAttribute('aria-expanded') !== 'true') return;
+      renderChildren(children, folders, expand.dataset.fmTreePath || '', false);
       children.dataset.hasChildren = folders.length ? '1' : '0';
       children.dataset.loaded = '1';
       children.hidden = !folders.length;
     } catch (error) {
-      link.setAttribute('aria-expanded', 'false');
+      expand.setAttribute('aria-expanded', 'false');
       children.hidden = true;
       console.warn('Files nested folder preview could not load:', error);
     }
   }
-  function actionFrom(target) {
-    if (!(target instanceof Element) || !target.closest('.fm-explorer')) return null;
-    if (target.closest('.explorer-item-menu,details,summary,form,input,textarea,select,[data-open-file],[data-b12-open-file],button,[contenteditable="true"]')) return null;
-    const nested = target.closest('[data-fm-tree-folder]');
-    if (nested) return {surface:nested, anchor:nested, toggle:()=>toggleNested(nested)};
+  function navigationTarget(target) {
+    if (!(target instanceof Element) || !target.closest('.fm-explorer') ||
+        target.closest('.explorer-item-menu,details,summary,form,input,textarea,select,[data-open-file],[data-b12-open-file],button,[contenteditable="true"]')) return null;
+    const nested = target.closest('[data-fm-tree-folder]') ||
+      target.closest('.fm-tree-node-header')?.querySelector('[data-fm-tree-folder]');
+    if (nested) return nested;
     const row = target.closest('tr[data-fm-inline-root]');
-    if (!row?.dataset.fmInlineRoot) return null;
-    const anchor = row.querySelector('[data-fm-inline-folder]');
-    if (!anchor) return null;
-    return {surface:row, anchor, toggle:()=>toggleInline(row)};
-  }
-  function cancelClick(surface) {
-    const timer = pending.get(surface);
-    if (timer !== undefined) clearTimeout(timer);
-    pending.delete(surface);
+    return row?.dataset.fmInlineRoot ? row.querySelector('[data-fm-inline-folder]') : null;
   }
   document.addEventListener('click', event => {
-    const action = actionFrom(event.target);
-    if (!action || action.anchor.dataset.fmNavigate === '1') return;
-    if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
-    event.preventDefault(); // The link opens on double-click, never on a single click.
-    if (event.detail > 1) {cancelClick(action.surface);return;}
-    cancelClick(action.surface);
-    if (!event.detail) {void action.toggle();return;} // Keyboard activation.
-    pending.set(action.surface, setTimeout(() => {
-      pending.delete(action.surface);
-      if (action.surface.isConnected) void action.toggle();
-    }, clickDelay));
+    const target = event.target instanceof Element ? event.target : null;
+    const expand = target?.closest('[data-fm-expand]');
+    if (expand?.closest('.fm-explorer')) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const row = expand.closest('tr[data-fm-inline-root]');
+      if (row) void toggleInline(row);
+      else void toggleNested(expand);
+      return;
+    }
+    const anchor = navigationTarget(target);
+    if (anchor?.dataset.fmNavigate !== '1' && event.button === 0 &&
+        !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey)
+      event.preventDefault(); // Single click selects. No timers, no navigation.
   }, true);
   document.addEventListener('dblclick', event => {
-    const action = actionFrom(event.target);
-    if (!action || event.button !== 0) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest('[data-fm-expand]') || event.button !== 0) return;
+    const anchor = navigationTarget(target);
+    if (!anchor) return;
     event.preventDefault();
-    cancelClick(action.surface);
-    // Dispatch a normal native link click: the existing desktop shell handles
-    // internal navigation without reloading the entire panel or changing its URL.
-    action.anchor.dataset.fmNavigate = '1';
-    try {action.anchor.click();} finally {delete action.anchor.dataset.fmNavigate;}
-  }, true);
-  document.addEventListener('keydown', event => {
-    if (event.key !== ' ' || !(event.target instanceof Element)) return;
-    const action = actionFrom(event.target);
-    if (!action || event.target !== action.anchor) return;
-    event.preventDefault();
-    cancelClick(action.surface);
-    void action.toggle();
+    anchor.dataset.fmNavigate = '1';
+    try { anchor.click(); } finally { delete anchor.dataset.fmNavigate; }
   }, true);
   // Prefetch child names on intent so first expansion can paint immediately.
   // No rendering, icon rotation or loading animation happens on hover.

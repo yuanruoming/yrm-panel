@@ -181,10 +181,32 @@ public sealed class PanelSettingsStore
         _ => "application/octet-stream"
     };
 
-    private static string WallpaperDigest(string path)
+    // Content hashes are needed to deduplicate history, but opening Appearance
+    // should not re-hash up to ten 8 MB originals every single time.
+    private readonly object _wallpaperDigestSync = new();
+    private readonly Dictionary<string, (long Length, long LastWriteTicks, string Digest)> _wallpaperDigests =
+        new(StringComparer.Ordinal);
+
+    private string WallpaperDigest(string path)
     {
+        var info = new FileInfo(path);
+        var length = info.Length;
+        var modified = info.LastWriteTimeUtc.Ticks;
+        lock (_wallpaperDigestSync)
+        {
+            if (_wallpaperDigests.TryGetValue(path, out var existing) &&
+                existing.Length == length && existing.LastWriteTicks == modified)
+                return existing.Digest;
+        }
         using var file = File.OpenRead(path);
-        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file));
+        var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file));
+        lock (_wallpaperDigestSync)
+        {
+            // The archive is capped at ten images; never retain unbounded stale keys.
+            if (_wallpaperDigests.Count > 32) _wallpaperDigests.Clear();
+            _wallpaperDigests[path] = (length, modified, digest);
+        }
+        return digest;
     }
 
     private IEnumerable<string> StoredWallpaperHistory() =>
