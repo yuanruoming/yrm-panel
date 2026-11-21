@@ -26,8 +26,16 @@ class DesktopUiContracts(unittest.TestCase):
         view = source('YrmPanel/Pages/Settings.cshtml')
         self.assertIn('asp-page-handler="DdnsAddGroup"', view)
         self.assertIn('asp-page-handler="DdnsEditGroup"', view)
-        self.assertIn('name="ipv4Enabled"', view)
-        self.assertIn('name="ipv6Enabled"', view)
+        # Edit form: IPv4 and IPv6 must use their respective field names.
+        self.assertIn(
+            'name="@(suffix == "4" ? "ipv4Enabled" : "ipv6Enabled")"',
+            view
+        )
+        # Add form: the same field mapping must be preserved.
+        self.assertIn(
+            'name="@(family.Suffix == "4" ? "ipv4Enabled" : "ipv6Enabled")"',
+            view
+        )
         self.assertIn('Leave empty to keep saved credential', view)
         self.assertIn('yrm-b11-toggle-line', view)
         self.assertIn('yrm-b11-switch', view)
