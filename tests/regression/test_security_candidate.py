@@ -173,15 +173,13 @@ class PackageContractTests(TestCase):
 
     def test_upload_conflict_only_returns_when_file_exists(self):
         code=(ROOT/'YrmPanel/Pages/Files.cshtml.cs').read_text()
-        conflict_branch="""            if (!replace && _files.Exists("system", CurrentRelative, upload.FileName))
-            {
-                if (ajax)
-                    return new ConflictObjectResult(new { ok = false, conflict = true, message = "File exists." });
-                Notice = "Error: File already exists. Choose Replace or Skip.";
-                return Back();
-            }
-            await _files.UploadAsync("system", CurrentRelative, upload, replace, HttpContext.RequestAborted);"""
-        self.assertIn(conflict_branch, code)
+        # Both normal directories and the virtual My Files root must use the
+        # same conflict check against the *resolved* upload destination.
+        self.assertIn('if (targetParent is null || !valid.Contains(targetParent))', code)
+        self.assertIn('if (!replace && _files.Exists("system", uploadParent, upload.FileName))', code)
+        self.assertIn('return new ConflictObjectResult(new { ok = false, conflict = true', code)
+        self.assertIn('Notice = "Error: File already exists. Choose Replace or Skip.";', code)
+        self.assertIn('await _files.UploadAsync("system", uploadParent, upload, replace', code)
 
     def test_wallpaper_preview_and_csp(self):
         razor=(ROOT/'YrmPanel/Pages/Settings.cshtml').read_text()

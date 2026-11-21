@@ -25,19 +25,10 @@
       {
         var relative = folderPath.TrimStart('/');
         var displayName = System.IO.Path.GetFileName(folderPath);
-        <div class="fm-tree-node" data-fm-tree-root="@relative">
-          <div class="fm-tree-node-header">
-            <button type="button" class="fm-tree-toggle" data-fm-tree-toggle data-fm-tree-path="@relative"
-                    aria-expanded="false" aria-label="Expand @displayName">
-              <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
-            </button>
-            <a class="fm-location-link fm-location-child @(Model.Path == relative && (Model.HttpContext.Request.Query["nav"] == "library") ? "is-active" : "")"
-               asp-page="/Files" asp-route-path="@relative" asp-route-nav="library">
-              <svg class="ui-icon"><use href="#i-folder"/></svg><span>@displayName</span>
-            </a>
-          </div>
-          <div class="fm-tree-descendants" hidden></div>
-        </div>
+        <a class="fm-location-link fm-location-child @(Model.Path == relative && (Model.HttpContext.Request.Query["nav"] == "library") ? "is-active" : "")"
+           asp-page="/Files" asp-route-path="@relative" asp-route-nav="library">
+          <svg class="ui-icon"><use href="#i-folder"/></svg><span>@displayName</span>
+        </a>
       }
       </div>
       <div class="yrm-b10-nav-divider"></div>
@@ -83,8 +74,12 @@
     </aside>
     <div class="fm-content">
       <div class="explorer-path-row fm-unified-path" aria-label="File location">
-        <button class="mini-button fm-history-back" type="button" data-fm-history-back
-                disabled="@Model.IsMyFolders" title="Back to the previous folder">Back</button>
+        <button class="mini-button fm-history-back" type="button" data-fm-history-back title="Back to the previous folder" aria-label="Back">
+          <svg class="ui-icon" aria-hidden="true"><use href="#i-arrow-left"/></svg>
+        </button>
+        <a class="mini-button fm-history-refresh" asp-page="/Files" asp-route-path="@currentRoute" asp-route-hidden="@Model.Hidden" title="Refresh this folder" aria-label="Refresh">
+          <svg class="ui-icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+        </a>
         <nav class="fm-breadcrumbs" aria-label="Folder breadcrumb">
           @foreach (var crumb in Model.Breadcrumbs)
           {
@@ -94,13 +89,54 @@
           }
         </nav>
       </div>
+        <div class="explorer-toolbar fm-compact-toolbar">
+          <button type="button" class="button button-secondary" data-open-new-folder>＋ New Folder</button>
+          @if (!Model.IsMyFolders && Model.View.Available && Model.View.CanWrite)
+          {
+            <form method="post" asp-page-handler="Upload" asp-route-path="@currentRoute" enctype="multipart/form-data" class="explorer-upload fm-upload-form">
+              <input name="upload" id="fm-upload-file" type="file" class="fm-visually-hidden" multiple required />
+              <button type="button" class="button button-secondary" data-file-picker="fm-upload-file">Upload</button>
+              
+              <span id="fm-upload-progress" class="fm-upload-progress" aria-live="polite" hidden></span>
+            </form>
+          }
+          @if (Model.IsMyFolders)
+          {
+            <button type="button" class="button button-secondary" data-root-upload-open>Upload</button>
+          }
+          @if (!Model.IsMyFolders && Model.View.Available && Model.View.CanEnable && !Model.View.CanWrite)
+          {
+            <form method="post" asp-page-handler="Enable" asp-route-path="@currentRoute" data-requires-admin="Grant folder permissions">
+              <button class="button button-secondary" type="submit">Request management</button>
+            </form>
+          }
+          <div class="yrm-b10-file-selection" id="yrm-b10-file-selection" aria-label="Selected file actions">
+            <button type="button" class="button button-secondary" data-b12-file-download disabled>Download</button>
+            <button type="button" class="button button-secondary" data-b10-file-rename disabled>Rename</button>
+            <button type="button" class="button button-secondary" data-b12-file-copy disabled>Copy To</button>
+            <button type="button" class="button button-secondary" data-b10-file-move disabled>Move To</button>
+            <button type="button" class="button button-danger" data-b10-file-delete disabled>Delete</button>
+          </div>
+          <form method="post" asp-page-handler="BulkDownload" asp-route-path="@currentRoute"
+                data-bulk-download-form hidden>
+            <button type="submit">Download selected items as ZIP</button>
+          </form>
+          <form method="post" asp-page-handler="BulkDelete" asp-route-path="@currentRoute"
+                data-bulk-delete-form data-confirm="Delete selected items? This cannot be undone." hidden>
+            <button type="submit">Confirm delete</button>
+          </form>
+          @if (!Model.IsMyFolders)
+          {
+            <a class="fm-hidden-toggle" asp-page="/Files" asp-route-path="@currentRoute" asp-route-hidden="@(!Model.Hidden)">
+              @(Model.Hidden ? "Hide hidden files" : "Show hidden files")
+            </a>
+          }
+        </div>
       @if (Model.IsMyFolders)
       {
         <div class="fm-page-title">
           <div class="fm-location-crumb">Folders</div>
-          <div class="fm-action-row">
-            <button type="button" class="button button-primary" data-open-new-folder>＋ New Folder</button>
-          </div>
+          <div class="fm-action-row"></div>
         </div>
         @if (Model.MyFiles.Count == 0)
         {
@@ -124,12 +160,17 @@
               var exists = System.IO.Directory.Exists(folderPath);
               var relative = folderPath.TrimStart('/');
               var matching = shared.FirstOrDefault(x => string.Equals(x.Path, folderPath, StringComparison.Ordinal));
-              <tr data-fm-inline-root="@relative">
+              <tr data-b10-file-row data-b10-filename="@folderPath" data-b10-absolute="@folderPath"
+                  data-fm-inline-root="@relative" aria-selected="false" tabindex="0">
                 <td class="explorer-name">
-                  <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@relative"
-                          aria-label="Expand @name" aria-expanded="false" title="Preview subfolders">
-                    <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
-                  </button>
+                  @if (exists && Model.HasSubfolders(relative))
+                  {
+                    <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@relative"
+                            aria-label="Expand @name" aria-expanded="false" title="Preview subfolders">
+                      <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+                    </button>
+                  }
+                  else { <span class="fm-inline-toggle-spacer" aria-hidden="true"></span> }
                   <a asp-page="/Files" asp-route-path="@relative"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@name</span></a>
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared">Shared</small> }
                 </td>
@@ -139,6 +180,15 @@
                   <details class="explorer-item-menu"><summary aria-label="Folder actions for @name" title="Actions">⋯</summary>
                     <div class="explorer-actions-popover">
                       <a asp-page="/Files" asp-route-path="@relative">Open</a>
+                      @if (exists)
+                      {
+                        <button type="button" data-copy-item="@name">Copy To...</button>
+                        @if (FileAccess.IsManaged(System.IO.Path.GetDirectoryName(folderPath) ?? "/"))
+                        {
+                          <button type="button" data-move-item="@name">Move To...</button>
+                          <button type="button" data-rename-item="@name">Rename</button>
+                        }
+                      }
                       @if (exists && matching is not null && matching.Managed)
                       {
                         <form method="post" asp-page-handler="Unshare" asp-route-path="@("@folders")" data-requires-admin="Remove SMB share">
@@ -159,10 +209,10 @@
                           <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit">Unpin shortcut</button>
                         </form>
                       }
-                      @if (exists && FileAccess.IsManaged(System.IO.Path.GetDirectoryName(folderPath) ?? "/"))
+                      @if (exists && matching is null && FileAccess.IsManaged(System.IO.Path.GetDirectoryName(folderPath) ?? "/"))
                       {
                         <hr class="yrm-menu-divider" />
-                        <form method="post" asp-page-handler="DeleteLibrary" asp-route-path="@("@folders")"
+                        <form method="post" data-b10-row-delete asp-page-handler="DeleteLibrary" asp-route-path="@("@folders")"
                               data-confirm="Permanently delete @name and its contents? This cannot be undone.">
                           <input type="hidden" name="folderPath" value="@folderPath"/><button type="submit" class="danger">Delete folder</button>
                         </form>
@@ -180,45 +230,6 @@
       }
       else
       {
-        <div class="explorer-toolbar fm-compact-toolbar">
-          <button type="button" class="button button-secondary" data-open-new-folder>＋ New Folder</button>
-          @if (Model.View.Available && Model.View.CanWrite)
-          {
-            <form method="post" asp-page-handler="Upload" asp-route-path="@currentRoute" enctype="multipart/form-data" class="explorer-upload fm-upload-form">
-              <input name="upload" id="fm-upload-file" type="file" class="fm-visually-hidden" multiple required />
-              <button type="button" class="button button-secondary" data-file-picker="fm-upload-file">Upload</button>
-              
-              <span id="fm-upload-progress" class="fm-upload-progress" aria-live="polite" hidden></span>
-            </form>
-          }
-          @if (Model.View.Available && Model.View.CanEnable && !Model.View.CanWrite)
-          {
-            <form method="post" asp-page-handler="Enable" asp-route-path="@currentRoute" data-requires-admin="Grant folder permissions">
-              <button class="button button-secondary" type="submit">Request management</button>
-            </form>
-          }
-          @if (Model.View.Available)
-          {
-          <div class="yrm-b10-file-selection" id="yrm-b10-file-selection" aria-label="Selected file actions">
-            <button type="button" class="button button-secondary" data-b12-file-download disabled>Download</button>
-            <button type="button" class="button button-secondary" data-b10-file-rename disabled>Rename</button>
-            <button type="button" class="button button-secondary" data-b12-file-copy disabled>Copy To</button>
-            <button type="button" class="button button-secondary" data-b10-file-move disabled>Move To</button>
-            <button type="button" class="button button-danger" data-b10-file-delete disabled>Delete</button>
-          </div>
-          }
-          <form method="post" asp-page-handler="BulkDownload" asp-route-path="@currentRoute"
-                data-bulk-download-form hidden>
-            <button type="submit">Download selected items as ZIP</button>
-          </form>
-          <form method="post" asp-page-handler="BulkDelete" asp-route-path="@currentRoute"
-                data-bulk-delete-form data-confirm="Delete selected items? This cannot be undone." hidden>
-            <button type="submit">Confirm delete</button>
-          </form>
-          <a class="fm-hidden-toggle" asp-page="/Files" asp-route-path="@currentRoute" asp-route-hidden="@(!Model.Hidden)">
-            @(Model.Hidden ? "Hide hidden files" : "Show hidden files")
-          </a>
-        </div>
         @if (!Model.View.Available) { <div class="empty-hint">@Model.View.Error</div> }
         else
         {
@@ -236,10 +247,12 @@
                   aria-selected="false" tabindex="0">
                 <td class="explorer-name">
                   @if (item.IsDirectory)
-                  { <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@child"
-                              aria-label="Expand @item.Name" aria-expanded="false" title="Preview subfolders">
-                        <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
-                      </button>
+                  { @if (Model.HasSubfolders(child))
+                    { <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@child"
+                                aria-label="Expand @item.Name" aria-expanded="false" title="Preview subfolders">
+                          <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+                        </button> }
+                    else { <span class="fm-inline-toggle-spacer" aria-hidden="true"></span> }
                       <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
                   else { <span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" >@item.Name</button> }
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared folder">Shared</small> }
@@ -318,6 +331,20 @@
     </div>
   </div>
 </section>
+<dialog id="yrm-root-upload-dialog" class="panel-modal fm-small-dialog" aria-labelledby="yrm-root-upload-title">
+  <div class="panel-modal-head"><strong id="yrm-root-upload-title">Upload to My Files</strong><button type="button" data-root-upload-close aria-label="Close">×</button></div>
+  <form method="post" asp-page-handler="Upload" asp-route-path="@("@folders")" enctype="multipart/form-data" class="yrm-root-upload-form">
+    <label>Destination
+      <select name="targetParent" required>
+        <option value="@Model.HomePath">Home</option>
+        @foreach (var volume in Model.MountedVolumes)
+        { <option value="@volume.MountPoint.TrimStart('/')">@Model.StorageLabel(volume) · @volume.MountPoint</option> }
+      </select>
+    </label>
+    <label>File <input type="file" name="upload" required /></label>
+    <div class="panel-modal-actions"><button class="button button-secondary" type="button" data-root-upload-close>Cancel</button><button class="button button-primary" type="submit">Upload</button></div>
+  </form>
+</dialog>
 <dialog id="yrm-b12-file-properties" class="panel-modal fm-small-dialog" aria-labelledby="yrm-b12-props-heading">
   <div class="panel-modal-head"><strong id="yrm-b12-props-heading">Properties</strong><button type="button" data-b12-props-close aria-label="Close">×</button></div>
   <dl class="yrm-b12-props-grid">
@@ -380,9 +407,10 @@
 </dialog>
 <dialog id="file-action-dialog" class="panel-modal fm-small-dialog" aria-labelledby="file-action-title">
   <div class="panel-modal-head"><strong id="file-action-title">File action</strong><button type="button" data-close-dialog="file-action-dialog">×</button></div>
-  <form method="post" id="file-action-form">
+  <form method="post" id="file-action-form" data-current-route="@currentRoute" data-default-action-folder="@Model.HomePath">
     @Html.AntiForgeryToken()
     <input type="hidden" name="name" id="file-action-name"/>
+    <input type="hidden" name="sourcePath" id="file-action-source"/>
     <div class="form-stack" id="yrm-b121-action-input-row"><label id="file-action-label">New name</label><input id="file-action-value" name="newName" required maxlength="255"/></div>
     <div id="yrm-b12-action-picker" class="yrm-b12-action-picker" hidden>
 

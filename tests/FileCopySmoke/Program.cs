@@ -72,6 +72,43 @@ try
     await wallpapers.SetWallpaperAsync(new MemoryStream(red), red.Length);
     Expect(wallpapers.ListWallpaperHistory().Count == 2, "applying active wallpaper is a no-op");
     Console.WriteLine("PASS: Wallpaper History (archive, restore, content deduplication)");
+
+    // The profile avatar is local to YRMPanel, never touches Linux account data.
+    await wallpapers.SetProfilePhotoAsync(new MemoryStream(red), red.Length, CancellationToken.None);
+    var avatar = wallpapers.GetProfilePhoto();
+    Expect(avatar is not null && avatar.Value.Mime == "image/png", "valid avatar stored");
+    Expect(File.ReadAllBytes(avatar!.Value.Path).SequenceEqual(red), "avatar bytes match upload");
+    try
+    {
+        var notImage = new byte[] { 0, 1, 2, 3, 4, 5, 6, 7 };
+        await wallpapers.SetProfilePhotoAsync(new MemoryStream(notImage), notImage.Length, CancellationToken.None);
+        throw new Exception("FAIL: invalid avatar was accepted");
+    }
+    catch (InvalidOperationException) { /* rejected as expected */ }
+    Expect(wallpapers.GetProfilePhoto() is not null, "invalid avatar never overwrites existing image");
+    await wallpapers.ClearProfilePhotoAsync();
+    Expect(wallpapers.GetProfilePhoto() is null, "restore default avatar clears local file");
+    Console.WriteLine("PASS: Profile Photo (valid upload, invalid upload, restore default)");
+
+    // Real ZIP creation from independent My Files roots, preserving folder structure.
+    var zipOne = Path.Combine(fixture, "zip-one");
+    var zipTwo = Path.Combine(fixture, "zip-two");
+    Directory.CreateDirectory(zipOne);
+    Directory.CreateDirectory(zipTwo);
+    await File.WriteAllTextAsync(Path.Combine(zipOne, "hello.txt"), "one");
+    await File.WriteAllTextAsync(Path.Combine(zipTwo, "hello.txt"), "two");
+    await using var archiveBytes = new MemoryStream();
+    await fileManager.WriteDownloadZipFromPathsAsync(new[] { zipOne, zipTwo }, archiveBytes, CancellationToken.None);
+    archiveBytes.Position = 0;
+    using (var archive = new System.IO.Compression.ZipArchive(archiveBytes,
+        System.IO.Compression.ZipArchiveMode.Read, leaveOpen: true))
+    {
+        Expect(archive.Entries.Any(entry => entry.FullName == "zip-one/hello.txt"),
+            "first selected folder included in ZIP");
+        Expect(archive.Entries.Any(entry => entry.FullName == "zip-two/hello.txt"),
+            "second selected folder included in ZIP");
+    }
+    Console.WriteLine("PASS: Files My Files root ZIP (multiple parents, preserved folders)");
 }
 finally
 {

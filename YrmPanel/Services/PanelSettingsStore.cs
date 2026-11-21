@@ -108,6 +108,67 @@ public sealed class PanelSettingsStore
         File.Move(temp, _settingsPath, true);
     }
 
+    // One locally stored avatar for the signed-in panel account. Never touch Linux login/SMB profiles.
+    public (string Path, string Mime, long Version)? GetProfilePhoto()
+    {
+        foreach (var ext in new[] { "png", "jpg", "webp" })
+        {
+            var path = Path.Combine(_root, "profile-photo." + ext);
+            if (!File.Exists(path)) continue;
+            try
+            {
+                if (File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint)) return null;
+                return (path, WallpaperMime("." + ext), File.GetLastWriteTimeUtc(path).Ticks);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        }
+        return null;
+    }
+
+    public async Task SetProfilePhotoAsync(Stream upload, long size, CancellationToken ct)
+    {
+        const long maxSize = 2 * 1024 * 1024;
+        if (size <= 0 || size > maxSize) throw new InvalidOperationException("Avatar must be an image up to 2 MB.");
+        using var data = new MemoryStream();
+        await upload.CopyToAsync(data, ct);
+        var bytes = data.ToArray();
+        if (bytes.LongLength != size) throw new InvalidOperationException("Incomplete image upload.");
+        var png = bytes.Length > 24 && bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
+        var jpg = bytes.Length > 4 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[^2] == 0xFF && bytes[^1] == 0xD9;
+        var webp = bytes.Length > 16 && System.Text.Encoding.ASCII.GetString(bytes, 0, 4) == "RIFF" &&
+            System.Text.Encoding.ASCII.GetString(bytes, 8, 4) == "WEBP";
+        var ext = png ? "png" : jpg ? "jpg" : webp ? "webp" : "";
+        if (ext.Length == 0) throw new InvalidOperationException("Only genuine PNG, JPEG and WebP images are supported.");
+        await _gate.WaitAsync(ct);
+        var tmp = Path.Combine(_root, "profile-photo.upload-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(_root);
+            await File.WriteAllBytesAsync(tmp, bytes, ct);
+            if (OperatingSystem.IsLinux()) File.SetUnixFileMode(tmp, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+            // Publish the new file before removing alternate extensions. Failures preserve the old image.
+            File.Move(tmp, Path.Combine(_root, "profile-photo." + ext), true);
+            foreach (var other in new[] { "png", "jpg", "webp" })
+                if (other != ext) File.Delete(Path.Combine(_root, "profile-photo." + other));
+        }
+        finally
+        {
+            if (File.Exists(tmp)) File.Delete(tmp);
+            _gate.Release();
+        }
+    }
+
+    public async Task ClearProfilePhotoAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            foreach (var ext in new[] { "png", "jpg", "webp" })
+                File.Delete(Path.Combine(_root, "profile-photo." + ext));
+        }
+        finally { _gate.Release(); }
+    }
+
     public sealed record WallpaperHistoryItem(string Id, string Mime, long SizeBytes, DateTime SavedUtc);
 
     private string WallpaperHistoryRoot => Path.Combine(_root, "wallpaper-history");

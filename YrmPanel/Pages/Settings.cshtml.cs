@@ -86,6 +86,10 @@ public sealed class SettingsModel : PageModel
     public string AccountName => OperatingSystem.IsLinux()
         ? Environment.GetEnvironmentVariable("YRM_PANEL_USER") ?? "Linux user"
         : _accounts.Username;
+    public string ProfileName => User.Identity?.Name is { Length: > 0 } user ? user : AccountName;
+    public string ProfileInitial => ProfileName.Length > 0 ? ProfileName[..1].ToUpperInvariant() : "Y";
+    public bool HasProfilePhoto => _settings.GetProfilePhoto() is not null;
+    public long ProfilePhotoVersion => _settings.GetProfilePhoto()?.Version ?? 0;
     public bool HasWallpaper => _settings.GetWallpaper() is not null;
     public long WallpaperVersion => _settings.WallpaperVersion;
     public IReadOnlyList<PanelSettingsStore.WallpaperHistoryItem> WallpaperHistory => _settings.ListWallpaperHistory();
@@ -331,17 +335,56 @@ public sealed class SettingsModel : PageModel
         return RedirectToPage(new { tab = "ddns" });
     }
 
+    // The Add and Edit forms have identical IP-source validation. A missing or
+    // invalid interface/manual address must not produce half-configured DNS.
+    private string? ValidateDdnsSources(bool ipv4Enabled, bool ipv6Enabled,
+        string? ipSource4, string? ipSource6,
+        string? manualIp4, string? manualIp6,
+        string? interfaceName4, string? interfaceName6)
+    {
+        foreach (var family in new[] {
+            (on: ipv4Enabled, src: ipSource4, ip: manualIp4, iface: interfaceName4,
+                af: System.Net.Sockets.AddressFamily.InterNetwork),
+            (on: ipv6Enabled, src: ipSource6, ip: manualIp6, iface: interfaceName6,
+                af: System.Net.Sockets.AddressFamily.InterNetworkV6)
+        })
+        {
+            if (!family.on) continue;
+            var source = family.src ?? "public";
+            if (source is not ("public" or "manual" or "interface")) return "Invalid IP source.";
+            if (source == "manual" && (!System.Net.IPAddress.TryParse(family.ip, out var parsed) ||
+                parsed.AddressFamily != family.af)) return "Invalid IPv4 or IPv6 manual address.";
+            if (source == "interface" && (string.IsNullOrWhiteSpace(family.iface) ||
+                !DdnsNetworkInterfaces.Contains(family.iface, StringComparer.Ordinal)))
+                return "Select an existing network interface.";
+        }
+        return null;
+    }
+
     public async Task<IActionResult> OnPostDdnsAddGroupAsync(string name, string hostname, string recordType,
         string urlTemplate, string httpMethod, string headerName, string token, string bodyTemplate,
         string successContains, int intervalMinutes, string? detectionUrl, string? authType,
         string? username, string? responseMode, string? successCodes, string? unchangedCodes,
         string? errorCodes, string? jsonProperty, string? jsonExpected, bool verifyDns, string? provider,
-        bool ipv4Enabled, bool ipv6Enabled)
+        bool ipv4Enabled, bool ipv6Enabled,
+        string? ipSource4, string? ipSource6, string? manualIp4, string? manualIp6,
+        string? interfaceName4, string? interfaceName6, bool enabled)
     {
         var ct = HttpContext.RequestAborted;
         provider = (provider ?? "custom").Trim().ToLowerInvariant();
+        var sourceError = ValidateDdnsSources(ipv4Enabled, ipv6Enabled, ipSource4, ipSource6,
+            manualIp4, manualIp6, interfaceName4, interfaceName6);
+        if (sourceError is not null)
+        { Notice = "Error: " + sourceError; return RedirectToPage(new { tab = "ddns" }); }
+        // A custom HTTP template defines one record at a time. Do not use an
+        // unrelated hidden recordType field that can disagree with the visible switches.
+        if (provider == "custom" && ipv4Enabled == ipv6Enabled)
+        {
+            Notice = "Error: Custom HTTPS API must select exactly one IP family.";
+            return RedirectToPage(new { tab = "ddns" });
+        }
         var families = provider == "custom"
-            ? new[] { recordType == "AAAA" ? "AAAA" : "A" }
+            ? new[] { ipv4Enabled ? "A" : "AAAA" }
             : new[] { ipv4Enabled ? "A" : "", ipv6Enabled ? "AAAA" : "" }.Where(x => x.Length > 0).ToArray();
         if (families.Length == 0)
         {
@@ -366,6 +409,22 @@ public sealed class SettingsModel : PageModel
                 : urlTemplate;
             var result = await _ddns.AddAsync(name, hostname, type, apiUrl, httpMethod, headerName,
                 token, bodyTemplate, successContains, intervalMinutes, ct, options);
+            if (!result.StartsWith("Error:", StringComparison.Ordinal))
+            {
+                var added = (await _ddns.ListAsync(ct)).FirstOrDefault(p =>
+                    !before.Any(b => b.Id == p.Id) && p.Provider == provider &&
+                    p.Hostname.Equals(hostname, StringComparison.OrdinalIgnoreCase) && p.RecordType == type);
+                if (added is null) result = "Error: New DNS record could not be located.";
+                else
+                {
+                    var v4 = type == "A";
+                    result = await _ddns.EditAsync(added.Id, name, hostname, username ?? "", "",
+                        (v4 ? ipSource4 : ipSource6) ?? "public",
+                        (v4 ? manualIp4 : manualIp6) ?? "",
+                        (v4 ? interfaceName4 : interfaceName6) ?? "",
+                        intervalMinutes, enabled, ct);
+                }
+            }
             if (!result.StartsWith("Error:", StringComparison.Ordinal)) continue;
             // Roll back only records this request added; a two-record form must
             // not silently leave a half-created provider if the second fails.
@@ -389,6 +448,13 @@ public sealed class SettingsModel : PageModel
         string? jsonProperty, string? jsonExpected)
     {
         var ct = HttpContext.RequestAborted;
+        // Provider and hostname are identity fields: Edit changes configuration,
+        // never silently creates a different DDNS identity by renaming the domain.
+        if (!string.Equals(hostname, originalHostname, StringComparison.OrdinalIgnoreCase))
+        {
+            Notice = "Error: Hostname cannot be changed here. Create a new provider instead.";
+            return RedirectToPage(new { tab = "ddns" });
+        }
         var all = await _ddns.ListAsync(ct);
         var group = all.Where(p => p.Provider.Equals(provider, StringComparison.OrdinalIgnoreCase) &&
             p.Hostname.Equals(originalHostname, StringComparison.OrdinalIgnoreCase)).ToArray();
@@ -399,25 +465,11 @@ public sealed class SettingsModel : PageModel
             Notice = "Error: Provider is missing or hostname already belongs to another configuration.";
             return RedirectToPage(new { tab = "ddns" });
         }
-        // Validate each family's options before changing either record so a
-        // bad IPv6 manual IP cannot leave IPv4 saved and IPv6 rejected.
-        foreach (var family in new[] {
-            (on: ipv4Enabled, src: ipSource4, ip: manualIp4, iface: interfaceName4,
-             addressFamily: System.Net.Sockets.AddressFamily.InterNetwork),
-            (on: ipv6Enabled, src: ipSource6, ip: manualIp6, iface: interfaceName6,
-             addressFamily: System.Net.Sockets.AddressFamily.InterNetworkV6) })
-        {
-            if (!family.on) continue;
-            var source = family.src ?? "public";
-            if (source is not ("public" or "manual" or "interface"))
-            { Notice = "Error: Invalid IP source."; return RedirectToPage(new { tab = "ddns" }); }
-            if (source == "manual" && (!System.Net.IPAddress.TryParse(family.ip, out var parsed) ||
-                parsed.AddressFamily != family.addressFamily))
-            { Notice = "Error: Invalid IPv4 or IPv6 manual address."; return RedirectToPage(new { tab = "ddns" }); }
-            if (source == "interface" && (string.IsNullOrWhiteSpace(family.iface) ||
-                !DdnsNetworkInterfaces.Contains(family.iface, StringComparer.Ordinal)))
-            { Notice = "Error: Select an existing network interface."; return RedirectToPage(new { tab = "ddns" }); }
-        }
+        // Validate both families before any mutation.
+        var sourceError = ValidateDdnsSources(ipv4Enabled, ipv6Enabled, ipSource4, ipSource6,
+            manualIp4, manualIp6, interfaceName4, interfaceName6);
+        if (sourceError is not null)
+        { Notice = "Error: " + sourceError; return RedirectToPage(new { tab = "ddns" }); }
         var missing = new[] { (type: "A", on: ipv4Enabled), (type: "AAAA", on: ipv6Enabled) }
             .Where(x => x.on && !group.Any(p => p.RecordType == x.type)).ToArray();
         if (missing.Length > 0 && (string.IsNullOrWhiteSpace(token) || provider == "custom"))
@@ -625,6 +677,38 @@ public sealed class SettingsModel : PageModel
         return RedirectToPage(new { tab = "security", section = "certificates" });
     }
 
+    public IActionResult OnGetProfilePhoto()
+    {
+        var photo = _settings.GetProfilePhoto();
+        if (photo is null) return NotFound();
+        Response.Headers["Cache-Control"] = "private, no-store";
+        try { return File(System.IO.File.OpenRead(photo.Value.Path), photo.Value.Mime); }
+        catch (IOException) { return NotFound(); }
+        catch (UnauthorizedAccessException) { return NotFound(); }
+    }
+
+    public async Task<IActionResult> OnPostProfilePhotoAsync(IFormFile? photo)
+    {
+        try
+        {
+            if (photo is null) throw new InvalidOperationException("Choose a photo first.");
+            await using var input = photo.OpenReadStream();
+            await _settings.SetProfilePhotoAsync(input, photo.Length, HttpContext.RequestAborted);
+            Notice = null;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        { Notice = "Error: " + ex.Message; }
+        return RedirectToPage(new { tab = "overview" });
+    }
+
+    public async Task<IActionResult> OnPostClearProfilePhotoAsync()
+    {
+        try { await _settings.ClearProfilePhotoAsync(); Notice = null; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { Notice = "Error: " + ex.Message; }
+        return RedirectToPage(new { tab = "overview" });
+    }
+
     public async Task<IActionResult> OnPostWallpaperAsync(IFormFile? wallpaper)
     {
         if (wallpaper is null)
@@ -667,7 +751,7 @@ public sealed class SettingsModel : PageModel
         try
         {
             await _settings.RestoreWallpaperHistoryAsync(id);
-            Notice = "Wallpaper restored from history.";
+            Notice = null;
         }
         catch (Exception ex) when (ex is IOException or InvalidOperationException or UnauthorizedAccessException)
         {

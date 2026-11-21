@@ -19,7 +19,8 @@
     if (!response.ok || response.redirected) throw new Error(`Could not read folder (HTTP ${response.status}).`);
     const data = await response.json();
     if (!Array.isArray(data?.folders)) throw new Error('Invalid folder response.');
-    const folders = data.folders.filter(name => typeof name === 'string' && name.length && name !== '.' && name !== '..');
+    const folders = (Array.isArray(data.folderNodes) ? data.folderNodes : data.folders.map(name => ({name,hasChildren:true})))
+      .filter(item => item && typeof item.name === 'string' && item.name && item.name !== '.' && item.name !== '..');
     cache.set(path, folders);
     return folders;
   }
@@ -27,7 +28,7 @@
     const small = document.createElement('span');small.className=className;small.textContent=message;
     return small;
   }
-  function node(path, name, library) {
+  function node(path, name, library, hasChildren = true) {
     const wrapper=document.createElement('div');wrapper.className='fm-tree-node';wrapper.dataset.fmTreeRoot=path;
     const head=document.createElement('div');head.className='fm-tree-node-header';
     const toggle=document.createElement('button');toggle.type='button';toggle.className='fm-tree-toggle';
@@ -39,31 +40,19 @@
     const folderSvg=document.createElementNS('http://www.w3.org/2000/svg','svg');folderSvg.classList.add('ui-icon');
     const folderUse=document.createElementNS('http://www.w3.org/2000/svg','use');folderUse.setAttribute('href','#i-folder');folderSvg.append(folderUse);
     const label=document.createElement('span');label.textContent=name;anchor.append(folderSvg,label);
-    head.append(toggle,anchor);
+    if (hasChildren) head.append(toggle);
+    else { const spacer=document.createElement('span');spacer.className='fm-inline-toggle-spacer';head.append(spacer); }
+    head.append(anchor);
     const descendants=document.createElement('div');descendants.className='fm-tree-descendants';descendants.hidden=true;
     wrapper.append(head,descendants);return wrapper;
   }
   function renderChildren(host,folders,path,library){
     host.replaceChildren();
     if (folders.length===0){host.append(text('No subfolders'));return;}
-    for(const name of folders){
-      const childPath=path ? path.replace(/\/$/,'') + '/' + name : name;
-      host.append(node(childPath,name,library));
+    for(const item of folders){
+      const childPath=path ? path.replace(/\/$/,'') + '/' + item.name : item.name;
+      host.append(node(childPath,item.name,library,item.hasChildren));
     }
-  }
-  async function toggleSidebar(button){
-    const wrapper=button.closest('.fm-tree-node'),host=wrapper?.querySelector(':scope > .fm-tree-descendants');
-    if(!host)return;
-    const expanding=button.getAttribute('aria-expanded')!=='true';
-    button.setAttribute('aria-expanded',String(expanding));host.hidden=!expanding;
-    if(!expanding||host.dataset.loaded==='1')return;
-    host.replaceChildren(text('Loading subfolders…','fm-tree-loading'));
-    try{
-      const path=button.dataset.fmTreePath||'';
-      const folders=await loadFolders(path);
-      if(!host.isConnected)return;
-      renderChildren(host,folders,path,true);host.dataset.loaded='1';
-    }catch(err){host.replaceChildren(text(String(err.message||err)));}
   }
   async function toggleInline(button){
     const row=button.closest('tr[data-fm-inline-root]');if(!row)return;
@@ -87,22 +76,12 @@
   }
   document.addEventListener('click',event=>{
     const target=event.target instanceof Element?event.target:null;
-    const button=target?.closest('[data-fm-tree-toggle],[data-fm-inline-toggle]');
+    const button=target?.closest('[data-fm-inline-toggle]');
     if(!(button instanceof HTMLButtonElement))return;
     event.preventDefault();event.stopPropagation();
-    if(button.hasAttribute('data-fm-tree-toggle'))void toggleSidebar(button);
-    else void toggleInline(button);
+    void toggleInline(button);
   },true);
-  // Keep the active highlight on dynamically expanded navigation children.
-  function refreshSelected(){
-    const nav=document.querySelector('.fm-locations');if(!nav)return;
-    const crumb=document.querySelector('.fm-breadcrumbs a:last-child');
-    const current=crumb?.getAttribute('href')||'';
-    nav.querySelectorAll('.fm-tree-node .fm-tree-node-header>a').forEach(a=>{
-      a.classList.toggle('is-active',a.getAttribute('href')===current);
-    });
-  }
   document.addEventListener('click',event=>{
-    if(event.target instanceof Element && event.target.closest('.fm-tree-node a'))requestAnimationFrame(refreshSelected);
+    if(event.target instanceof Element && event.target.closest('.fm-history-refresh')) cache.clear();
   });
 })();

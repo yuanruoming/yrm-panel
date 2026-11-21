@@ -157,6 +157,44 @@ public sealed class FilesModel : PageModel
             !device.MountPoint.StartsWith("/var/", StringComparison.Ordinal));
     }
 
+    public bool HasSubfolders(string relative)
+    {
+        // A leaf is a real directory without a nested visible folder. The UI
+        // must never show an expand control for an empty/leaf folder.
+        try
+        {
+            var absolute = FileManagerService.Absolute(relative);
+            return Directory.EnumerateDirectories(absolute).Any(directory =>
+                !System.IO.Path.GetFileName(directory).StartsWith('.') &&
+                !System.IO.File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        { return false; }
+    }
+
+    private async Task<IReadOnlyList<(string Full, string Parent, string Name)>> ResolveLibrarySelectionAsync(string[] paths)
+    {
+        if (paths.Length == 0 || paths.Length > 200)
+            throw new ArgumentException("Select between 1 and 200 folders.");
+        var devices = await _devices.ListAsync(HttpContext.RequestAborted);
+        MountedVolumes = devices.Where(d => d.MountPoint.Length > 0 && d.CanMount && d.MountPoint != "/" &&
+            !d.MountPoint.StartsWith("/var/", StringComparison.Ordinal) &&
+            !d.MountPoint.StartsWith("/boot", StringComparison.Ordinal) &&
+            !d.MountPoint.StartsWith("/home/", StringComparison.Ordinal))
+            .GroupBy(d => d.MountPoint, StringComparer.Ordinal).Select(g => g.First()).ToArray();
+        var allowed = DiscoverMyFiles().ToHashSet(StringComparer.Ordinal);
+        var selected = new List<(string Full, string Parent, string Name)>();
+        foreach (var value in paths.Distinct(StringComparer.Ordinal))
+        {
+            if (!allowed.Contains(value) || !Directory.Exists(value))
+                throw new UnauthorizedAccessException("A selected My Files folder is missing or unavailable.");
+            var parent = System.IO.Path.GetDirectoryName(value) ?? "/";
+            var name = System.IO.Path.GetFileName(value);
+            selected.Add((value, parent.TrimStart('/'), name));
+        }
+        return selected;
+    }
+
     public IActionResult OnGetTree(string path = "")
     {
         var view = _files.Browse("system", path, Hidden);
@@ -166,6 +204,10 @@ public sealed class FilesModel : PageModel
             path = view.Relative,
             absolute = FileManagerService.Absolute(view.Relative),
             folders = view.Items.Where(x => x.IsDirectory).Select(x => x.Name),
+            folderNodes = view.Items.Where(x => x.IsDirectory).Select(x => new {
+                name = x.Name,
+                hasChildren = HasSubfolders(path.Trim('/') + "/" + x.Name)
+            }),
             canManage = view.CanWrite,
             canEnable = view.CanEnable
         });
@@ -195,7 +237,13 @@ public sealed class FilesModel : PageModel
             Response.Headers["Content-Disposition"] =
                 $"attachment; filename=\"yrm-files-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip\"";
             Response.Headers["Cache-Control"] = "private, no-store";
-            await _files.WriteDownloadZipAsync("system", CurrentRelative, items,
+            if (IsMyFolders)
+            {
+                var roots = await ResolveLibrarySelectionAsync(items);
+                await _files.WriteDownloadZipFromPathsAsync(roots.Select(x => x.Full).ToArray(),
+                    Response.Body, HttpContext.RequestAborted);
+            }
+            else await _files.WriteDownloadZipAsync("system", CurrentRelative, items,
                 Response.Body, HttpContext.RequestAborted);
             return new EmptyResult();
         }
@@ -362,8 +410,25 @@ public sealed class FilesModel : PageModel
         return Back();
     }
 
-    public IActionResult OnPostRename(string name, string newName)
-    { Notice = Act(() => _files.Rename("system", CurrentRelative, name, newName), "Renamed."); return Back(); }
+    public async Task<IActionResult> OnPostRenameAsync(string name, string newName, string? sourcePath)
+    {
+        try
+        {
+            var parent = CurrentRelative;
+            if (IsMyFolders)
+            {
+                var selected = await ResolveLibrarySelectionAsync([sourcePath ?? ""]);
+                if (selected.Count != 1 || selected[0].Name != name)
+                    throw new UnauthorizedAccessException("The selected folder has changed.");
+                parent = selected[0].Parent;
+            }
+            _files.Rename("system", parent, name, newName);
+            Notice = null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { Notice = "Error: " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
 
     public async Task<IActionResult> OnPostDeleteAsync(string name)
     {
@@ -393,15 +458,17 @@ public sealed class FilesModel : PageModel
         {
             // Validate once against current directory and one SMB snapshot.
             // Read-only preflight avoids 100 repeated Samba calls for 100 items.
-            var view = _files.Browse("system", CurrentRelative);
-            if (!view.Available) throw new IOException("Current folder unavailable.");
+            IReadOnlyList<(string Full, string Parent, string Name)> library = IsMyFolders
+                ? await ResolveLibrarySelectionAsync(selected) : [];
+            var view = IsMyFolders ? null : _files.Browse("system", CurrentRelative);
+            if (view is not null && !view.Available) throw new IOException("Current folder unavailable.");
             var smb = await _samba.ListAsync(HttpContext.RequestAborted);
             if (!smb.Available) throw new IOException("Cannot verify SMB shares. Deletion was cancelled.");
             foreach (var name in selected)
             {
-                var full = FileManagerService.Absolute(string.IsNullOrEmpty(CurrentRelative)
+                var full = IsMyFolders ? name : FileManagerService.Absolute(string.IsNullOrEmpty(CurrentRelative)
                     ? name : CurrentRelative.Trim('/') + "/" + name);
-                if (!view.Items.Any(item => item.Name == name))
+                if (!IsMyFolders && !view!.Items.Any(item => item.Name == name))
                     throw new IOException("Selected item no longer exists.");
                 if (smb.Shares.Any(share => share.Path == full ||
                     share.Path.StartsWith(full + "/", StringComparison.Ordinal)))
@@ -409,9 +476,10 @@ public sealed class FilesModel : PageModel
             }
             foreach (var name in selected)
             {
-                var full = FileManagerService.Absolute(string.IsNullOrEmpty(CurrentRelative)
+                var full = IsMyFolders ? name : FileManagerService.Absolute(string.IsNullOrEmpty(CurrentRelative)
                     ? name : CurrentRelative.Trim('/') + "/" + name);
-                _files.Delete("system", CurrentRelative, name);
+                if (IsMyFolders) _files.DeleteLibraryFolder(full);
+                else _files.Delete("system", CurrentRelative, name);
                 _folders.ForgetDeletedTree(full);
                 completed++;
             }
@@ -430,7 +498,15 @@ public sealed class FilesModel : PageModel
         var completed = 0;
         try
         {
-            foreach (var name in selected)
+            IReadOnlyList<(string Full, string Parent, string Name)> library = IsMyFolders
+                ? await ResolveLibrarySelectionAsync(selected) : [];
+            foreach (var item in library)
+            {
+                await _files.CopyAsync("system", item.Parent, item.Name, destination,
+                    HttpContext.RequestAborted);
+                completed++;
+            }
+            if (!IsMyFolders) foreach (var name in selected)
             {
                 await _files.CopyAsync("system", CurrentRelative, name, destination,
                     HttpContext.RequestAborted);
@@ -444,7 +520,7 @@ public sealed class FilesModel : PageModel
         return Back();
     }
 
-    public IActionResult OnPostBulkMove([FromForm] string[] names, string destination)
+    public async Task<IActionResult> OnPostBulkMoveAsync([FromForm] string[] names, string destination)
     {
         var selected = (names ?? []).Distinct(StringComparer.Ordinal).ToArray();
         if (selected.Length == 0 || selected.Length > 500)
@@ -452,7 +528,19 @@ public sealed class FilesModel : PageModel
         var completed = 0;
         try
         {
-            foreach (var name in selected)
+            IReadOnlyList<(string Full, string Parent, string Name)> library = IsMyFolders
+                ? await ResolveLibrarySelectionAsync(selected) : [];
+            if (IsMyFolders)
+            {
+                var smb = await _samba.ListAsync(HttpContext.RequestAborted);
+                if (!smb.Available) throw new IOException("Cannot verify active SMB shares. Move cancelled.");
+                if (library.Any(item => smb.Shares.Any(share =>
+                    share.Path == item.Full || share.Path.StartsWith(item.Full + "/", StringComparison.Ordinal))))
+                    throw new IOException("Stop sharing selected folders before moving them.");
+            }
+            foreach (var item in library)
+            { _files.Move("system", item.Parent, item.Name, destination); completed++; }
+            if (!IsMyFolders) foreach (var name in selected)
             {
                 _files.Move("system", CurrentRelative, name, destination);
                 completed++;
@@ -523,21 +611,34 @@ public sealed class FilesModel : PageModel
         { return BadRequest(FileManagerService.SafeError(ex)); }
     }
 
-    public async Task<IActionResult> OnPostUploadAsync(IFormFile? upload, bool replace = false)
+    public async Task<IActionResult> OnPostUploadAsync(IFormFile? upload, bool replace = false, string? targetParent = null)
     {
         var ajax = Request.Headers.Accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
         if (upload is null) return ajax ? BadRequest(new { ok = false, message = "Select a file." })
             : Back();
         try
         {
-            if (!replace && _files.Exists("system", CurrentRelative, upload.FileName))
+            var uploadParent = CurrentRelative;
+            if (IsMyFolders)
+            {
+                var devices = await _devices.ListAsync(HttpContext.RequestAborted);
+                var home = HomePath;
+                var valid = new HashSet<string>(devices.Where(d => d.CanMount && d.MountPoint.Length > 0 &&
+                    d.MountPoint != "/" && !d.MountPoint.StartsWith("/var/", StringComparison.Ordinal) &&
+                    !d.MountPoint.StartsWith("/boot", StringComparison.Ordinal))
+                    .Select(d => d.MountPoint.TrimStart('/')), StringComparer.Ordinal) { home };
+                if (targetParent is null || !valid.Contains(targetParent))
+                    throw new UnauthorizedAccessException("Select a valid mounted destination.");
+                uploadParent = targetParent;
+            }
+            if (!replace && _files.Exists("system", uploadParent, upload.FileName))
             {
                 if (ajax)
                     return new ConflictObjectResult(new { ok = false, conflict = true, message = "File exists." });
                 Notice = "Error: File already exists. Choose Replace or Skip.";
                 return Back();
             }
-            await _files.UploadAsync("system", CurrentRelative, upload, replace, HttpContext.RequestAborted);
+            await _files.UploadAsync("system", uploadParent, upload, replace, HttpContext.RequestAborted);
             if (ajax) return new JsonResult(new { ok = true, message = "File uploaded." });
             Notice = "File uploaded.";
         }

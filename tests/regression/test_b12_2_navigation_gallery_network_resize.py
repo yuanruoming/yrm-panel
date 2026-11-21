@@ -22,10 +22,49 @@ class RoundTwoContracts(unittest.TestCase):
         model = content('YrmPanel/Pages/Files.cshtml.cs')
         layout = content('YrmPanel/Pages/Shared/_Layout.cshtml')
         self.assertIn('data-fm-inline-toggle', view)
-        self.assertIn('data-fm-tree-toggle', view)
+        self.assertNotIn('data-fm-tree-toggle', view)
+        self.assertIn('data-my-files-toggle', view)
+        self.assertIn('data-fm-inline-toggle', view)
         self.assertIn("url.searchParams.set('handler', 'Tree')", tree)
         self.assertIn('public IActionResult OnGetTree(', model)
         self.assertIn('v1-tree-navigation.js', layout)
+    def test_my_files_has_complete_toolbar_and_real_path_operations(self):
+        view = content('YrmPanel/Pages/Files.cshtml')
+        model = content('YrmPanel/Pages/Files.cshtml.cs')
+        shell = content('YrmPanel/wwwroot/js/panel.js')
+        tree = content('YrmPanel/wwwroot/js/v1-tree-navigation.js')
+        for marker in ('data-b12-file-download', 'data-b10-file-rename',
+                       'data-b12-file-copy', 'data-b10-file-move',
+                       'data-b10-file-delete', 'data-root-upload-open'):
+            self.assertIn(marker, view)
+        self.assertLess(view.find('id="yrm-b10-file-selection"'),
+                        view.find('@if (Model.IsMyFolders)', view.find('id="yrm-b10-file-selection"')))
+        self.assertIn('data-current-route="@currentRoute"', view)
+        self.assertIn('form.dataset.currentRoute', shell)
+        self.assertIn('ResolveLibrarySelectionAsync(', model)
+        self.assertIn('WriteDownloadZipFromPathsAsync(', model)
+        self.assertNotIn('data-fm-tree-toggle', view)
+        self.assertIn('folderNodes', tree)
+
+    def test_profile_and_ddns_forms_use_current_backends(self):
+        settings = content('YrmPanel/Pages/Settings.cshtml')
+        page_model = content('YrmPanel/Pages/Settings.cshtml.cs')
+        store = content('YrmPanel/Services/PanelSettingsStore.cs')
+        js = content('YrmPanel/wwwroot/js/rc41-ui.js')
+        self.assertIn('yrm-settings-nav-bottom', settings)
+        self.assertIn('yrm-profile-photo-dialog', settings)
+        self.assertIn('data-yrm-photo-open', settings)
+        self.assertIn('OnPostProfilePhotoAsync(', page_model)
+        self.assertIn('OnGetProfilePhoto()', page_model)
+        self.assertIn('SetProfilePhotoAsync(', store)
+        self.assertIn('data-yrm-profile-toggle', js)
+        self.assertIn('data-yrm-system-time', settings)
+        self.assertIn('data-yrm-system-uptime', settings)
+        self.assertIn('ValidateDdnsSources(', page_model)
+        self.assertIn('ipSource', settings)
+        self.assertIn('name="enabled"', settings)
+        self.assertIn('Notice = null;', page_model)
+
     def test_multi_item_zip_is_streamed_with_guards(self):
         model = content('YrmPanel/Pages/Files.cshtml.cs')
         service = content('YrmPanel/Services/FileManagerService.cs')

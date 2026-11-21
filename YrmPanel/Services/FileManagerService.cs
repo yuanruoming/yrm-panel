@@ -335,6 +335,39 @@ public sealed class FileManagerService
             var source = Resolve(root, Combine(relative, name), true);
             queue.Enqueue((source, name));
         }
+        await WritePreparedDownloadZipAsync(queue, output, ct);
+    }
+
+    // My Files is a virtual library: entries may originate from different parent
+    // directories and volumes. The PageModel must authorize each path against
+    // the freshly discovered My Files roots before calling this method.
+    public async Task WriteDownloadZipFromPathsAsync(IReadOnlyList<string> absolutePaths,
+        Stream output, CancellationToken ct)
+    {
+        if (absolutePaths.Count == 0 || absolutePaths.Count > 200)
+            throw new ArgumentException("Select between 1 and 200 items for a ZIP download.");
+        var queue = new Queue<(string Full, string ZipName)>();
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var absolute in absolutePaths.Distinct(StringComparer.Ordinal))
+        {
+            if (!Path.IsPathFullyQualified(absolute) || absolute == "/" ||
+                Path.GetFullPath(absolute) != absolute)
+                throw new UnauthorizedAccessException("Invalid library item path.");
+            var fileName = Path.GetFileName(absolute);
+            ValidateName(fileName);
+            // Resolve each source through the same Linux path guards as normal Files.
+            var source = Resolve("system", absolute.TrimStart('/'), true);
+            var zipName = fileName;
+            for (var number = 2; !usedNames.Add(zipName); number++)
+                zipName = $"{fileName} ({number})";
+            queue.Enqueue((source, zipName));
+        }
+        await WritePreparedDownloadZipAsync(queue, output, ct);
+    }
+
+    private static async Task WritePreparedDownloadZipAsync(
+        Queue<(string Full, string ZipName)> queue, Stream output, CancellationToken ct)
+    {
         var prepared = new List<(string Full, string Name, bool Directory)>();
         // Read mountinfo once, before writing headers, to avoid creating a ZIP
         // that silently includes an unrelated filesystem mounted inside a folder.

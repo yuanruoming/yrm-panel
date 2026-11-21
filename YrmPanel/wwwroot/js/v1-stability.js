@@ -264,7 +264,7 @@
       const copy=action.matches('[data-b12-file-copy]');
       const origin=first.querySelector(copy?'[data-copy-item]':'[data-move-item]');
       origin?.click();
-      if(selected.length>1){
+      if(selected.length>1 || first.dataset.b10Absolute){
         const form=get('file-action-form');
         if(!(form instanceof HTMLFormElement))return;
         const url=new URL(form.action,location.origin);url.searchParams.set('handler',copy?'BulkCopy':'BulkMove');
