@@ -21,11 +21,15 @@ class WallpaperHistoryContracts(TestCase):
         for handler, model_method, store_method in (
             ('WallpaperHistoryImage', 'OnGetWallpaperHistoryImage(', 'FindWallpaperHistoryImage('),
             ('RestoreWallpaperHistory', 'OnPostRestoreWallpaperHistoryAsync(', 'RestoreWallpaperHistoryAsync('),
-            ('DeleteWallpaperHistory', 'OnPostDeleteWallpaperHistoryAsync(', 'DeleteWallpaperHistoryAsync('),
         ):
             self.assertIn(handler, self.view)
             self.assertIn(model_method, self.model)
             self.assertIn(store_method, self.store)
+        # The historic delete API remains compatible, but the new UI is image-only.
+        self.assertIn('OnPostDeleteWallpaperHistoryAsync(', self.model)
+        self.assertIn('DeleteWallpaperHistoryAsync(', self.store)
+        self.assertNotIn('asp-page-handler="DeleteWallpaperHistory"', self.view)
+        self.assertIn('Recently Used', self.view)
 
     def test_replaced_wallpapers_are_archived(self):
         self.assertIn('ArchiveCurrentWallpaper()', self.store)

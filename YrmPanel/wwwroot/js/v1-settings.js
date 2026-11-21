@@ -117,6 +117,21 @@
   void pollUpdate();
 
   // Keep the original native-form Dynu/Cloudflare and Custom HTTPS presets.
+  // Wallpaper preview is a local dialog, not a route or full-page reload.
+  document.addEventListener('click',event=>{
+    const node=event.target instanceof Element?event.target:null;
+    const dialog=document.getElementById('yrm-wallpaper-lightbox');
+    if(!(dialog instanceof HTMLDialogElement)||!node)return;
+    if(node.closest('[data-wallpaper-preview-close]')){dialog.close();return;}
+    if(node.closest('[data-wallpaper-preview-open]')){
+      const source=document.getElementById('wallpaper-preview');
+      const image=document.getElementById('yrm-wallpaper-lightbox-image');
+      if(source instanceof HTMLImageElement && image instanceof HTMLImageElement){
+        image.src=source.currentSrc||source.src;
+        if(!dialog.open)dialog.showModal();
+      }
+    }
+  });
   function updateDdnsFields(form){
     const auth=form.elements.namedItem('authType')?.value||'header';
     const mode=form.elements.namedItem('responseMode')?.value||'codes';

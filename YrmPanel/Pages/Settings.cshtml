@@ -34,16 +34,69 @@
   <div class="server-settings-content">
     @if (activeTab == "overview")
     {
-
-      <section class="yrm-flat-device">
-        <div class="settings-device-avatar"><svg class="ui-icon"><use href="#i-server"/></svg></div>
-        <div><p class="eyebrow">DEVICE</p><h3>@info.Hostname</h3><p class="muted">@info.OperatingSystem</p></div>
-      </section>
-      <div class="settings-summary-grid">
-        <section class="yrm-summary-cell"><p class="eyebrow">CPU</p><h3>@info.Processors cores</h3><p class="muted settings-clip">@info.CpuModel</p></section>
-        <section class="yrm-summary-cell"><p class="eyebrow">MEMORY</p><h3>@(info.MemoryBytes > 0 ? (info.MemoryBytes / 1073741824d).ToString("0.0") + " GiB" : "Unavailable")</h3><p class="muted">Installed RAM</p></section>
-        <section class="yrm-summary-cell"><p class="eyebrow">STORAGE</p><h3>@snapshot.Disks.Count</h3><p class="muted">Detected filesystems</p></section>
-        <section class="yrm-summary-cell"><p class="eyebrow">NETWORK</p><h3 class="settings-clip">@(info.Adapters.FirstOrDefault(x => x.Ipv4.Length > 0 && !Model.IsVirtualAdapter(x.Name))?.Ipv4.FirstOrDefault() ?? "Unavailable")</h3><p class="muted">Primary IPv4</p></section>
+      
+        var overviewVolumes = Model.StorageDevices
+          .Where(d => (d.Type is "part" or "disk") && d.Uuid.Length > 0 &&
+            new[] { "ext4", "xfs", "btrfs", "vfat", "exfat", "ntfs" }.Contains(d.FileSystem, StringComparer.OrdinalIgnoreCase) &&
+            d.MountPoint.Length > 0 && !d.MountPoint.StartsWith("/boot", StringComparison.Ordinal) &&
+            !d.MountPoint.StartsWith("/var/", StringComparison.Ordinal))
+          .GroupBy(d => d.Uuid, StringComparer.Ordinal).Select(group => group.First())
+          .OrderByDescending(d => d.MountPoint == "/").ThenBy(d => d.Path, StringComparer.Ordinal).ToArray();
+        var primaryAdapter = info.Adapters.FirstOrDefault(a => !Model.IsVirtualAdapter(a.Name) && a.Ipv4.Length > 0)
+          ?? info.Adapters.FirstOrDefault(a => !Model.IsVirtualAdapter(a.Name));
+        var primaryNet = primaryAdapter is null ? null : Model.GetNetworkDetails(primaryAdapter.Name);
+      
+      <div class="yrm-overview-grid" aria-label="Server overview">
+        <section class="yrm-overview-card">
+          <h3>Device</h3><strong class="yrm-overview-large">@info.Hostname</strong>
+          <div class="yrm-overview-sub"><span>System</span><strong>@info.OperatingSystem</strong></div>
+        </section>
+        <section class="yrm-overview-card">
+          <h3>About YRMPanel</h3><strong class="yrm-overview-large">@info.PanelVersion.Split('+')[0]</strong>
+          <a asp-page="/Settings" asp-route-tab="about" class="yrm-overview-link">Check Updates</a>
+        </section>
+        @for (var i = 0; i < 2; i++)
+        {
+          var volume = i < overviewVolumes.Length ? overviewVolumes[i] : null;
+          var disk = volume is null ? null : snapshot.Disks.FirstOrDefault(d => d.Path == volume.MountPoint);
+          var usedPercent = disk is not null && disk.TotalBytes > 0
+            ? Math.Clamp(100d * disk.UsedBytes / disk.TotalBytes, 0d, 100d) : 0d;
+          var percentCss = usedPercent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+          <section class="yrm-overview-card yrm-overview-volume">
+            <div class="yrm-overview-card-head">
+              <h3>@(i == 0 && volume?.MountPoint == "/" ? "System Volume" : $"Volume {i + 1}")</h3>
+              @if (i == 1 && overviewVolumes.Length > 2)
+              { <a asp-page="/Settings" asp-route-tab="storage" class="yrm-overview-link">More</a> }
+            </div>
+            @if (disk is not null && disk.TotalBytes > 0)
+            {
+              <div class="yrm-overview-volume-body">
+                <div class="yrm-volume-donut" style="--used:@percentCss%" aria-label="@percentCss percent used">
+                  <span>@usedPercent.ToString("0")%</span>
+                </div>
+                <div class="yrm-volume-amounts">
+                  <div><span>Used</span><strong>@((disk.UsedBytes / 1073741824d).ToString("0.0")) GiB</strong></div>
+                  <div><span>Free</span><strong>@(((disk.TotalBytes - disk.UsedBytes) / 1073741824d).ToString("0.0")) GiB</strong></div>
+                </div>
+              </div>
+            }
+            else
+            { <p class="muted">@(volume is null ? "No additional volume" : "Capacity unavailable")</p> }
+          </section>
+        }
+        <section class="yrm-overview-card">
+          <h3>Hardware Info</h3>
+          <div class="yrm-overview-kv"><span>CPU</span><strong>@info.CpuModel · @info.Processors cores</strong></div>
+          <div class="yrm-overview-kv"><span>RAM</span><strong>@(info.MemoryBytes > 0 ? (info.MemoryBytes / 1073741824d).ToString("0.0") + " GiB" : "—")</strong></div>
+          <div class="yrm-overview-kv"><span>GPU</span><strong>Not available</strong></div>
+        </section>
+        <section class="yrm-overview-card">
+          <h3>Network</h3>
+          <div class="yrm-overview-kv"><span>IPv4</span><strong>@(primaryAdapter?.Ipv4.FirstOrDefault() ?? "—")</strong></div>
+          <div class="yrm-overview-kv"><span>IPv6</span><strong>@(primaryAdapter?.Ipv6.FirstOrDefault(x => !Model.IsLinkLocalIpv6(x)) ?? "—")</strong></div>
+          <div class="yrm-overview-kv"><span>MAC</span><strong>@(primaryNet?.Mac ?? "—")</strong></div>
+          <div class="yrm-overview-kv"><span>Speed</span><strong>@(primaryNet?.LinkSpeed ?? "—")</strong></div>
+        </section>
       </div>
     }
     else if (activeTab == "storage")
@@ -169,51 +222,51 @@
     }
     else if (activeTab == "network")
     {
-
-      <div class="settings-stack">
-        @foreach (var adapter in info.Adapters.Where(x => !Model.IsVirtualAdapter(x.Name)))
-        {
-          <section class="yrm-network-row">
-            <div class="settings-row-top"><div><h3>@adapter.Name</h3><small class="muted">Network interface</small></div><span class="tag">@adapter.State</span></div>
-            @foreach (var ipv4 in adapter.Ipv4)
-            {
-              <div class="settings-address-row"><span>IPv4</span><code>@ipv4</code><button class="mini-button" type="button" data-copy-address="@ipv4" title="Copy IPv4" aria-label="Copy IPv4">⧉</button></div>
-            }
-            @foreach (var ipv6 in adapter.Ipv6.Where(x => !Model.IsLinkLocalIpv6(x)))
-            {
-              <div class="settings-address-row"><span>Global IPv6</span><code>@ipv6</code><button class="mini-button" type="button" data-copy-address="@ipv6" title="Copy IPv6" aria-label="Copy IPv6">⧉</button></div>
-            }
-            @if (adapter.Ipv4.Length == 0 && adapter.Ipv6.Length == 0) { <p class="muted">No assigned addresses.</p> }
-            @if (adapter.Ipv6.Any(Model.IsLinkLocalIpv6))
-            {
-              <details class="settings-secondary-addresses"><summary>Link-local addresses</summary>
-                @foreach (var ip in adapter.Ipv6.Where(Model.IsLinkLocalIpv6))
-                { <div class="settings-address-row"><span>IPv6</span><code>@ip</code><button class="mini-button" type="button" data-copy-address="@ip" title="Copy address">⧉</button></div> }
-              </details>
-            }
+      <div class="yrm-network-layout">
+      @foreach (var adapter in info.Adapters.Where(x => !Model.IsVirtualAdapter(x.Name)))
+      {
+        var net = Model.GetNetworkDetails(adapter.Name);
+        <section class="yrm-network-interface" aria-label="Network interface @adapter.Name">
+          <div class="yrm-network-interface-head">
+            <h3>@adapter.Name</h3>
+            <span class="yrm-network-meta">@net.LinkSpeed · MTU @net.Mtu · MAC @net.Mac</span>
+          </div>
+          <section class="yrm-network-family">
+            <h4>IPv4</h4>
+            <dl>
+              <div><dt>Type</dt><dd>@net.Ipv4Mode</dd></div>
+              <div><dt>IP Address</dt><dd>@(adapter.Ipv4.Length > 0 ? string.Join(", ", adapter.Ipv4) : "—")</dd></div>
+              <div><dt>Subnet Mask</dt><dd>@net.SubnetMask</dd></div>
+              <div><dt>Gateway</dt><dd>@net.Ipv4Gateway</dd></div>
+              <div><dt>DNS</dt><dd>@net.Ipv4Dns</dd></div>
+            </dl>
           </section>
-        }
-        @if (info.Adapters.Any(x => Model.IsVirtualAdapter(x.Name)))
-        {
-          <details class="settings-network-secondary"><summary>Virtual &amp; secondary interfaces (@info.Adapters.Count(x => Model.IsVirtualAdapter(x.Name)))</summary>
-            @foreach (var adapter in info.Adapters.Where(x => Model.IsVirtualAdapter(x.Name)))
-            {
-              <div class="settings-virtual-row"><div><strong>@adapter.Name</strong><small>@adapter.State</small></div>
-                <div class="settings-virtual-addresses">
-                  @foreach (var ip in adapter.Ipv4.Concat(adapter.Ipv6.Where(x => !Model.IsLinkLocalIpv6(x))))
-                  { <code>@ip</code> }
-                  @if (adapter.Ipv4.Length == 0 && !adapter.Ipv6.Any(x => !Model.IsLinkLocalIpv6(x))) { <small class="muted">No assigned addresses</small> }
-                </div>
-              </div>
-            }
-          </details>
-        }
-        @if (info.Adapters.Count == 0) { <p class="muted">No network interfaces detected.</p> }
+          <section class="yrm-network-family">
+            <h4>IPv6</h4>
+            <dl>
+              <div><dt>Type</dt><dd>@net.Ipv6Mode</dd></div>
+              <div><dt>IP Address</dt><dd>@(adapter.Ipv6.Any(x => !Model.IsLinkLocalIpv6(x)) ? string.Join(", ", adapter.Ipv6.Where(x => !Model.IsLinkLocalIpv6(x))) : "—")</dd></div>
+              <div><dt>Prefix Length</dt><dd>@net.Ipv6Prefix</dd></div>
+              <div><dt>Gateway</dt><dd>@net.Ipv6Gateway</dd></div>
+              <div><dt>DNS</dt><dd>@net.Ipv6Dns</dd></div>
+            </dl>
+          </section>
+        </section>
+      }
+      @if (info.Adapters.Any(x => Model.IsVirtualAdapter(x.Name)))
+      {
+        <details class="yrm-network-virtual"><summary>Virtual &amp; secondary interfaces (@info.Adapters.Count(x => Model.IsVirtualAdapter(x.Name)))</summary>
+          @foreach (var adapter in info.Adapters.Where(x => Model.IsVirtualAdapter(x.Name)))
+          { <div class="yrm-network-virtual-row"><strong>@adapter.Name</strong><span>@string.Join(", ", adapter.Ipv4.Concat(adapter.Ipv6))</span></div> }
+        </details>
+      }
+      @if (info.Adapters.Count == 0) { <p class="muted">No network interfaces detected.</p> }
       </div>
     }
     else if (activeTab == "ddns")
     {
       <div class="yrm-settings-toolbar yrm-ddns-header-actions">
+        <h3 class="yrm-ddns-workspace-title">Dynamic DNS</h3>
         <form method="post" asp-page-handler="DdnsUpdateAll" asp-route-tab="ddns">
           <button class="button button-secondary" type="submit" disabled="@(Model.DdnsProfiles.Count == 0)">Update</button>
         </form>
@@ -527,8 +580,14 @@
 
       <section class="yrm-flat-panel settings-wallpaper-card">
         <div class="settings-row-top"><h3>Desktop Wallpaper</h3></div>
-        <img class="v1-wallpaper-preview" id="wallpaper-preview" src="@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))" alt="Wallpaper preview" />
-        <div class="v1-wallpaper-mode"><button type="button" class="mini-button" data-wallpaper-fit>Full image</button> · Toggle actual desktop crop</div>
+        <button type="button" class="yrm-wallpaper-preview-trigger" data-wallpaper-preview-open title="Preview desktop wallpaper" aria-label="View desktop wallpaper">
+          <img class="v1-wallpaper-preview" id="wallpaper-preview" src="@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))" alt="Wallpaper preview" />
+        </button>
+        <dialog class="yrm-wallpaper-lightbox" id="yrm-wallpaper-lightbox" aria-label="Desktop wallpaper preview">
+          <button type="button" data-wallpaper-preview-close aria-label="Close wallpaper preview">×</button>
+          <img id="yrm-wallpaper-lightbox-image" alt="Desktop wallpaper, full image" />
+        </dialog>
+        
         <div class="wallpaper-actions">
           <form method="post" asp-page-handler="Wallpaper" asp-route-tab="appearance" enctype="multipart/form-data" id="wallpaper-upload-form" class="wallpaper-upload-actions">
             <input type="file" name="wallpaper" id="wallpaper-select" class="fm-visually-hidden" accept="image/jpeg,image/png,image/webp" required/>
@@ -543,26 +602,16 @@
         @if (Model.WallpaperHistory.Count > 0)
         {
           <div class="yrm-ui-wallpaper-history">
-            <h4>Wallpaper History</h4>
-            <div class="yrm-ui-history-list">
+            <h4>Recently Used</h4>
+            <div class="yrm-wallpaper-recent-grid">
               @foreach (var history in Model.WallpaperHistory)
               {
-                <div class="yrm-ui-history-row">
-                  <img src="@Url.Page("/Settings", "WallpaperHistoryImage", new { id = history.Id })" alt="Saved desktop wallpaper" loading="lazy" />
-                  <div class="history-info"><strong>@history.SavedUtc.ToLocalTime().ToString("dd MMM yyyy HH:mm")</strong>
-                    <small>@((history.SizeBytes / 1048576d).ToString("0.0")) MiB</small></div>
-                  <div class="yrm-ui-history-actions">
-                    <form method="post" asp-page-handler="RestoreWallpaperHistory" asp-route-tab="appearance">
-                      <input type="hidden" name="id" value="@history.Id" />
-                      <button type="submit" class="button button-secondary">Restore</button>
-                    </form>
-                    <form method="post" asp-page-handler="DeleteWallpaperHistory" asp-route-tab="appearance"
-                      data-confirm="Delete this saved wallpaper from history?">
-                      <input type="hidden" name="id" value="@history.Id" />
-                      <button type="submit" class="button button-secondary">Delete</button>
-                    </form>
-                  </div>
-                </div>
+                <form method="post" asp-page-handler="RestoreWallpaperHistory" asp-route-tab="appearance">
+                  <input type="hidden" name="id" value="@history.Id" />
+                  <button type="submit" class="yrm-wallpaper-recent-item" title="Use this wallpaper" aria-label="Apply previously used wallpaper">
+                    <img src="@Url.Page("/Settings", "WallpaperHistoryImage", new { id = history.Id })" alt="Previously used wallpaper" loading="lazy" />
+                  </button>
+                </form>
               }
             </div>
           </div>
@@ -574,10 +623,15 @@
 
       <section class="yrm-flat-panel settings-update-card">
         <div class="settings-row-top"><h3>Updates</h3><span class="tag">@Model.UpdateChannel</span></div>
-        <div class="yrm-update-overview">
-          <div><small>Current Version</small><strong>@info.PanelVersion.Split('+')[0]</strong></div>
-          <div><small>@(Model.UpdateChannel == "stable" ? "Available Version" : "Latest Dev Build")</small><strong>@(Model.UpdateChannel == "stable" ? (Model.LastUpdateCheck?.Tag ?? "Not checked") : (Model.LastUpdateCheck?.Available == true && latestBuild.Length >= 8 ? latestBuild[..8] : "Not checked"))</strong></div>
-        </div>
+        @if (Model.LastUpdateCheck?.HasUpdate == true)
+        {
+          <div class="yrm-update-available">
+            <small>Available Version</small>
+            <strong>@(Model.LastUpdateCheck.Tag ?? "New development build")</strong>
+          </div>
+        }
+        @if (Model.UpdateChannel == "dev" && latestBuild.Length >= 8)
+        { <details class="yrm-update-technical"><summary>Build details</summary><code>@(latestBuild[..8])</code></details> }
         <div class="yrm-update-tracker" id="v1-update-progress" role="status" aria-live="polite">
           <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@(Model.UpdateStatus.State == "running" ? "Updating" : Model.LastUpdateCheck?.HasUpdate == true ? "Update Available" : Model.UpdateStatus.State == "failed" ? "Update Failed" : Model.LastUpdateCheck?.Available == true ? "Up to Date" : "Not Checked")</strong><span id="yrm-update-percent"></span></div>
           <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress" hidden><span id="yrm-update-bar-fill"></span></div>

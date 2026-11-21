@@ -66,7 +66,6 @@
     <div class="launcher-title"><div><strong>Applications</strong></div></div>
     <div class="launcher-group-title">WORKSPACE</div>
     <div class="launcher-grid">
-      <a asp-page="/Applications" class="launcher-app"><span class="app-visual app-apps"><svg class="ui-icon"><use href="#i-grid"/></svg></span><span>Apps</span></a>
       <a asp-page="/Docker" class="launcher-app"><span class="app-visual app-docker"><svg class="ui-icon"><use href="#i-docker-symbol"/></svg></span><span>Docker</span></a>
       <a asp-page="/Files" class="launcher-app"><span class="app-visual app-files"><svg class="ui-icon"><use href="#i-folder"/></svg></span><span>Files</span></a>
     </div>
@@ -89,7 +88,7 @@
   </main>
   <main class="workspace-stage" id="workspace-stage">
     <section class="workspace-window" id="workspace-window" aria-label="Application window">
-      <div class="window-titlebar"><div class="window-title"><span class="window-title-dot"></span><span id="window-active-title">@(isDesktop ? "Application" : title)</span></div>
+      <div class="window-titlebar"><div class="window-title"><span id="window-active-title">@(isDesktop ? "Application" : title)</span></div>
         <div class="window-controls">
           <button type="button" class="window-control" id="window-minimize" title="Minimize" aria-label="Minimize window"><svg class="ui-icon"><use href="#i-minus"/></svg></button>
           <button type="button" class="window-control" id="window-maximize" title="Maximize" aria-label="Maximize window"><svg class="ui-icon"><use href="#i-max"/></svg></button>

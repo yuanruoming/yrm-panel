@@ -15,11 +15,9 @@ public sealed class ApplicationsModel : PageModel
     public IReadOnlyList<Shortcut> Shortcuts { get; private set; } = [];
     public IReadOnlyList<string> Pinned => _settings.Read().PinnedApps;
     [TempData] public string? Notice { get; set; }
-    public async Task OnGetAsync()
-    {
-        Docker = await _docker.ListAsync(HttpContext.RequestAborted);
-        Shortcuts = _settings.Read().Shortcuts;
-    }
+    // Applications was retired as a separate Web-link catalog. YRM-HOME
+    // remains the user's navigation homepage. Preserve old settings data.
+    public IActionResult OnGet() => RedirectToPage("/Docker");
     public async Task<IActionResult> OnPostSaveAsync(int index, string name, string url)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 40 ||

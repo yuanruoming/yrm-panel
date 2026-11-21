@@ -33,7 +33,7 @@
   let lastMonitorTrigger = null;
 
   // Do not accept arbitrary same-origin routes into the workspace shell.
-  const allowedPages = new Set(["/Applications", "/Docker", "/Services", "/Settings", "/Features", "/Files", "/Shares"]);
+  const allowedPages = new Set(["/Docker", "/Services", "/Settings", "/Features", "/Files", "/Shares"]);
   const canonicalPath = (path) => path.replace(/\/$/, "") || "/";
   function internalUrl(value) {
     try {
@@ -121,7 +121,6 @@
     return ({"/Docker":"i-docker-symbol","/Services":"i-server","/Applications":"i-grid","/Settings":"i-settings","/Files":"i-folder","/Shares":"i-globe","/Features":"i-grid"})[path] || "i-grid";
   };
   const taskbarBuiltin = new Map([
-    ["/Applications", {name:"Apps",url:"/Applications"}],
     ["/Docker", {name:"Docker",url:"/Docker"}],
     ["/Files", {name:"Files",url:"/Files"}],
     ["/Settings", {name:"Settings",url:"/Settings"}]
@@ -145,8 +144,9 @@
       const response = await fetch("/Settings?handler=TaskbarPins", {credentials:"same-origin",cache:"no-store"});
       if (!response.ok) return;
       const data = await response.json();
-      taskbarPins = Array.isArray(data.pins) ? data.pins.filter(x => typeof x === "string") : [];
-      taskbarShortcuts = Array.isArray(data.shortcuts) ? data.shortcuts : [];
+      taskbarPins = Array.isArray(data.pins) ? data.pins.filter(x => typeof x === "string" && x !== "/Applications" && !x.startsWith("link:")) : [];
+      // Old manual links remain in settings.json for compatibility; no longer displayed.
+      taskbarShortcuts = [];
       taskbarCsrf = typeof data.token === "string" ? data.token : "";
       renderTabs();
       updateLauncherPins();
@@ -778,9 +778,38 @@
     try { await navigator.clipboard.writeText($("docker-log-output")?.textContent || ""); showToast("Logs copied."); }
     catch { showToast("Copy failed. Select the text to copy.", "error"); }
   });
+  // Preserve Files/Settings navigation DOM when loading an inner view.
+  // The server may return a full Razor document, but only the working pane
+  // changes. This avoids collapsing and rebuilding the sidebar on every click.
+  function reconcileWorkspaceView(remotePage, targetUrl) {
+    const previous = canonicalPath((activeUrl || '').split('?')[0]);
+    const incoming = canonicalPath((targetUrl || '').split('?')[0]);
+    if (previous !== incoming || !['/Files','/Settings'].includes(incoming)) return false;
+    const rootSelector = incoming === '/Files' ? '.fm-explorer' : '.server-settings-layout';
+    const navSelector = incoming === '/Files' ? '.fm-locations' : '.server-settings-nav';
+    const contentSelector = incoming === '/Files' ? '.fm-content' : '.server-settings-content';
+    const oldRoot=page.querySelector(rootSelector), newRoot=remotePage.querySelector(rootSelector);
+    if (!oldRoot || !newRoot) return false;
+    const oldContent=oldRoot.querySelector(contentSelector), newContent=newRoot.querySelector(contentSelector);
+    const oldNav=oldRoot.querySelector(navSelector), newNav=newRoot.querySelector(navSelector);
+    if (!oldContent || !newContent || !oldNav || !newNav) return false;
+    // Update selection highlighting, not the actual navigation elements.
+    const selected=new Set(Array.from(newNav.querySelectorAll('a.is-active'),a=>a.getAttribute('href')));
+    oldNav.querySelectorAll('a').forEach(link=>link.classList.toggle('is-active',selected.has(link.getAttribute('href'))));
+    oldContent.replaceWith(document.importNode(newContent,true));
+    // Replace route-sensitive dialogs and notices, keeping the original sidebar.
+    for (const child of Array.from(page.children)) if (child !== oldRoot) child.remove();
+    for (const child of Array.from(remotePage.children)) {
+      if (child.matches(rootSelector)) continue;
+      page.append(document.importNode(child,true));
+    }
+    return true;
+  }
   async function loadPage(url, refresh = false, push = true) {
     const token = ++navigationId;
-    appWindow?.classList.add("is-loading");
+    const sameWorkspace = !!activeUrl && ["/Files","/Settings"].includes(canonicalPath(url.split("?")[0])) &&
+      canonicalPath(activeUrl.split("?")[0]) === canonicalPath(url.split("?")[0]);
+    if (!sameWorkspace) appWindow?.classList.add("is-loading");
     try {
       const response = await fetch(url, {credentials: "same-origin", headers: {"Accept":"text/html"}, cache: "no-store"});
       if (response.redirected && new URL(response.url).pathname.startsWith("/Account/")) {
@@ -813,7 +842,7 @@
       }
       activeUrl = url;
       saveWorkspaceRoute(url);
-      page.replaceChildren(fragment);
+      if (!reconcileWorkspaceView(remotePage,url)) page.replaceChildren(fragment);
       harvestNotices(page);
       scanDdnsFailures();
       windowScroll.scrollTop = 0;
@@ -832,7 +861,7 @@
     const push = options.push !== false;
     const refresh = Boolean(options.refresh);
     if (!refresh && url === activeUrl) return;
-    if (!refresh && canonicalPath(url.split("?")[0]) !== "/Applications" && tabs.get(url)?.fragment) {
+    if (!refresh && tabs.get(url)?.fragment) {
       ++navigationId;
       showTab(url, push);
     } else {
@@ -948,7 +977,7 @@
       saveWorkspaceRoute(targetUrl);
       const fragment = document.createDocumentFragment();
       for (const node of Array.from(remotePage.childNodes)) fragment.append(document.importNode(node, true));
-      page.replaceChildren(fragment);
+      if (!reconcileWorkspaceView(remotePage,targetUrl)) page.replaceChildren(fragment);
       harvestNotices(page);
       scanDdnsFailures();
       // Refresh Files on next opening after any disk mount-state change.

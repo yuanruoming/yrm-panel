@@ -57,7 +57,7 @@
         @foreach (var volume in Model.MountedVolumes)
         {
           <a class="fm-location-link" asp-page="/Files" asp-route-path="@volume.MountPoint.TrimStart('/')" title="@volume.MountPoint">
-            <svg class="ui-icon"><use href="#i-harddrive"/></svg><span>@(string.IsNullOrWhiteSpace(volume.Label) ? volume.Name : volume.Label)</span>
+            <svg class="ui-icon"><use href="#i-harddrive"/></svg><span>@Model.StorageLabel(volume)</span>
           </a>
         }
       </details>
@@ -188,6 +188,10 @@
             <button type="button" class="button button-danger" data-b10-file-delete disabled>Delete</button>
           </div>
           }
+          <form method="post" asp-page-handler="BulkDelete" asp-route-path="@currentRoute"
+                data-bulk-delete-form data-confirm="Delete selected items? This cannot be undone." hidden>
+            <button type="submit">Confirm delete</button>
+          </form>
           <a class="fm-hidden-toggle" asp-page="/Files" asp-route-path="@currentRoute" asp-route-hidden="@(!Model.Hidden)">
             @(Model.Hidden ? "Hide hidden files" : "Show hidden files")
           </a>
@@ -205,7 +209,7 @@
               var matching = shared.FirstOrDefault(x => string.Equals(x.Path, absolute, StringComparison.Ordinal));
               var canShare = item.IsDirectory && FileAccess.IsManaged(absolute);
               var canEnable = item.IsDirectory && FileAccess.CanEnable(absolute) && !canShare;
-              <tr data-b10-file-row data-b10-filename="@item.Name">
+              <tr data-b10-file-row data-b10-filename="@item.Name" aria-selected="false" tabindex="0">
                 <td class="explorer-name">
                   @if (item.IsDirectory)
                   { <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }

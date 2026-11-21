@@ -105,6 +105,65 @@ public sealed class SettingsModel : PageModel
     public PanelCertificateInfo Certificate => _certificates.Info();
     [TempData] public string? Notice { get; set; }
 
+
+    public sealed record NetworkDetails(
+        string Ipv4Mode, string SubnetMask, string Ipv4Gateway, string Ipv4Dns,
+        string Ipv6Mode, string Ipv6Prefix, string Ipv6Gateway, string Ipv6Dns,
+        string Mac, string LinkSpeed, string Mtu);
+
+    public NetworkDetails GetNetworkDetails(string name)
+    {
+        const string na = "—";
+        var blank = new NetworkDetails("Unknown", na, na, na, "Unknown", na, na, na, na, na, na);
+        try
+        {
+            var nic = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+                .FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.Ordinal));
+            if (nic is null) return blank;
+            var props = nic.GetIPProperties();
+            var v4 = props.UnicastAddresses.FirstOrDefault(x =>
+                x.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+            var v6 = props.UnicastAddresses.FirstOrDefault(x =>
+                x.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
+                !x.Address.IsIPv6LinkLocal);
+            var dhcp = "Unknown";
+            try { dhcp = props.GetIPv4Properties()?.IsDhcpEnabled == true ? "DHCP" : "Static / Other"; }
+            catch (Exception ex) when (ex is PlatformNotSupportedException or System.Net.NetworkInformation.NetworkInformationException) { }
+            var ipv6Mode = "Unknown";
+            try
+            {
+                ipv6Mode = v6?.PrefixOrigin switch
+                {
+                    System.Net.NetworkInformation.PrefixOrigin.Dhcp => "DHCPv6",
+                    System.Net.NetworkInformation.PrefixOrigin.RouterAdvertisement => "SLAAC",
+                    System.Net.NetworkInformation.PrefixOrigin.Manual => "Static",
+                    _ => "Unknown"
+                };
+            }
+            catch (PlatformNotSupportedException) { }
+            static string FirstAddress(System.Net.NetworkInformation.IPAddressCollection addresses,
+                System.Net.Sockets.AddressFamily family) => addresses.FirstOrDefault(x => x.AddressFamily == family)?.ToString() ?? "—";
+            var macBytes = nic.GetPhysicalAddress().GetAddressBytes();
+            var mac = macBytes.Length > 0 ? string.Join(":", macBytes.Select(x => x.ToString("X2"))) : na;
+            var speed = nic.Speed >= 1000000000 ? (nic.Speed / 1000000000d).ToString("0.#") + " Gbps"
+                : nic.Speed > 0 ? (nic.Speed / 1000000d).ToString("0.#") + " Mbps" : na;
+            var mtu = na;
+            try { mtu = props.GetIPv4Properties()?.Mtu.ToString() ?? na; }
+            catch (Exception ex) when (ex is PlatformNotSupportedException or System.Net.NetworkInformation.NetworkInformationException) { }
+            var ipv4Gateway = props.GatewayAddresses.FirstOrDefault(x =>
+                x.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?.Address.ToString() ?? na;
+            var ipv6Gateway = props.GatewayAddresses.FirstOrDefault(x =>
+                x.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)?.Address.ToString() ?? na;
+            return new NetworkDetails(dhcp, v4?.IPv4Mask?.ToString() ?? na, ipv4Gateway,
+                FirstAddress(props.DnsAddresses, System.Net.Sockets.AddressFamily.InterNetwork),
+                ipv6Mode, v6 is null ? na : v6.PrefixLength.ToString(), ipv6Gateway,
+                FirstAddress(props.DnsAddresses, System.Net.Sockets.AddressFamily.InterNetworkV6), mac, speed, mtu);
+        }
+        catch (Exception ex) when (ex is System.Net.NetworkInformation.NetworkInformationException or
+            PlatformNotSupportedException or InvalidOperationException or UnauthorizedAccessException)
+        { return blank; }
+    }
+
     public bool IsVirtualAdapter(string name)
     {
         if (string.IsNullOrWhiteSpace(name)) return false;
@@ -161,6 +220,9 @@ public sealed class SettingsModel : PageModel
         {
             case "services":
                 Services = await _services.ListAsync();
+                break;
+            case "overview":
+                StorageDevices = await _devices.ListAsync(HttpContext.RequestAborted);
                 break;
             case "storage":
                 StorageDevices = await _devices.ListAsync(HttpContext.RequestAborted);

@@ -36,15 +36,9 @@ public sealed class FilesModel : PageModel
     public string FormatSize(long size) => FileManagerService.FormatSize(size);
     public string StorageLabel(StorageDevice volume)
     {
-        var number = 0;
-        for (var i = 0; i < PhysicalDisks.Count; i++)
-        {
-            if (PhysicalDisks[i].Path != volume.ParentPath && PhysicalDisks[i].Path != volume.Path) continue;
-            number = i + 1;
-            break;
-        }
-        var display = !string.IsNullOrWhiteSpace(volume.Label) ? volume.Label : volume.Name;
-        return number > 0 ? $"Disk {number} · {display} — {volume.MountPoint}" : $"{display} — {volume.MountPoint}";
+        var index = MountedVolumes.ToList().FindIndex(item => item.MountPoint == volume.MountPoint);
+        return index >= 0 ? $"Volume {index + 2}" :
+            (!string.IsNullOrWhiteSpace(volume.Label) ? volume.Label : volume.Name);
     }
     public SambaOverview Samba { get; private set; } = new(false, "Samba unavailable", "", false, []);
     [TempData] public string? Notice { get; set; }
@@ -68,6 +62,7 @@ public sealed class FilesModel : PageModel
                 !device.MountPoint.StartsWith("/home/", StringComparison.Ordinal))
             .GroupBy(device => device.MountPoint, StringComparer.Ordinal)
             .Select(group => group.First())
+            .OrderBy(device => device.Path, StringComparer.Ordinal)
             .ToArray();
         MyFiles = DiscoverMyFiles();
         if (IsMyFolders)
@@ -325,6 +320,89 @@ public sealed class FilesModel : PageModel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         { Notice = "Error: " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
+
+    // One authenticated operation for a selection; server-side validation is
+    // performed for every entry. No client-side loop of destructive POSTs.
+    public async Task<IActionResult> OnPostBulkDeleteAsync([FromForm] string[] names)
+    {
+        var selected = (names ?? []).Distinct(StringComparer.Ordinal).ToArray();
+        if (selected.Length == 0 || selected.Length > 500)
+        { Notice = "Error: Select between 1 and 500 items."; return Back(); }
+        var completed = 0;
+        try
+        {
+            // Validate once against current directory and one SMB snapshot.
+            // Read-only preflight avoids 100 repeated Samba calls for 100 items.
+            var view = _files.Browse("system", CurrentRelative);
+            if (!view.Available) throw new IOException("Current folder unavailable.");
+            var smb = await _samba.ListAsync(HttpContext.RequestAborted);
+            if (!smb.Available) throw new IOException("Cannot verify SMB shares. Deletion was cancelled.");
+            foreach (var name in selected)
+            {
+                var full = FileManagerService.Absolute(string.IsNullOrEmpty(CurrentRelative)
+                    ? name : CurrentRelative.Trim('/') + "/" + name);
+                if (!view.Items.Any(item => item.Name == name))
+                    throw new IOException("Selected item no longer exists.");
+                if (smb.Shares.Any(share => share.Path == full ||
+                    share.Path.StartsWith(full + "/", StringComparison.Ordinal)))
+                    throw new IOException("Stop sharing this folder before deleting it.");
+            }
+            foreach (var name in selected)
+            {
+                var full = FileManagerService.Absolute(string.IsNullOrEmpty(CurrentRelative)
+                    ? name : CurrentRelative.Trim('/') + "/" + name);
+                _files.Delete("system", CurrentRelative, name);
+                _folders.ForgetDeletedTree(full);
+                completed++;
+            }
+            Notice = $"Deleted {completed} items.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { Notice = $"Error: Deleted {completed} of {selected.Length}. " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
+
+    public async Task<IActionResult> OnPostBulkCopyAsync([FromForm] string[] names, string destination)
+    {
+        var selected = (names ?? []).Distinct(StringComparer.Ordinal).ToArray();
+        if (selected.Length == 0 || selected.Length > 500)
+        { Notice = "Error: Select between 1 and 500 items."; return Back(); }
+        var completed = 0;
+        try
+        {
+            foreach (var name in selected)
+            {
+                await _files.CopyAsync("system", CurrentRelative, name, destination,
+                    HttpContext.RequestAborted);
+                completed++;
+            }
+            Notice = $"Copied {completed} items.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or
+                                   NotSupportedException or OperationCanceledException)
+        { Notice = $"Error: Copied {completed} of {selected.Length}. " + FileManagerService.SafeError(ex); }
+        return Back();
+    }
+
+    public IActionResult OnPostBulkMove([FromForm] string[] names, string destination)
+    {
+        var selected = (names ?? []).Distinct(StringComparer.Ordinal).ToArray();
+        if (selected.Length == 0 || selected.Length > 500)
+        { Notice = "Error: Select between 1 and 500 items."; return Back(); }
+        var completed = 0;
+        try
+        {
+            foreach (var name in selected)
+            {
+                _files.Move("system", CurrentRelative, name, destination);
+                completed++;
+            }
+            Notice = $"Moved {completed} items.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        { Notice = $"Error: Moved {completed} of {selected.Length}. " + FileManagerService.SafeError(ex); }
         return Back();
     }
 

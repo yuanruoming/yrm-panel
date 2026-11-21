@@ -27,7 +27,8 @@ class DesktopNavigationContracts(unittest.TestCase):
                                     markup.find('id="yrm-b10-file-selection"')))
         self.assertIn('data-b10-file-move disabled',markup)
         self.assertIn('data-b12-file-copy disabled',markup)
-        self.assertIn('setFileSelection(row)',read('YrmPanel/wwwroot/js/v1-stability.js'))
+        self.assertIn('const selectedFileRows = new Set()',read('YrmPanel/wwwroot/js/v1-stability.js'))
+        self.assertIn('data-bulk-delete-form',markup)
     def test_copy_move_picker_hides_raw_path(self):
         js=read('YrmPanel/wwwroot/js/panel.js')
         self.assertIn('input.type = rename ? "text" : "hidden";',js)
