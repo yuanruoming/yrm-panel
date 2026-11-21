@@ -32,7 +32,6 @@ public sealed class FilesModel : PageModel
     public IReadOnlyList<string> QuickAccess { get; private set; } = [];
     public IReadOnlyList<StorageDevice> MountedVolumes { get; private set; } = [];
     public IReadOnlyList<StorageDevice> PhysicalDisks { get; private set; } = [];
-    public bool CanSelectStorage => IsMyFolders || string.IsNullOrEmpty(Path);
     public string FormatSize(long size) => FileManagerService.FormatSize(size);
     public string StorageLabel(StorageDevice volume)
     {
@@ -168,21 +167,6 @@ public sealed class FilesModel : PageModel
             !device.MountPoint.StartsWith("/var/", StringComparison.Ordinal));
     }
 
-    public bool HasSubfolders(string relative)
-    {
-        // A leaf is a real directory without a nested visible folder. The UI
-        // must never show an expand control for an empty/leaf folder.
-        try
-        {
-            var absolute = FileManagerService.Absolute(relative);
-            return Directory.EnumerateDirectories(absolute).Any(directory =>
-                !System.IO.Path.GetFileName(directory).StartsWith('.') &&
-                !System.IO.File.GetAttributes(directory).HasFlag(FileAttributes.ReparsePoint));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
-        { return false; }
-    }
-
     private async Task<IReadOnlyList<(string Full, string Parent, string Name)>> ResolveLibrarySelectionAsync(string[] paths)
     {
         if (paths.Length == 0 || paths.Length > 200)
@@ -215,10 +199,9 @@ public sealed class FilesModel : PageModel
             path = view.Relative,
             absolute = FileManagerService.Absolute(view.Relative),
             folders = view.Items.Where(x => x.IsDirectory).Select(x => x.Name),
-            folderNodes = view.Items.Where(x => x.IsDirectory).Select(x => new {
-                name = x.Name,
-                hasChildren = HasSubfolders(path.Trim('/') + "/" + x.Name)
-            }),
+            // A folder always has a chevron. Loading its children is lazy, so
+            // we do not scan each directory just to decide whether to draw one.
+            folderNodes = view.Items.Where(x => x.IsDirectory).Select(x => new { name = x.Name }),
             canManage = view.CanWrite,
             canEnable = view.CanEnable
         });
@@ -357,10 +340,8 @@ public sealed class FilesModel : PageModel
         string parent, string name, string? adminPassword, string? returnTo)
     {
         var normalizedParent = (parent ?? string.Empty).Trim('/');
-        // When browsing an existing directory, New Folder always belongs there.
-        // Only the library overview or filesystem root may choose another mount.
-        var fixedLocation = returnTo != FolderHome && !string.IsNullOrWhiteSpace(returnTo) && returnTo != "/";
-        if (fixedLocation) normalizedParent = returnTo!.Trim('/');
+        // The location picker chooses the real parent, including siblings of the current folder.
+        // The file service still verifies this destination before creating anything.
         Path = returnTo == FolderHome ? FolderHome : (returnTo ?? normalizedParent).TrimStart('/');
         var rootParent = normalizedParent.Length == 0;
         if (rootParent)

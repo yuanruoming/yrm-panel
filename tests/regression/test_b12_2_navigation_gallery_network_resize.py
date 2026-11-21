@@ -111,7 +111,9 @@ class RoundTwoContracts(unittest.TestCase):
         actions = content('YrmPanel/wwwroot/js/v1-stability.js')
         tree = content('YrmPanel/wwwroot/js/v1-tree-navigation.js')
         self.assertIn('fm-my-files-toggle fm-location-link', view)
-        self.assertNotIn('fm-inline-toggle-spacer', view)
+        self.assertIn('fm-inline-toggle-spacer', view)
+        self.assertNotIn('HasSubfolders(', view)
+        self.assertEqual(view.count('data-fm-inline-toggle data-fm-tree-path='), 2)
         self.assertNotIn('class="fm-location-crumb">Folders', view)
         self.assertIn('yrm-panel:files-storage-open', view)
         self.assertIn('node.dataset.persistDisclosure', actions)
@@ -119,7 +121,8 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertIn('fm-root-upload-body', view)
         self.assertIn('data-file-picker="fm-root-upload-file"', view)
         self.assertIn('IsPanelInstallArtifact', model)
-        self.assertIn('System.IO.File.GetAttributes(directory)', model)
+        self.assertIn('folderNodes = view.Items.Where(x => x.IsDirectory)', model)
+        self.assertNotIn('HasSubfolders(', model)
 
     def test_profile_crop_certificate_disclosure_and_ddns_fixed_sections(self):
         view = content('YrmPanel/Pages/Settings.cshtml')
@@ -139,6 +142,33 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertEqual(view.count('<div class="yrm-ddns-dialog-body">'), 2)
         self.assertIn('overscroll-behavior:contain', css)
         self.assertIn('yrm-ddns-dialog-body', css)
+
+    def test_folder_picker_has_real_free_parent_and_no_redundant_copy(self):
+        view = content('YrmPanel/Pages/Files.cshtml')
+        model = content('YrmPanel/Pages/Files.cshtml.cs')
+        shell = content('YrmPanel/wwwroot/js/panel.js')
+        tree = content('YrmPanel/wwwroot/js/v1-tree-navigation.js')
+        self.assertIn('yrm-create-folder-content', view)
+        self.assertIn('new-folder-parent-text', view)
+        self.assertIn('id="yrm-folder-volume"', view)
+        self.assertNotIn('Model.CanSelectStorage', view)
+        self.assertNotIn('This folder will be created inside', view)
+        self.assertNotIn('Parent location', view)
+        self.assertNotIn('var fixedLocation =', model)
+        self.assertIn('parent.value = data.path', shell)
+        self.assertIn("add('Parent folder',", shell)
+        self.assertIn('if(!folders.length)return;', tree)
+        self.assertNotIn("No subfolders", tree)
+
+    def test_compact_certificates_ddns_avatar_and_overview_alignment(self):
+        view = content('YrmPanel/Pages/Settings.cshtml')
+        css = content('YrmPanel/wwwroot/css/v1-stability.css')
+        self.assertIn('string.Equals(Model.Certificate.Subject, Model.Certificate.Issuer', view)
+        self.assertIn('yrm-cert-fingerprint', view)
+        self.assertIn('grid-template-columns:repeat(3,minmax(0,1fr))', css)
+        self.assertIn('yrm-profile-photo-dialog .yrm-profile-preview{width:180px', css)
+        self.assertIn('yrm-b11-ddns-table th:nth-child(2){width:22%;}', css)
+        self.assertIn('yrm-overview-card:nth-child(1) .yrm-overview-sub', css)
 
     def test_about_restores_version_without_dev_badge(self):
         view = content('YrmPanel/Pages/Settings.cshtml')

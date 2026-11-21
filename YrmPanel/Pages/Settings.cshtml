@@ -632,10 +632,11 @@
             {
               <dl class="yrm-cert-info-list">
                 <div><dt>Issued to</dt><dd>@Model.Certificate.Subject</dd></div>
-                <div><dt>Issued by</dt><dd>@Model.Certificate.Issuer</dd></div>
-                <div><dt>Fingerprint</dt><dd><code>@Model.Certificate.Thumbprint</code></dd></div>
+                @if (!string.Equals(Model.Certificate.Subject, Model.Certificate.Issuer, StringComparison.OrdinalIgnoreCase))
+                { <div><dt>Issued by</dt><dd>@Model.Certificate.Issuer</dd></div> }
                 <div><dt>Expires</dt><dd>@Model.Certificate.NotAfter.ToString("dd MMM yyyy")</dd></div>
                 <div><dt>Status</dt><dd>@(Model.Certificate.NotAfter > DateTime.UtcNow ? "Valid" : "Expired")</dd></div>
+                <div class="yrm-cert-fingerprint"><dt>Fingerprint</dt><dd><code>@Model.Certificate.Thumbprint</code></dd></div>
               </dl>
               @if (Model.Certificate.IsCustom)
               {

@@ -158,10 +158,10 @@
               <tr data-b10-file-row data-b10-filename="@folderPath" data-b10-absolute="@folderPath"
                   data-fm-inline-root="@relative" aria-selected="false" tabindex="0">
                 <td class="explorer-name">
-                  @if (exists && Model.HasSubfolders(relative))
+                  @if (exists)
                   {
                     <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@relative"
-                            aria-label="Expand @name" aria-expanded="false" title="Preview subfolders">
+                            aria-label="Expand @name" aria-expanded="false" title="Expand or collapse">
                       <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
                     </button>
                   }
@@ -241,13 +241,14 @@
                   aria-selected="false" tabindex="0">
                 <td class="explorer-name">
                   @if (item.IsDirectory)
-                  { @if (Model.HasSubfolders(child))
-                    { <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@child"
-                                aria-label="Expand @item.Name" aria-expanded="false" title="Preview subfolders">
-                          <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
-                        </button> }
-                        <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
-                  else { <span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" title="@item.Name" >@item.Name</button> }
+                  {
+                    <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@child"
+                            aria-label="Expand @item.Name" aria-expanded="false" title="Expand or collapse">
+                      <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+                    </button>
+                    <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a>
+                  }
+                  else { <span class="fm-inline-toggle-spacer" aria-hidden="true"></span><span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" title="@item.Name" >@item.Name</button> }
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared folder">Shared</small> }
                 </td>
                 <td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
@@ -360,45 +361,27 @@
   <div id="file-preview-body" class="fm-preview-body"></div>
   <div class="panel-modal-actions"><a id="file-preview-download" class="button button-secondary" data-native-download href="#">Download</a><button type="button" class="button button-secondary" data-close-dialog="file-preview-dialog">Close</button></div>
 </dialog>
-<dialog id="new-folder-dialog" class="panel-modal explorer-dialog" aria-labelledby="new-folder-title" data-current-volume-root="@(Model.MountedVolumes.Any(v => v.MountPoint == Model.Absolute) ? "true" : "false")">
+<dialog id="new-folder-dialog" class="panel-modal explorer-dialog yrm-create-folder-dialog" aria-labelledby="new-folder-title">
   <div class="panel-modal-head"><strong id="new-folder-title">New Folder</strong><button type="button" data-close-dialog="new-folder-dialog" aria-label="Close">×</button></div>
   <form method="post" asp-page-handler="Create" class="explorer-create-form">
     <input type="hidden" name="returnTo" value="@currentRoute"/>
-    <div class="explorer-dialog-grid">
-      @if (Model.CanSelectStorage)
-      {
-        <div class="explorer-folder-chooser"><strong>Folder location</strong><div id="new-folder-tree" class="explorer-tree" data-initial-folder="@Model.DefaultCreateParent"></div></div>
-      }
-      else
-      {
-        <div class="explorer-folder-chooser explorer-folder-current"><strong>Current location</strong>
-          <p class="muted">This folder will be created inside the current directory.</p>
-          <p class="yrm-current-path">@Model.Absolute</p>
-        </div>
-      }
-      <div class="explorer-folder-fields">
-        @if (Model.CanSelectStorage)
-        {
-          <label>Storage disk
-            <select id="yrm-folder-volume" aria-label="Choose a mounted disk for new folder">
-              <option value="@(Model.IsMyFolders ? Model.HomePath : "")">Disk 1 · System (@(Model.IsMyFolders ? "/home" : "/"))</option>
-              @foreach (var volume in Model.MountedVolumes)
-              {
-                <option value="@volume.MountPoint.TrimStart('/')">@Model.StorageLabel(volume)</option>
-              }
-            </select>
-            <small>Only mounted disks are available. A disk without a filesystem must be set up in Storage first.</small>
-            <a asp-page="/Settings" asp-route-tab="storage" class="yrm-location-link">Manage disks &amp; mounts</a>
-          </label>
-        }
-        else
-        {
-          <p class="muted yrm-fixed-storage-note">This folder will be created in the current location. The existing Linux mount determines which disk stores it.</p>
-        }
-        <label>Folder name<input name="name" required maxlength="64" autocomplete="off" placeholder="New Folder"/></label>
-        <input type="hidden" name="parent" id="new-folder-parent" value="@Model.DefaultCreateParent" />
-        <div class="yrm-parent-location"><span>Parent location</span><strong id="new-folder-parent-text">/@Model.DefaultCreateParent</strong></div>
-        <small id="new-folder-full-path">/@Model.DefaultCreateParent</small><p class="muted" id="new-folder-rights"></p>
+    <div class="yrm-create-folder-content">
+      <div class="yrm-create-location">
+        <label for="yrm-folder-volume">Location</label>
+        <select id="yrm-folder-volume" aria-label="Choose a starting location">
+          <option value="@Model.HomePath">Home</option>
+          @foreach (var volume in Model.MountedVolumes)
+          { <option value="@volume.MountPoint.TrimStart('/')">@Model.StorageLabel(volume)</option> }
+          <option value="">System Root /</option>
+        </select>
+        <div id="new-folder-parent-text" class="yrm-create-location-path" aria-live="polite">/@Model.DefaultCreateParent</div>
+        <div id="new-folder-tree" class="explorer-tree yrm-create-location-tree" data-initial-folder="@Model.DefaultCreateParent" aria-label="Choose parent folder"></div>
+      </div>
+      <div class="yrm-create-name">
+        <label for="new-folder-name">Folder name</label>
+        <input id="new-folder-name" name="name" required maxlength="64" autocomplete="off" placeholder="New Folder"/>
+        <input type="hidden" name="parent" id="new-folder-parent" value="@Model.DefaultCreateParent"/>
+        <p class="muted" id="new-folder-rights" role="status"></p>
       </div>
     </div>
     <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-close-dialog="new-folder-dialog">Cancel</button><button type="submit" class="button button-primary">Create Folder</button></div>

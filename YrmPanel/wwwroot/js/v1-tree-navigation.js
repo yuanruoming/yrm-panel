@@ -28,7 +28,7 @@
     const small = document.createElement('span');small.className=className;small.textContent=message;
     return small;
   }
-  function node(path, name, library, hasChildren = true) {
+  function node(path, name, library) {
     const wrapper=document.createElement('div');wrapper.className='fm-tree-node';wrapper.dataset.fmTreeRoot=path;
     const head=document.createElement('div');head.className='fm-tree-node-header';
     const toggle=document.createElement('button');toggle.type='button';toggle.className='fm-tree-toggle';
@@ -40,39 +40,50 @@
     const folderSvg=document.createElementNS('http://www.w3.org/2000/svg','svg');folderSvg.classList.add('ui-icon');
     const folderUse=document.createElementNS('http://www.w3.org/2000/svg','use');folderUse.setAttribute('href','#i-folder');folderSvg.append(folderUse);
     const label=document.createElement('span');label.textContent=name;anchor.append(folderSvg,label);
-    if (hasChildren) head.append(toggle);
-
-    head.append(anchor);
+    head.append(toggle,anchor);
     const descendants=document.createElement('div');descendants.className='fm-tree-descendants';descendants.hidden=true;
     wrapper.append(head,descendants);return wrapper;
   }
   function renderChildren(host,folders,path,library){
     host.replaceChildren();
-    if (folders.length===0){host.append(text('No subfolders'));return;}
     for(const item of folders){
       const childPath=path ? path.replace(/\/$/,'') + '/' + item.name : item.name;
-      host.append(node(childPath,item.name,library,item.hasChildren));
+      host.append(node(childPath,item.name,library));
     }
   }
   async function toggleInline(button){
     const row=button.closest('tr[data-fm-inline-root]');if(!row)return;
-    let preview=row.nextElementSibling;
-    if(!preview?.classList.contains('fm-tree-preview-row')){
-      preview=document.createElement('tr');preview.className='fm-tree-preview-row';
-      const td=document.createElement('td');td.colSpan=row.querySelectorAll(':scope > td').length;
-      const host=document.createElement('div');host.className='fm-inline-preview';td.append(host);preview.append(td);row.after(preview);
-    }
-    const host=preview.querySelector('.fm-inline-preview');if(!host)return;
     const expanding=button.getAttribute('aria-expanded')!=='true';
-    button.setAttribute('aria-expanded',String(expanding));preview.hidden=!expanding;
-    if(!expanding||host.dataset.loaded==='1')return;
-    host.replaceChildren(text('Loading subfolders…','fm-tree-loading'));
+    button.setAttribute('aria-expanded',String(expanding));
+    const path=button.dataset.fmTreePath||'';
+    if(!expanding){
+      const preview=row.nextElementSibling;
+      if(preview?.classList.contains('fm-tree-preview-row')) preview.hidden=true;
+      return;
+    }
+    let preview=row.nextElementSibling;
+    if(preview?.classList.contains('fm-tree-preview-row') && preview.dataset.loaded==='1'){
+      preview.hidden=false;return;
+    }
     try{
-      const path=button.dataset.fmTreePath||'';
       const folders=await loadFolders(path);
-      if(!host.isConnected)return;
-      renderChildren(host,folders,path,false);host.dataset.loaded='1';
-    }catch(err){host.replaceChildren(text(String(err.message||err)));}
+      if(!row.isConnected || button.getAttribute('aria-expanded')!=='true')return;
+      // Leaf folders still turn their chevron; there is simply no panel underneath.
+      if(!folders.length)return;
+      preview=row.nextElementSibling;
+      if(!preview?.classList.contains('fm-tree-preview-row')){
+        preview=document.createElement('tr');preview.className='fm-tree-preview-row';
+        const td=document.createElement('td');td.colSpan=row.querySelectorAll(':scope > td').length;
+        const host=document.createElement('div');host.className='fm-inline-preview';td.append(host);preview.append(td);row.after(preview);
+      }
+      renderChildren(preview.querySelector('.fm-inline-preview'),folders,path,false);
+      preview.dataset.loaded='1';preview.hidden=false;
+    }catch(err){
+      button.setAttribute('aria-expanded','false');
+      const rowPreview=row.nextElementSibling;
+      if(rowPreview?.classList.contains('fm-tree-preview-row')) rowPreview.remove();
+      console.warn('Files folder preview could not load:',err);
+    }
   }
   document.addEventListener('click',event=>{
     const target=event.target instanceof Element?event.target:null;
@@ -93,12 +104,16 @@
     if(!children)return;
     const opening=button.getAttribute('aria-expanded')!=='true';
     button.setAttribute('aria-expanded',String(opening));children.hidden=!opening;
-    if(!opening||children.dataset.loaded==='1')return;
-    children.replaceChildren(text('Loading subfolders…','fm-tree-loading'));
+    if(!opening||children.dataset.loaded==='1'){
+      if(opening && children.dataset.hasChildren==='0') children.hidden=true;
+      return;
+    }
     const path=button.dataset.fmTreePath||'';
     void loadFolders(path).then(folders=>{
       if(!children.isConnected)return;
       renderChildren(children,folders,path,false);
+      children.dataset.hasChildren=folders.length?'1':'0';
+      if(!folders.length)children.hidden=true;
       children.dataset.loaded='1';
     }).catch(err=>children.replaceChildren(text(String(err.message||err))));
   },true);

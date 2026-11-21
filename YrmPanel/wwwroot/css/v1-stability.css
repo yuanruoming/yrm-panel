@@ -41,8 +41,6 @@
 .yrm-mount-form .button{align-self:flex-start}
 .yrm-storage-section .yrm-storage-warning{color:#d4bc93}
 .yrm-storage-note{margin-top:13px}
-#new-folder-dialog .explorer-folder-fields #yrm-folder-volume{width:100%;max-width:100%;background:#141f2d;border:1px solid #43536a;color:#e4f1fb;border-radius:8px;min-height:37px;padding:6px 10px;font:inherit;font-size:12px}
-#new-folder-dialog .explorer-folder-fields label small{display:block;color:#99aabb;font-size:11px;line-height:1.4;margin:5px 0}
 .yrm-location-link{display:block;font-size:11px;color:#9ccdf0;margin-top:7px;text-decoration:none}
 .yrm-location-link:hover{text-decoration:underline}
 @media(max-width:620px){.yrm-cert-details>div{grid-template-columns:1fr;gap:4px}.yrm-update-overview{grid-template-columns:1fr}}
@@ -189,21 +187,6 @@
 
 .yrm-ddns-editor input:-webkit-autofill,
 #yrm-ddns-new-form input:-webkit-autofill{-webkit-text-fill-color:var(--text,#e8eef5);-webkit-box-shadow:0 0 0 1000px #141d2a inset;caret-color:var(--text,#e8eef5)}
-
-/* BETA8 follow-up: fixed desktop geometry for New Folder, regardless of location. */
-#new-folder-dialog.explorer-dialog {width:min(860px,calc(100vw - 32px));max-width:860px;min-height:min(540px,calc(100dvh - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;}
-#new-folder-dialog .explorer-create-form {display:flex;flex-direction:column;min-height:min(460px,calc(100dvh - 114px));}
-#new-folder-dialog .explorer-dialog-grid {flex:1;min-height:330px;grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
-#new-folder-dialog .explorer-folder-chooser {min-height:300px;max-height:340px;overflow:auto;}
-#new-folder-dialog .explorer-folder-fields {min-width:0;}
-#new-folder-dialog .explorer-folder-current {display:flex;flex-direction:column;gap:12px;}
-#new-folder-dialog .yrm-current-path {overflow-wrap:anywhere;color:#89bdd9;margin-top:12px;font-size:13px;}
-#new-folder-dialog .yrm-parent-location {display:grid;gap:7px;margin-top:2px;font-size:12px;color:#a8bfce;}
-#new-folder-dialog .yrm-parent-location strong {display:block;font-size:13px;font-weight:500;color:#d5e7f9;overflow-wrap:anywhere;padding:9px 0;}
-#new-folder-dialog #new-folder-full-path {display:block;margin-top:2px;}
-.yrm-volume-actions {display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;}
-.yrm-volume-actions form {margin:0;}
-@media(max-width:620px){#new-folder-dialog .explorer-dialog-grid{grid-template-columns:1fr;min-height:auto}#new-folder-dialog .explorer-folder-chooser{min-height:130px;max-height:180px}#new-folder-dialog.explorer-dialog{min-height:0}}
 
 /* BETA9 volume / physical device separation; uses existing palette. */
 .yrm-b9-volume-section{margin-bottom:16px;}
@@ -1120,3 +1103,72 @@ body.is-desktop .workspace-stage{display:none!important;}
 
 .fm-explorer .explorer-name>a span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .fm-explorer .explorer-name>a{max-width:calc(100% - 26px);min-width:0;}
+
+
+/* BETA12.2: consistent folder picker. Path is selectable, not locked to the browsing directory. */
+#new-folder-dialog.explorer-dialog{width:min(830px,calc(100vw - 34px));max-height:min(650px,calc(100dvh - 40px));padding:0!important;overflow:hidden;}
+.yrm-create-folder-dialog>.panel-modal-head{padding:17px 22px;border-bottom:1px solid #3b4552;display:flex;align-items:center;justify-content:space-between;}
+.yrm-create-folder-dialog>.explorer-create-form{display:flex;flex-direction:column;min-height:0;margin:0;padding:0;}
+.yrm-create-folder-content{padding:18px 22px;display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:20px;min-height:280px;}
+.yrm-create-location,.yrm-create-name{display:flex;flex-direction:column;gap:11px;min-width:0;}
+.yrm-create-location>label,.yrm-create-name>label{font-size:13px;font-weight:600;color:#d6e1ef;}
+.yrm-create-location>select,.yrm-create-name>input{box-sizing:border-box;width:100%;min-height:40px;border:1px solid #47556a;border-radius:7px;background:#161f29;color:#e6edf5;padding:9px 11px;}
+.yrm-create-location-path{font-size:12px;color:#9ec9f5;overflow-wrap:anywhere;padding:9px 11px;border:1px solid #384756;border-radius:7px;background:#1b2630;}
+.yrm-create-location-tree{min-height:90px;max-height:185px;overflow:auto;display:flex;flex-direction:column;gap:3px;padding:4px 2px;}
+.yrm-create-location-tree .yrm-create-tree-item{width:100%;min-height:32px;display:flex;align-items:center;gap:10px;text-align:left;padding:6px 9px;border:0;border-radius:5px;background:transparent;color:#d7e4ef;white-space:nowrap;overflow:hidden;cursor:pointer;}
+.yrm-create-location-tree .yrm-create-tree-item>span:last-child{overflow:hidden;text-overflow:ellipsis;}
+.yrm-create-location-tree .yrm-create-tree-item:hover{background:#334154;}
+.yrm-create-name>input{margin-top:0;}
+.yrm-create-name>p{font-size:12px;min-height:20px;margin:0;color:#adbac8;}
+.yrm-create-folder-dialog .panel-modal-actions{margin:0;padding:14px 22px;border-top:1px solid #3b4552;display:flex;justify-content:flex-end;gap:10px;}
+@media (max-width:620px){.yrm-create-folder-content{grid-template-columns:1fr;min-height:0;max-height:calc(100dvh - 180px);overflow:auto;}.yrm-create-location-tree{max-height:130px;}}
+
+/* Every right-pane folder has one chevron slot; the folder icon never shifts. */
+.fm-explorer .explorer-name .fm-inline-toggle,
+.fm-explorer .explorer-name .fm-inline-toggle-spacer{display:inline-flex;box-sizing:border-box;flex:0 0 22px;width:22px;height:26px;margin-right:2px;vertical-align:middle;align-items:center;justify-content:center;}
+.fm-explorer .explorer-name .fm-inline-toggle .ui-icon{transform-origin:center center;}
+.fm-explorer .explorer-name .fm-inline-toggle[aria-expanded="true"] .ui-icon{transform:rotate(90deg);}
+.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-height:32px;}
+.fm-explorer .fm-tree-node-header>.fm-location-link{align-items:center;}
+.fm-explorer .fm-tree-preview-row[hidden]{display:none!important;}
+
+/* DDNS: balanced column proportions in the existing five-column table. */
+.yrm-b11-ddns-table{table-layout:fixed;width:100%;min-width:770px;}
+.yrm-b11-ddns-table th:nth-child(1){width:17%;}
+.yrm-b11-ddns-table th:nth-child(2){width:22%;}
+.yrm-b11-ddns-table th:nth-child(3){width:22%;}
+.yrm-b11-ddns-table th:nth-child(4){width:22%;}
+.yrm-b11-ddns-table th:nth-child(5){width:17%;}
+.yrm-b11-ddns-table th,.yrm-b11-ddns-table td{box-sizing:border-box;min-width:0;}
+
+/* Certificate: one collapsible card, compact horizontal detail grid; never duplicate self-issued CN. */
+.yrm-cert-card-details .yrm-cert-info-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px;margin:0;padding:14px 0 4px;align-items:start;}
+.yrm-cert-card-details .yrm-cert-info-list>div{display:flex;flex-direction:column;gap:7px;padding:11px 12px!important;border:1px solid #384554;border-radius:7px;min-width:0;}
+.yrm-cert-card-details .yrm-cert-info-list dt{color:#aebbc9;font-size:11px;}
+.yrm-cert-card-details .yrm-cert-info-list dd{margin:0;font-size:12px;overflow-wrap:anywhere;}
+.yrm-cert-card-details .yrm-cert-info-list .yrm-cert-fingerprint{grid-column:span 2;}
+.yrm-cert-card-details .yrm-cert-info-list .yrm-cert-fingerprint code{white-space:normal;overflow-wrap:anywhere;}
+@container (max-width:800px){.yrm-cert-card-details .yrm-cert-info-list{grid-template-columns:repeat(2,minmax(0,1fr));}}
+@container (max-width:530px){.yrm-cert-card-details .yrm-cert-info-list{grid-template-columns:1fr;}.yrm-cert-card-details .yrm-cert-info-list .yrm-cert-fingerprint{grid-column:auto;}}
+
+/* Profile crop: larger preview, useful canvas space, aligned heading and footer. */
+.yrm-profile-photo-dialog{width:min(550px,calc(100vw - 28px));padding:0!important;max-height:calc(100dvh - 40px);overflow:hidden;}
+.yrm-profile-photo-dialog>.panel-modal-head{padding:17px 22px!important;margin:0;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #3d4858;}
+.yrm-profile-photo-dialog>form#yrm-profile-photo-form{margin:0;display:flex;flex-direction:column;}
+.yrm-profile-photo-dialog .yrm-profile-photo-editor{min-height:226px;padding:22px 25px 10px;display:flex;align-items:center;justify-content:center;gap:32px;}
+.yrm-profile-photo-dialog .yrm-profile-preview{width:180px;height:180px;flex:0 0 180px;font-size:38px;}
+.yrm-profile-photo-dialog #yrm-profile-photo-hint{margin:0;padding:5px 22px 18px;font-size:12px;text-align:center;}
+.yrm-profile-photo-dialog .yrm-profile-photo-actions{padding:14px 22px;margin:0!important;display:flex;align-items:center;gap:10px;border-top:1px solid #3d4858;}
+.yrm-profile-photo-dialog .yrm-profile-photo-actions .button{margin:0;min-height:36px;}
+.yrm-profile-photo-dialog .yrm-profile-actions-spacer{flex:1;min-width:2px;}
+@media (max-width:420px){.yrm-profile-photo-dialog .yrm-profile-photo-editor{gap:18px;}.yrm-profile-photo-dialog .yrm-profile-preview{width:145px;height:145px;flex-basis:145px;}.yrm-profile-photo-dialog .yrm-profile-photo-actions{padding:10px;gap:5px;}}
+
+/* Overview: Device and About share a baseline for System and System Time. */
+.yrm-overview-card:nth-child(1) .yrm-overview-sub,
+.yrm-overview-card:nth-child(2) .yrm-overview-timing{
+  margin-top:auto;min-height:66px;box-sizing:border-box;border-top:1px solid #3d4149;padding-top:10px;
+}
+.yrm-overview-card:nth-child(1) .yrm-overview-sub{grid-template-columns:90px minmax(0,1fr);align-content:start;align-items:center;gap:10px;}
+.yrm-overview-card:nth-child(1) .yrm-overview-sub span{align-self:center;}
+.yrm-overview-card:nth-child(1) .yrm-overview-sub strong{align-self:center;}
+.yrm-overview-card:nth-child(2) .yrm-overview-timing{display:grid;align-content:start;gap:7px;}

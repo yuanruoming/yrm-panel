@@ -112,22 +112,29 @@ class FirewallPortSpec(TestCase):
         self.assertIn('80',calls[0]);self.assertIn('443',calls[1])
 
 class UiIntegration(TestCase):
-    def test_my_folders_root_only_disk_selector(self):
+    def test_folder_location_picker_uses_selected_parent_even_in_nested_folders(self):
         files=source('YrmPanel/Pages/Files.cshtml')
         model=source('YrmPanel/Pages/Files.cshtml.cs')
-        self.assertIn('public bool CanSelectStorage => IsMyFolders || string.IsNullOrEmpty(Path)',model)
-        self.assertIn('@if (Model.CanSelectStorage)',files)
-        self.assertIn('Storage disk',files)
+        js=source('YrmPanel/wwwroot/js/panel.js')
+        self.assertIn('id="yrm-folder-volume"',files)
+        self.assertIn('id="new-folder-tree"',files)
+        self.assertIn('id="new-folder-parent"',files)
+        self.assertNotIn('Model.CanSelectStorage',files)
+        self.assertNotIn('var fixedLocation =',model)
+        self.assertIn('var normalizedParent = (parent ?? string.Empty).Trim',model)
+        self.assertIn('_files.CreateFolder("system", normalizedParent, name)',model)
+        self.assertIn('parent.value = data.path',js)
+        self.assertIn("add('Parent folder',",js)
+        self.assertNotIn('This folder will be created in the current location',files)
+        self.assertNotIn('Parent location</span>',files)
         self.assertNotIn('Double-click to open',files)
-        # The upload picker is custom-styled, with a hidden native file input.
-        # "No file selected" is an intentional status message until a file is chosen.
+        # Existing custom upload remains functional from My Files.
         self.assertIn('class="fm-visually-hidden" id="fm-root-upload-file" type="file"',files)
         self.assertIn('data-file-picker="fm-root-upload-file"',files)
         self.assertIn('id="fm-root-upload-name" class="muted" aria-live="polite"',files)
         picker_js=source('YrmPanel/wwwroot/js/rc41-ui.js')
         self.assertIn("field.id === 'fm-upload-file' || field.id === 'fm-root-upload-file'",picker_js)
         self.assertIn("field.files?.[0]?.name || 'No file selected'",picker_js)
-        self.assertIn('var fixedLocation = returnTo != FolderHome',model)
     def test_image_only_shows_after_decode_and_private_revalidation(self):
         js=source('YrmPanel/wwwroot/js/v1-files.js')
         cs=source('YrmPanel/Pages/Files.cshtml.cs')

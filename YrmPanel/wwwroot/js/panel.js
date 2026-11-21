@@ -652,55 +652,70 @@
   if (page)appPinObserver.observe(page,{childList:true,subtree:false});
 
   // App dialogs and file dialogs are delegated because Razor content is loaded via Fetch.
+  let folderLocationRequest = 0;
   async function listFolders(path) {
-    const tree = document.querySelector("#new-folder-tree");
-    if (!document.querySelector("#new-folder-dialog")) return;
-    if (tree) tree.replaceChildren();
-    const folderPath = (path || "").replace(/^\/+|\/+$/g, "");
+    const dialog = document.querySelector('#new-folder-dialog');
+    const tree = document.querySelector('#new-folder-tree');
+    if (!dialog || !tree) return;
+    const request = ++folderLocationRequest;
+    const folderPath = (path || '').replace(/^\/+|\/+$/g, '');
+    const submit = dialog.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = true;
     try {
-      const response = await fetch(`/Files?handler=Tree&path=${encodeURIComponent(folderPath)}`, {credentials:"same-origin", cache:"no-store"});
+      const response = await fetch(`/Files?handler=Tree&path=${encodeURIComponent(folderPath)}`,
+        {credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
+      if (!response.ok || response.redirected) throw new Error('Cannot read this location.');
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Cannot read this folder.");
-      const parentInput = document.querySelector("#new-folder-parent");
-      if (parentInput) parentInput.value = data.path;
-      const parentText = document.querySelector("#new-folder-parent-text");
-      if (parentText) parentText.textContent = data.absolute;
-      const volume = document.querySelector("#yrm-folder-volume");
-      let volumeRoot = !volume && document.querySelector("#new-folder-dialog")?.dataset.currentVolumeRoot === "true";
+      if (request !== folderLocationRequest || !tree.isConnected) return;
+      if (!Array.isArray(data.folders)) throw new Error('Invalid directory listing.');
+      const parent = document.querySelector('#new-folder-parent');
+      if (parent) parent.value = data.path;
+      const selected = document.querySelector('#new-folder-parent-text');
+      if (selected) selected.textContent = data.absolute;
+      const volume = document.querySelector('#yrm-folder-volume');
+      let volumeRoot = false;
       if (volume instanceof HTMLSelectElement) {
-        const options = Array.from(volume.options).filter(o => o.value &&
-          (data.path === o.value || data.path.startsWith(o.value + "/")));
-        options.sort((a,b) => b.value.length - a.value.length);
-        if (options.length) volume.value = options[0].value;
-        volumeRoot = options.some(o => o.value === data.path && o.value !== "");
+        const choices = Array.from(volume.options).filter(o => o.value &&
+          (data.path === o.value || data.path.startsWith(o.value + '/')));
+        choices.sort((a,b) => b.value.length-a.value.length);
+        if (choices.length) volume.value = choices[0].value;
+        else volume.value = '';
+        volumeRoot = choices.some(o => o.value === data.path);
       }
-      const nameInput = document.querySelector("#new-folder-dialog input[name=name]");
-      const preview = document.querySelector("#new-folder-full-path");
-      const rights = document.querySelector("#new-folder-rights");
-      const submit = document.querySelector("#new-folder-dialog button[type=submit]");
-      if (preview) preview.textContent = data.absolute + (nameInput?.value ? (data.path ? "/" : "") + nameInput.value : "");
-      const canCreate = data.canManage || data.path === "" || (data.canEnable && volumeRoot);
-      if (rights) rights.textContent = data.canManage || data.path === "" ? "" :
-        (data.canEnable && volumeRoot ? "Linux authorization will enable this volume and create the folder." :
-          "This folder is read-only. Enable management from Files first.");
+      const canCreate = Boolean(data.canManage || !data.path || (data.canEnable && volumeRoot));
       if (submit) submit.disabled = !canCreate;
-      const form = document.querySelector("#new-folder-dialog .explorer-create-form");
+      const rights = dialog.querySelector('#new-folder-rights');
+      if (rights) rights.textContent = canCreate ? '' : 'This location is read-only.';
+      const form = dialog.querySelector('.explorer-create-form');
       if (form) {
-        if (data.canEnable && volumeRoot) form.dataset.requiresAdmin = "Enable volume access and create folder";
+        if (data.canEnable && volumeRoot && !data.canManage)
+          form.dataset.requiresAdmin = 'Enable volume access and create folder';
         else delete form.dataset.requiresAdmin;
       }
-      const makeItem = (name, nextPath, icon) => {
-        const b = document.createElement("button"); b.type="button"; b.className="explorer-tree-item";
-        b.textContent = `${icon}  ${name}`;
-        b.addEventListener("click", () => void listFolders(nextPath));
-        return b;
+      const add = (label, targetPath, parentItem=false) => {
+        const button=document.createElement('button');
+        button.type='button';button.className='explorer-tree-item yrm-create-tree-item';
+        if(parentItem) button.classList.add('is-parent');
+        const glyph=document.createElement('span');glyph.setAttribute('aria-hidden','true');
+        glyph.textContent=parentItem?'←':'📁';
+        const text=document.createElement('span');text.textContent=label;
+        button.append(glyph,text);
+        button.addEventListener('click',()=>void listFolders(targetPath));
+        tree.append(button);
       };
-      if (tree) {
-        if (data.path) tree.append(makeItem("..", data.path.split("/").slice(0,-1).join("/"), "↰"));
-        for (const name of data.folders || []) tree.append(makeItem(name, data.path ? `${data.path}/${name}` : name,"📁"));
-        if (!data.folders?.length) tree.append(document.createTextNode("No subfolders."));
+      tree.replaceChildren();
+      if (data.path) add('Parent folder', data.path.split('/').slice(0,-1).join('/'),true);
+      for (const folder of data.folders) {
+        const child = data.path ? data.path + '/' + folder : folder;
+        add(folder,child);
       }
-    } catch (error) { if (tree) tree.textContent = error.message; }
+    } catch (error) {
+      if (request !== folderLocationRequest || !tree.isConnected) return;
+      tree.replaceChildren();
+      const warning=document.createElement('p');warning.className='muted';
+      warning.textContent=error.message || 'Could not read this folder.';
+      tree.append(warning);
+    }
   }
   async function listActionFolders(path) {
     const host=$("yrm-b12-action-tree"), field=$("file-action-value");
@@ -796,12 +811,6 @@
   });
   document.addEventListener("change", event => {
     if (event.target.id === "yrm-folder-volume") void listFolders(event.target.value);
-  });
-  document.addEventListener("input", event => {
-    if (event.target.matches?.("#new-folder-dialog input[name=name]")) {
-      const path = $("new-folder-parent")?.value || "";
-      $("new-folder-full-path").textContent = `/${path ? path + "/" : ""}${event.target.value}`;
-    }
   });
   document.addEventListener("change", event => {
     if (event.target.matches?.("#wallpaper-select") && event.target.files?.length) {
