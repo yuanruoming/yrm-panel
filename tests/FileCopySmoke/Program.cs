@@ -45,6 +45,33 @@ try
     Expect(!Directory.Exists(Path.Combine(output, "links")), "incomplete directory is never published");
 
     Console.WriteLine("PASS: File Copy (contents, directory, collision, recursive guard, symlink, rollback)");
+
+    // Wallpaper history uses actual valid 1x1 PNGs. The restore loop checks that
+    // applying the same historical image does not create duplicate files/records.
+    var wallpaperRoot = Path.Combine(fixture, "wallpaper-data");
+    Directory.CreateDirectory(wallpaperRoot);
+    var wallpapers = new PanelSettingsStore(new PanelDataPaths(wallpaperRoot));
+    var red = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4LycHAANbATzfaMhOAAAAAElFTkSuQmCC");
+    var blue = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGOQk/sPAAGZATwBmEnjAAAAAElFTkSuQmCC");
+    await wallpapers.SetWallpaperAsync(new MemoryStream(red), red.Length);
+    Expect(wallpapers.ListWallpaperHistory().Count == 0, "first wallpaper does not create history");
+    await wallpapers.SetWallpaperAsync(new MemoryStream(blue), blue.Length);
+    var history = wallpapers.ListWallpaperHistory();
+    Expect(history.Count == 1, "replaced wallpaper archived exactly once");
+    var redId = history.Single().Id;
+    await wallpapers.RestoreWallpaperHistoryAsync(redId);
+    Expect(wallpapers.ListWallpaperHistory().Count == 2, "other wallpaper archived on restore");
+    Expect(File.ReadAllBytes(wallpapers.GetWallpaper()!.Value.path).SequenceEqual(red), "restore sets selected image");
+    var blueId = wallpapers.ListWallpaperHistory().Single(h => h.Id != redId).Id;
+    for (var attempt = 0; attempt < 5; attempt++)
+    {
+        await wallpapers.RestoreWallpaperHistoryAsync(blueId);
+        await wallpapers.RestoreWallpaperHistoryAsync(redId);
+        Expect(wallpapers.ListWallpaperHistory().Count == 2, "restore history does not duplicate images");
+    }
+    await wallpapers.SetWallpaperAsync(new MemoryStream(red), red.Length);
+    Expect(wallpapers.ListWallpaperHistory().Count == 2, "applying active wallpaper is a no-op");
+    Console.WriteLine("PASS: Wallpaper History (archive, restore, content deduplication)");
 }
 finally
 {
