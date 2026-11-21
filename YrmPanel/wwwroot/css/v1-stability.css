@@ -1037,3 +1037,86 @@ body.is-desktop .workspace-stage{display:none!important;}
  .yrm-profile-photo-dialog{position:fixed;}
  .yrm-overview-timing>div{grid-template-columns:82px 1fr;}
 }
+
+/* Cohesive Files sidebar: My Files is one full-width disclosure surface. */
+.fm-explorer .fm-my-files-header{display:block;border-radius:7px;overflow:hidden;}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-location-link{
+  display:flex;width:100%;height:36px;min-height:36px;align-items:center;gap:9px;
+  padding:0 10px;border:0;border-radius:7px;text-align:left;
+  background:transparent;color:#e4ebf5;cursor:pointer;white-space:nowrap;
+}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-location-link:hover{background:#303d4e;}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-location-link.is-active{background:#354253;}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle .ui-icon{width:16px;height:16px;flex:0 0 auto;}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle span{overflow:hidden;text-overflow:ellipsis;}
+.fm-explorer .fm-my-files-children{padding-left:14px;}
+.fm-explorer .fm-my-files-children .fm-location-link{padding-left:10px!important;min-height:32px;}
+.fm-explorer .fm-history-back,.fm-explorer .fm-history-refresh{width:36px;min-width:36px;height:36px;padding:8px;box-sizing:border-box;}
+.fm-explorer .fm-history-back .ui-icon,.fm-explorer .fm-history-refresh .ui-icon{width:18px;height:18px;}
+.fm-explorer .explorer-name .fm-inline-toggle{margin-right:2px;flex:0 0 auto;}
+.fm-explorer .explorer-name>a,.fm-explorer .explorer-name>.fm-file-open{display:inline-flex;align-items:center;gap:7px;min-height:27px;max-width:100%;overflow-wrap:anywhere;}
+.fm-explorer .explorer-name>.fm-file-open{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 26px);}
+.fm-explorer .explorer-name{padding-left:13px!important;}
+.fm-explorer .fm-tree-preview-row[hidden]{display:none!important;}
+/* File upload modal uses the existing design language, not native file/select widgets. */
+.fm-root-upload-dialog{width:min(520px,calc(100vw - 32px));padding:0;overflow:hidden;border-radius:11px;}
+.fm-root-upload-dialog .panel-modal-head{padding:18px 22px 16px;border-bottom:1px solid #3b4654;}
+.fm-root-upload-dialog .yrm-root-upload-form{margin:0;display:flex;flex-direction:column;gap:0;padding:0;}
+.fm-root-upload-body{padding:21px 22px;display:grid;gap:10px;}
+.fm-root-upload-body>label{font-size:12px;font-weight:500;color:#c7d4e4;}
+.fm-root-upload-body>select{background:#18212d;color:#e3edf8;width:100%;min-width:0;min-height:41px;border:1px solid #455467;border-radius:7px;padding:8px 12px;}
+.fm-root-file-choice{display:flex;align-items:center;gap:11px;min-width:0;flex-wrap:wrap;margin-bottom:4px;}
+.fm-root-file-choice>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;font-size:12px;}
+.fm-root-upload-dialog .panel-modal-actions{margin:0;padding:13px 22px 15px;border-top:1px solid #3b4654;background:#222a35;}
+/* Profile: save, cancel and restore occupy one footer; optionally drag to crop. */
+.yrm-profile-photo-dialog .yrm-profile-photo-actions{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;}
+.yrm-profile-photo-actions .yrm-profile-actions-spacer{flex:1;min-width:1px;}
+.yrm-profile-photo-actions .button{white-space:nowrap;padding-left:11px;padding-right:11px;}
+.yrm-profile-restore-form[hidden]{display:none!important;}
+.yrm-profile-preview canvas{display:block;width:100%;height:100%;border-radius:50%;cursor:grab;touch-action:none;}
+.yrm-profile-preview canvas:active{cursor:grabbing;}
+/* Cert: one expandable identity card; Import action always visible. */
+.yrm-cert-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #3c4654;padding-bottom:13px;margin-bottom:15px;}
+.yrm-cert-toolbar h3{margin:0;font-size:16px;}
+.yrm-cert-card{border:1px solid #485365;border-radius:10px;background:#242b35;overflow:hidden;}
+.yrm-cert-card-summary{display:flex;align-items:center;gap:12px;padding:18px 19px;cursor:pointer;list-style:none;min-height:66px;}
+.yrm-cert-card-summary::-webkit-details-marker{display:none;}
+.yrm-cert-card-summary>.ui-icon:first-child{width:23px;height:23px;color:#76afef;}
+.yrm-cert-card-summary strong{font-size:15px;flex:1;}
+.yrm-cert-card-summary .tag{margin-left:auto;white-space:nowrap;}
+.yrm-cert-expand-icon{width:15px;height:15px;transition:transform .17s ease;}
+.yrm-cert-card[open] .yrm-cert-expand-icon{transform:rotate(90deg);}
+.yrm-cert-card-summary:hover{background:#2e3948;}
+.yrm-cert-card-details{padding:4px 19px 17px;border-top:1px solid #3d4856;}
+.yrm-cert-card-details .yrm-cert-info-list>div{grid-template-columns:110px minmax(0,1fr);padding:10px 0;}
+.yrm-cert-card-details form{margin-top:12px;}
+.yrm-cert-import-dialog{width:min(500px,calc(100vw - 32px));padding:0;overflow:hidden;}
+.yrm-cert-import-dialog .panel-modal-head{padding:18px 20px;border-bottom:1px solid #3b4654;}
+.yrm-cert-import-fields{padding:18px 20px;display:grid;gap:16px;}
+.yrm-cert-import-fields label{display:grid;gap:8px;}
+.yrm-cert-import-dialog .panel-modal-actions{padding:13px 20px;border-top:1px solid #3b4654;}
+/* DDNS forms: real three-zone dialogs. Scroll just the body; header/footer never scroll. */
+.yrm-b9-ddns-dialog[open],.yrm-b10-ddns-dialog[open]{
+  display:flex;flex-direction:column;overflow:hidden!important;
+  max-height:calc(100dvh - 38px);padding:0!important;
+}
+.yrm-b9-ddns-dialog>.panel-modal-head,.yrm-b10-ddns-dialog>.panel-modal-head{
+  position:relative;flex-shrink:0;margin:0;padding:18px 22px 15px;border-bottom:1px solid #3b4758;
+}
+.yrm-b9-ddns-dialog>form,.yrm-b10-ddns-dialog>form{
+  display:flex!important;flex-direction:column!important;flex:1 1 auto;min-height:0;max-height:100%;
+  padding:0!important;gap:0!important;overflow:hidden;
+}
+.yrm-b9-ddns-dialog .yrm-ddns-dialog-body,.yrm-b10-ddns-dialog .yrm-ddns-dialog-body{
+  display:grid;gap:13px;flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain;
+  padding:16px 22px 18px;align-content:start;
+}
+.yrm-b9-ddns-dialog .panel-modal-actions,.yrm-b10-ddns-dialog .panel-modal-actions{
+  position:relative!important;bottom:auto!important;flex:0 0 auto;margin:0!important;
+  padding:13px 22px 15px!important;background:#1b2633!important;z-index:2;
+  border-top:1px solid #3b4758;display:flex;justify-content:flex-end;
+}
+@media(max-width:460px){.yrm-profile-photo-actions .button{font-size:11px;padding-left:8px;padding-right:8px;}}
+
+.fm-explorer .explorer-name>a span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fm-explorer .explorer-name>a{max-width:calc(100% - 26px);min-width:0;}

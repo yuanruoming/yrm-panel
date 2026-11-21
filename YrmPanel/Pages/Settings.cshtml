@@ -42,7 +42,7 @@
             @if (Model.HasProfilePhoto) { <img src="@Url.Page("/Settings", "ProfilePhoto", new { v = Model.ProfilePhotoVersion })" alt=""/> }
             else { <span>@Model.ProfileInitial</span> }
           </span>
-          <span class="yrm-profile-ident"><strong>@Model.ProfileName</strong><small>Current User</small></span>
+          <span class="yrm-profile-ident"><strong>@Model.ProfileName</strong></span>
           <svg class="ui-icon yrm-profile-chevron"><use href="#i-chevron"/></svg>
         </button>
         <div class="yrm-profile-popover" id="yrm-profile-popover" hidden>
@@ -69,12 +69,16 @@
           <input class="fm-visually-hidden" type="file" id="yrm-profile-photo-file" name="photo" accept="image/png,image/jpeg,image/webp" required />
         </div>
         <small class="muted" id="yrm-profile-photo-hint">PNG, JPEG or WebP · Up to 2 MB</small>
-        <div class="panel-modal-actions"><button class="button button-secondary" type="button" data-yrm-photo-close>Cancel</button><button class="button button-primary" type="submit" id="yrm-profile-photo-save" disabled>Save</button></div>
+        <div class="panel-modal-actions yrm-profile-photo-actions">
+          @if (Model.HasProfilePhoto)
+          { <button class="button button-secondary" type="submit" form="yrm-profile-restore-form">Restore Default</button> }
+          <span class="yrm-profile-actions-spacer"></span>
+          <button class="button button-secondary" type="button" data-yrm-photo-close>Cancel</button>
+          <button class="button button-primary" type="submit" id="yrm-profile-photo-save" disabled>Save</button>
+        </div>
       </form>
       @if (Model.HasProfilePhoto)
-      {
-        <form method="post" asp-page-handler="ClearProfilePhoto" class="yrm-profile-restore-form"><button type="submit" class="button button-secondary">Restore Default</button></form>
-      }
+      { <form id="yrm-profile-restore-form" method="post" asp-page-handler="ClearProfilePhoto" class="yrm-profile-restore-form" hidden></form> }
     </dialog>
   </nav>
   <div class="server-settings-content">
@@ -100,7 +104,7 @@
           <a asp-page="/Settings" asp-route-tab="about" class="yrm-overview-link">Check Updates</a>
           <div class="yrm-overview-timing">
             <div><span>System Time</span><strong data-yrm-system-time data-server-epoch="@DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()" data-server-offset-minutes="@DateTimeOffset.Now.Offset.TotalMinutes">@DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss")</strong></div>
-            <div><span>Uptime</span><strong data-yrm-system-uptime data-uptime-seconds="@snapshot.UptimeSeconds">@($"{Math.Max(0, snapshot.UptimeSeconds) / 86400}d {Math.Max(0, snapshot.UptimeSeconds) / 3600 % 24}h {Math.Max(0, snapshot.UptimeSeconds) / 60 % 60}m")</strong></div>
+            <div><span>Uptime</span><strong data-yrm-system-uptime data-uptime-seconds="@snapshot.UptimeSeconds">@($"{Math.Max(0, snapshot.UptimeSeconds) / 86400}d {Math.Max(0, snapshot.UptimeSeconds) / 3600 % 24}h {Math.Max(0, snapshot.UptimeSeconds) / 60 % 60}m {Math.Max(0, snapshot.UptimeSeconds) % 60}s")</strong></div>
           </div>
         </section>
         @for (var i = 0; i < 2; i++)
@@ -386,6 +390,7 @@
         <dialog id="yrm-b10-ddns-edit-@primary.Id" class="yrm-ddns-editor yrm-b10-ddns-dialog" aria-label="Edit DDNS provider">
           <div class="panel-modal-head"><strong>Edit @primary.Provider · @primary.Hostname</strong><button type="button" data-yrm-ddns-edit-close aria-label="Close">×</button></div>
           <form method="post" asp-page-handler="DdnsEditGroup" asp-route-tab="ddns" autocomplete="off">
+            <div class="yrm-ddns-dialog-body">
             <input type="hidden" name="provider" value="@primary.Provider" />
             <input type="hidden" name="originalHostname" value="@primary.Hostname" />
             <input type="hidden" name="name" value="@primary.Name" />
@@ -443,13 +448,15 @@
             }
             <label>Update interval (minutes)<input type="number" name="intervalMinutes" min="5" max="1440" required value="@primary.IntervalMinutes" /></label>
             <label class="v1-check yrm-b11-toggle-line"><span>Enable automatic updates</span><input name="enabled" type="checkbox" value="true" checked="@primary.Enabled"/><span class="yrm-b11-switch" aria-hidden="true"></span></label>
+            </div>
             <div class="panel-modal-actions"><button class="button button-secondary" type="button" data-yrm-ddns-edit-close>Cancel</button><button class="button button-primary" type="submit">Save Changes</button></div>
           </form>
         </dialog>
       }
-      <dialog id="yrm-b9-ddns-add" class="yrm-ddns-editor yrm-b9-ddns-dialog" aria-label="Add DDNS provider">
-        <div class="panel-modal-head"><strong>Add DDNS Provider</strong><button type="button" data-b9-ddns-cancel aria-label="Close">×</button></div>
+      <dialog id="yrm-b9-ddns-add" class="yrm-ddns-editor yrm-b9-ddns-dialog" aria-label="Add Provider">
+        <div class="panel-modal-head"><strong>Add Provider</strong><button type="button" data-b9-ddns-cancel aria-label="Close">×</button></div>
           <form method="post" asp-page-handler="DdnsAddGroup" asp-route-tab="ddns" id="yrm-ddns-new-form">
+            <div class="yrm-ddns-dialog-body">
             <label>Provider template
               <div class="yrm-b10-provider-picker" data-b10-provider-picker>
                 <select id="yrm-ddns-provider-preset" aria-label="DDNS provider"><option value="dynu4">Dynu</option><option value="cloudflare4">Cloudflare</option><option value="custom">Custom HTTPS API</option></select>
@@ -527,6 +534,7 @@
             <label class="v1-check yrm-b11-toggle-line"><span>Enable automatic updates</span><input type="checkbox" name="enabled" value="true" checked /><span class="yrm-b11-switch" aria-hidden="true"></span></label>
             <input type="hidden" name="provider" id="yrm-ddns-provider" value="dynu" />
             <input type="hidden" name="successContains" value="" />
+            </div>
             <div class="panel-modal-actions"><button class="button button-secondary" type="button" data-b9-ddns-cancel>Cancel</button><button class="button button-primary" type="submit">Save Provider</button></div>
           </form>
       </dialog>
@@ -608,41 +616,47 @@
       else
       {
       <section class="yrm-flat-panel yrm-certificate-card">
-        <div class="settings-row-top"><h3>HTTPS Certificate</h3>
-          <span class="tag">@(Model.Certificate.IsCustom ? "Imported" : "System default")</span>
+        <div class="yrm-cert-toolbar">
+          <h3>Certificates</h3>
+          <button type="button" class="button button-secondary" data-yrm-cert-import-open>Import</button>
         </div>
-        @if (Model.Certificate.Available)
-        {
-          <div class="yrm-cert-overview">
-            <div class="yrm-cert-identity">
-              <svg class="ui-icon"><use href="#i-shield"/></svg>
-              <div><strong>YRM PANEL HTTPS</strong><small>@(Model.Certificate.IsCustom ? "Imported certificate" : "Default self-signed certificate")</small></div>
-              <span class="tag">@(Model.Certificate.NotAfter > DateTime.UtcNow ? "Valid" : "Expired")</span>
-            </div>
-            <dl class="yrm-cert-info-list">
-              <div><dt>Issued to</dt><dd>@Model.Certificate.Subject</dd></div>
-              <div><dt>Issued by</dt><dd>@Model.Certificate.Issuer</dd></div>
-              <div><dt>Expires</dt><dd>@Model.Certificate.NotAfter.ToString("dd MMM yyyy")</dd></div>
-            </dl>
-            <details class="yrm-cert-technical"><summary>Advanced details</summary>
-              <dl class="yrm-cert-details"><div><dt>Fingerprint</dt><dd><code>@Model.Certificate.Thumbprint</code></dd></div></dl>
-            </details>
+        <details class="yrm-cert-card">
+          <summary class="yrm-cert-card-summary">
+            <svg class="ui-icon" aria-hidden="true"><use href="#i-shield"/></svg>
+            <strong>YRMPanel</strong>
+            <span class="tag">@(Model.Certificate.IsCustom ? "Imported" : "System Default")</span>
+            <svg class="ui-icon yrm-cert-expand-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+          </summary>
+          <div class="yrm-cert-card-details">
+            @if (Model.Certificate.Available)
+            {
+              <dl class="yrm-cert-info-list">
+                <div><dt>Issued to</dt><dd>@Model.Certificate.Subject</dd></div>
+                <div><dt>Issued by</dt><dd>@Model.Certificate.Issuer</dd></div>
+                <div><dt>Fingerprint</dt><dd><code>@Model.Certificate.Thumbprint</code></dd></div>
+                <div><dt>Expires</dt><dd>@Model.Certificate.NotAfter.ToString("dd MMM yyyy")</dd></div>
+                <div><dt>Status</dt><dd>@(Model.Certificate.NotAfter > DateTime.UtcNow ? "Valid" : "Expired")</dd></div>
+              </dl>
+              @if (Model.Certificate.IsCustom)
+              {
+                <form method="post" asp-page-handler="RestoreCertificate" asp-route-tab="security" asp-route-section="certificates" data-confirm="Restore the original self-signed certificate?">
+                  <button type="submit" class="button button-secondary">Restore Default Certificate</button>
+                </form>
+              }
+            }
+            else { <p class="muted">Certificate information is available on Linux installations.</p> }
           </div>
-        }
-        else { <p>Certificate information is available on Linux installations.</p> }
-        <div class="yrm-cert-actions">
-          <details class="yrm-certificate-import"><summary class="button button-secondary">Import Certificate</summary>
-            <form method="post" asp-page-handler="Certificate" asp-route-tab="security" asp-route-section="certificates" enctype="multipart/form-data">
-              <div class="v1-grid"><label>Certificate (PEM)<input name="certificate" type="file" accept=".crt,.pem" required /></label>
-                <label>Private key (PEM)<input name="privateKey" type="file" accept=".key,.pem" required /></label></div>
-              <div class="v1-row"><button class="button button-primary" type="submit">Import &amp; Activate</button></div>
-            </form>
-          </details>
-          @if (Model.Certificate.IsCustom)
-          {
-            <form method="post" asp-page-handler="RestoreCertificate" asp-route-tab="security" asp-route-section="certificates" data-confirm="Restore the original self-signed certificate?"><button class="button button-secondary">Restore Default Certificate</button></form>
-          }
-        </div>
+        </details>
+        <dialog id="yrm-cert-import-dialog" class="panel-modal yrm-cert-import-dialog" aria-labelledby="yrm-cert-import-title">
+          <div class="panel-modal-head"><strong id="yrm-cert-import-title">Import Certificate</strong><button type="button" data-yrm-cert-import-close aria-label="Close">×</button></div>
+          <form method="post" asp-page-handler="Certificate" asp-route-tab="security" asp-route-section="certificates" enctype="multipart/form-data">
+            <div class="yrm-cert-import-fields">
+              <label>Certificate (PEM)<input name="certificate" type="file" accept=".crt,.pem" required /></label>
+              <label>Private key (PEM)<input name="privateKey" type="file" accept=".key,.pem" required /></label>
+            </div>
+            <div class="panel-modal-actions"><button type="button" class="button button-secondary" data-yrm-cert-import-close>Cancel</button><button class="button button-primary" type="submit">Import &amp; Activate</button></div>
+          </form>
+        </dialog>
       </section>
       }
     }

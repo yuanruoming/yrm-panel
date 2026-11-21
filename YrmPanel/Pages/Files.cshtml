@@ -13,12 +13,11 @@
   <div class="fm-columns">
     <aside class="fm-locations" aria-label="File locations">
       <div class="fm-my-files-header">
-        <button type="button" class="fm-my-files-toggle" data-my-files-toggle aria-controls="yrm-my-files-children" aria-expanded="false" title="Show or hide folders" aria-label="Expand My Files">
-          <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        <button type="button" class="fm-my-files-toggle fm-location-link @(Model.IsMyFolders ? "is-active" : "")"
+                data-my-files-toggle aria-controls="yrm-my-files-children" aria-expanded="false"
+                aria-label="Expand or collapse My Files" title="Expand or collapse My Files">
+          <svg class="ui-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>My Files</span>
         </button>
-        <a class="fm-location-link @(Model.IsMyFolders ? "is-active" : "")" asp-page="/Files" asp-route-path="@("@folders")">
-          <svg class="ui-icon"><use href="#i-folder"/></svg> My Files
-        </a>
       </div>
       <div class="fm-my-files-children" id="yrm-my-files-children" hidden>
       @foreach (var folderPath in Model.MyFiles)
@@ -52,7 +51,7 @@
         }
         @if (Model.QuickAccess.Count == 0) { <small class="muted yrm-b10-quick-empty">Pin folders from More.</small> }
       </div>
-      <details class="fm-system-nav fm-storage-nav">
+      <details class="fm-system-nav fm-storage-nav" data-persist-disclosure="yrm-panel:files-storage-open">
         <summary><svg class="ui-icon"><use href="#i-harddrive"/></svg> Storage</summary>
         @foreach (var volume in Model.MountedVolumes)
         {
@@ -134,11 +133,7 @@
         </div>
       @if (Model.IsMyFolders)
       {
-        <div class="fm-page-title">
-          <div class="fm-location-crumb">Folders</div>
-          <div class="fm-action-row"></div>
-        </div>
-        @if (Model.MyFiles.Count == 0)
+                @if (Model.MyFiles.Count == 0)
         {
           <div class="fm-library-empty">
             <svg class="ui-icon"><use href="#i-folder"/></svg>
@@ -170,7 +165,6 @@
                       <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
                     </button>
                   }
-                  else { <span class="fm-inline-toggle-spacer" aria-hidden="true"></span> }
                   <a asp-page="/Files" asp-route-path="@relative"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@name</span></a>
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared">Shared</small> }
                 </td>
@@ -252,9 +246,8 @@
                                 aria-label="Expand @item.Name" aria-expanded="false" title="Preview subfolders">
                           <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
                         </button> }
-                    else { <span class="fm-inline-toggle-spacer" aria-hidden="true"></span> }
-                      <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
-                  else { <span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" >@item.Name</button> }
+                        <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
+                  else { <span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" title="@item.Name" >@item.Name</button> }
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared folder">Shared</small> }
                 </td>
                 <td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
@@ -331,17 +324,23 @@
     </div>
   </div>
 </section>
-<dialog id="yrm-root-upload-dialog" class="panel-modal fm-small-dialog" aria-labelledby="yrm-root-upload-title">
+<dialog id="yrm-root-upload-dialog" class="panel-modal fm-small-dialog fm-root-upload-dialog" aria-labelledby="yrm-root-upload-title">
   <div class="panel-modal-head"><strong id="yrm-root-upload-title">Upload to My Files</strong><button type="button" data-root-upload-close aria-label="Close">×</button></div>
   <form method="post" asp-page-handler="Upload" asp-route-path="@("@folders")" enctype="multipart/form-data" class="yrm-root-upload-form">
-    <label>Destination
-      <select name="targetParent" required>
+    <div class="fm-root-upload-body">
+      <label for="fm-root-upload-destination">Destination</label>
+      <select id="fm-root-upload-destination" name="targetParent" required>
         <option value="@Model.HomePath">Home</option>
         @foreach (var volume in Model.MountedVolumes)
         { <option value="@volume.MountPoint.TrimStart('/')">@Model.StorageLabel(volume) · @volume.MountPoint</option> }
       </select>
-    </label>
-    <label>File <input type="file" name="upload" required /></label>
+      <label for="fm-root-upload-file">File</label>
+      <div class="fm-root-file-choice">
+        <input class="fm-visually-hidden" id="fm-root-upload-file" type="file" name="upload" required />
+        <button class="button button-secondary" type="button" data-file-picker="fm-root-upload-file">Choose File</button>
+        <span id="fm-root-upload-name" class="muted" aria-live="polite">No file selected</span>
+      </div>
+    </div>
     <div class="panel-modal-actions"><button class="button button-secondary" type="button" data-root-upload-close>Cancel</button><button class="button button-primary" type="submit">Upload</button></div>
   </form>
 </dialog>

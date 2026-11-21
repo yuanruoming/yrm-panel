@@ -4,20 +4,30 @@
   'use strict';
   // Desktop shell owns route persistence. This module owns only Files UI.
   const get = id => document.getElementById(id);
-  const fileNavKey = 'yrm-panel:system-files-open';
 
+  const disclosureState = new Map();
   function restoreDisclosure() {
     document.querySelectorAll('details[data-persist-disclosure]').forEach(node => {
       if (!(node instanceof HTMLDetailsElement) || node.dataset.restored === '1') return;
+      const key = node.dataset.persistDisclosure;
+      if (!key) return;
       node.dataset.restored = '1';
-      try { node.open = sessionStorage.getItem(fileNavKey) === '1'; } catch { node.open = false; }
+      let open = disclosureState.get(key);
+      if (open === undefined) {
+        try { const saved = sessionStorage.getItem(key); if (saved !== null) open = saved === '1'; }
+        catch { /* In-memory state remains available. */ }
+      }
+      if (open !== undefined) node.open = open;
     });
   }
   document.addEventListener('toggle', event => {
     const node = event.target;
     if (!(node instanceof HTMLDetailsElement) || !node.isConnected ||
         !node.matches('details[data-persist-disclosure]')) return;
-    try { sessionStorage.setItem(fileNavKey,node.open ? '1' : '0'); } catch {}
+    const key = node.dataset.persistDisclosure;
+    if (!key) return;
+    disclosureState.set(key,node.open);
+    try { sessionStorage.setItem(key,node.open ? '1' : '0'); } catch {}
   },true);
   restoreDisclosure();
 
@@ -733,7 +743,7 @@
     select.addEventListener('change',sync);
   }
   function initializeSelects(){
-    document.querySelectorAll('.yrm-b9-ddns-dialog select,.yrm-b10-ddns-dialog select,.yrm-b11-fw-dialog select,.yrm-b11-fw-status select')
+    document.querySelectorAll('.yrm-b9-ddns-dialog select,.yrm-b10-ddns-dialog select,.yrm-b11-fw-dialog select,.yrm-b11-fw-status select,.fm-root-upload-dialog select')
       .forEach(enhanceSelect);
   }
   document.addEventListener('click',event=>{

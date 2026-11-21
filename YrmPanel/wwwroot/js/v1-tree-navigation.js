@@ -41,7 +41,7 @@
     const folderUse=document.createElementNS('http://www.w3.org/2000/svg','use');folderUse.setAttribute('href','#i-folder');folderSvg.append(folderUse);
     const label=document.createElement('span');label.textContent=name;anchor.append(folderSvg,label);
     if (hasChildren) head.append(toggle);
-    else { const spacer=document.createElement('span');spacer.className='fm-inline-toggle-spacer';head.append(spacer); }
+
     head.append(anchor);
     const descendants=document.createElement('div');descendants.className='fm-tree-descendants';descendants.hidden=true;
     wrapper.append(head,descendants);return wrapper;
@@ -80,6 +80,27 @@
     if(!(button instanceof HTMLButtonElement))return;
     event.preventDefault();event.stopPropagation();
     void toggleInline(button);
+  },true);
+  // Nested previews use the same local data endpoint. Their chevrons must
+  // actually expand, not merely look expandable or cause a full page load.
+  document.addEventListener('click',event=>{
+    const target=event.target instanceof Element?event.target:null;
+    const button=target?.closest('[data-fm-tree-toggle]');
+    if(!(button instanceof HTMLButtonElement))return;
+    event.preventDefault();event.stopPropagation();
+    const wrapper=button.closest('.fm-tree-node');
+    const children=wrapper?.querySelector(':scope > .fm-tree-descendants');
+    if(!children)return;
+    const opening=button.getAttribute('aria-expanded')!=='true';
+    button.setAttribute('aria-expanded',String(opening));children.hidden=!opening;
+    if(!opening||children.dataset.loaded==='1')return;
+    children.replaceChildren(text('Loading subfolders…','fm-tree-loading'));
+    const path=button.dataset.fmTreePath||'';
+    void loadFolders(path).then(folders=>{
+      if(!children.isConnected)return;
+      renderChildren(children,folders,path,false);
+      children.dataset.loaded='1';
+    }).catch(err=>children.replaceChildren(text(String(err.message||err))));
   },true);
   document.addEventListener('click',event=>{
     if(event.target instanceof Element && event.target.closest('.fm-history-refresh')) cache.clear();

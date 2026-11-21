@@ -106,9 +106,20 @@ public sealed class FilesModel : PageModel
         else
         {
             View = _files.Browse("system", CurrentRelative, Hidden);
+            // Only hide the Panel's obsolete installer artifacts in this user's home.
+            // This changes file visibility, never deletes files or blocks Show hidden files.
+            if (!Hidden && View.Available && string.Equals(Absolute,
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimEnd('/'), StringComparison.Ordinal))
+            {
+                View = View with { Items = View.Items.Where(item => !IsPanelInstallArtifact(item.Name)).ToArray() };
+            }
         }
         Samba = await _samba.ListAsync(HttpContext.RequestAborted);
     }
+
+    private static bool IsPanelInstallArtifact(string name) =>
+        string.Equals(name, "install.sh", StringComparison.Ordinal) ||
+        string.Equals(name, "systemctl show yrm-panel.service -p ProtectSystem -p ReadWritePaths -p PrivateTmp -p PrivateMounts", StringComparison.Ordinal);
 
     // The visible My Files root is derived from real directories, not a parallel
     // 'registered folders' database. Historical bookmarks are read for compatibility.
