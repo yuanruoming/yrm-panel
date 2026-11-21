@@ -14,13 +14,16 @@ class WallpaperContracts(unittest.TestCase):
         self.assertIn('Where(p => IsWallpaperHistoryId', cs)
         self.assertIn('.Skip(10)', cs)
         self.assertIn('Path.Combine(_root, "wallpaper-history")', cs)
-    def test_restore_delete_and_private_image_handler(self):
-        view=source("YrmPanel/Pages/Settings.cshtml")
-        model=source("YrmPanel/Pages/Settings.cshtml.cs")
+    def test_recently_used_click_to_apply_and_private_image_handler(self):
+        view = source("YrmPanel/Pages/Settings.cshtml")
+        model = source("YrmPanel/Pages/Settings.cshtml.cs")
+
+        self.assertIn('<h4>Recently Used</h4>', view)
+        self.assertIn('class="yrm-wallpaper-recent-item"', view)
         self.assertIn('asp-page-handler="RestoreWallpaperHistory"', view)
-        self.assertIn('asp-page-handler="DeleteWallpaperHistory"', view)
+        self.assertNotIn('asp-page-handler="DeleteWallpaperHistory"', view)
+
         self.assertIn('OnPostRestoreWallpaperHistoryAsync', model)
-        self.assertIn('OnPostDeleteWallpaperHistoryAsync', model)
         self.assertIn('OnGetWallpaperHistoryImage', model)
         self.assertIn('Cache-Control', model)
 
