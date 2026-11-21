@@ -37,7 +37,11 @@
     previewVideo=video;
     const bigPlay=document.createElement('button');bigPlay.className='yrm-player-overlay-play';
     bigPlay.type='button';bigPlay.textContent='▶';bigPlay.setAttribute('aria-label','Play video');
-    screen.append(video,bigPlay);
+    const playbackError=document.createElement('p');playbackError.className='yrm-player-error';
+    playbackError.hidden=true;playbackError.setAttribute('role','status');
+    playbackError.textContent='Unable to play this video. Try downloading the original file.';
+    screen.append(video,bigPlay,playbackError);
+    video.addEventListener('error',()=>{playbackError.hidden=false;bigPlay.hidden=true;});
     const controls=document.createElement('div');controls.className='yrm-player-controls';
     const seek=document.createElement('input');seek.type='range';seek.min='0';seek.max='1000';seek.step='1';seek.value='0';
     seek.className='yrm-player-seek';seek.setAttribute('aria-label','Seek playback position');
@@ -63,11 +67,12 @@
     controls.append(seek,row);
     wrapper.append(screen,controls);
     const toggle=async()=>{
-      try {video.paused?await video.play():video.pause()} catch {}
+      try {if (video.paused) await video.play(); else video.pause();}
+      catch {playbackError.hidden=false;bigPlay.hidden=true;}
     };
     const refresh=()=>{
       const paused=video.paused;play.textContent=paused?'▶':'❚❚';play.setAttribute('aria-label',paused?'Play':'Pause');
-      bigPlay.hidden=!paused;
+      bigPlay.hidden=!paused || !playbackError.hidden;
       const duration=video.duration;
       time.textContent=`${formatTime(video.currentTime)} / ${formatTime(duration)}`;
       seek.value=Number.isFinite(duration)&&duration>0?String(Math.round(video.currentTime/duration*1000)):'0';
@@ -96,8 +101,11 @@
   }
 
   async function showFile(name) {
-    const route = new URL(location.href);
-    const path = route.searchParams.get('path') || '';
+    // The desktop shell intentionally keeps the address bar at /.
+    // Use the current rendered Files pane, not the browser location.
+    const explorer = document.querySelector('.fm-explorer[data-files-current-path]');
+    if (!explorer) return;
+    const path = explorer.dataset.filesCurrentPath || '';
     const params = new URLSearchParams({handler:'Preview',path,name});
     const url = `/Files?${params}`;
     if (!supported.test(name)) {

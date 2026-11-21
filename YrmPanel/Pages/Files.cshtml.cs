@@ -584,20 +584,19 @@ public sealed class FilesModel : PageModel
         try
         {
             var (stream, _) = _files.OpenDownload("system", CurrentRelative, name);
-            // Private browser cache with revalidation: do not stream the same image again
-            // when it has not changed. Never cache it publicly on a proxy/VPN gateway.
+            // Let ASP.NET Core perform ETag, If-Range, 304 and 206 handling.
+            // A manual If-None-Match early return can bypass media range processing.
             var details = new System.IO.FileInfo(stream.Name);
             var etag = $"\"{details.Length:x}-{details.LastWriteTimeUtc.Ticks:x}\"";
-            Response.Headers["ETag"] = etag;
             Response.Headers["Cache-Control"] = "private, no-cache";
-            if (Request.Headers["If-None-Match"].ToString() == etag)
-            {
-                stream.Dispose();
-                return new StatusCodeResult(StatusCodes.Status304NotModified);
-            }
-            // The built-in PDF preview is same-origin only.
+            // Embedded PDF preview stays same-origin; no public proxy caching.
             Response.Headers["Content-Security-Policy"] = "default-src 'self'; frame-ancestors 'self'; object-src 'none'";
-            return new FileStreamResult(stream, mime) { EnableRangeProcessing = true };
+            return new FileStreamResult(stream, mime)
+            {
+                EnableRangeProcessing = true,
+                EntityTag = new Microsoft.Net.Http.Headers.EntityTagHeaderValue(etag),
+                LastModified = new DateTimeOffset(details.LastWriteTimeUtc, TimeSpan.Zero)
+            };
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         { return BadRequest(FileManagerService.SafeError(ex)); }

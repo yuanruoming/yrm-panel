@@ -9,15 +9,19 @@
 }
 @if (!string.IsNullOrWhiteSpace(Model.Notice))
 { <div class="notice" data-result-notice="@(Model.Notice.StartsWith("Error:") ? "error" : "success")">@Model.Notice</div> }
-<section class="fm-explorer yrm-flat-files">
+<section class="fm-explorer yrm-flat-files" data-files-current-path="@currentRoute">
   <div class="fm-columns">
     <aside class="fm-locations" aria-label="File locations">
       <div class="fm-my-files-header">
-        <button type="button" class="fm-my-files-toggle fm-location-link @(Model.IsMyFolders ? "is-active" : "")"
-                data-my-files-toggle aria-controls="yrm-my-files-children" aria-expanded="false"
-                aria-label="Expand or collapse My Files" title="Expand or collapse My Files">
-          <svg class="ui-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>My Files</span>
+        <button type="button" class="fm-my-files-toggle" data-my-files-toggle
+                aria-controls="yrm-my-files-children" aria-expanded="false"
+                aria-label="Expand My Files" title="Expand or collapse My Files">
+          <svg class="ui-icon fm-my-files-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
         </button>
+        <a class="fm-location-link fm-my-files-home @(Model.IsMyFolders ? "is-active" : "")"
+           asp-page="/Files" asp-route-path="@@folders" title="Open My Files">
+          <svg class="ui-icon fm-my-files-folder" aria-hidden="true"><use href="#i-folder"/></svg><span>My Files</span>
+        </a>
       </div>
       <div class="fm-my-files-children" id="yrm-my-files-children" hidden>
       @foreach (var folderPath in Model.MyFiles)
@@ -366,7 +370,17 @@
   <form method="post" asp-page-handler="Create" class="explorer-create-form">
     <input type="hidden" name="returnTo" value="@currentRoute"/>
     <div class="yrm-create-folder-content">
-      <div class="yrm-create-location">
+      <div class="yrm-create-folder-chooser">
+        <div class="yrm-create-tree-heading">
+          <strong>My Files</strong>
+          <button type="button" class="yrm-create-tree-root" data-create-tree-root title="Return to filesystem root">Root /</button>
+        </div>
+        <div id="new-folder-tree" class="explorer-tree yrm-create-location-tree"
+             data-initial-folder="@Model.DefaultCreateParent" aria-label="Choose parent folder" role="tree"></div>
+      </div>
+      <div class="yrm-create-folder-fields">
+        <label for="new-folder-name">Folder name</label>
+        <input id="new-folder-name" name="name" required maxlength="64" autocomplete="off" placeholder="New Folder"/>
         <label for="yrm-folder-volume">Location</label>
         <select id="yrm-folder-volume" aria-label="Choose a starting location">
           <option value="@Model.HomePath">Home</option>
@@ -375,11 +389,6 @@
           <option value="">System Root /</option>
         </select>
         <div id="new-folder-parent-text" class="yrm-create-location-path" aria-live="polite">/@Model.DefaultCreateParent</div>
-        <div id="new-folder-tree" class="explorer-tree yrm-create-location-tree" data-initial-folder="@Model.DefaultCreateParent" aria-label="Choose parent folder"></div>
-      </div>
-      <div class="yrm-create-name">
-        <label for="new-folder-name">Folder name</label>
-        <input id="new-folder-name" name="name" required maxlength="64" autocomplete="off" placeholder="New Folder"/>
         <input type="hidden" name="parent" id="new-folder-parent" value="@Model.DefaultCreateParent"/>
         <p class="muted" id="new-folder-rights" role="status"></p>
       </div>

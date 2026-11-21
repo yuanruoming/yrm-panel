@@ -652,69 +652,154 @@
   if (page)appPinObserver.observe(page,{childList:true,subtree:false});
 
   // App dialogs and file dialogs are delegated because Razor content is loaded via Fetch.
+  // New Folder uses a real lazy directory tree. Navigation never changes the
+  // current Files view; the selected parent alone determines the destination.
   let folderLocationRequest = 0;
-  async function listFolders(path) {
-    const dialog = document.querySelector('#new-folder-dialog');
-    const tree = document.querySelector('#new-folder-tree');
-    if (!dialog || !tree) return;
-    const request = ++folderLocationRequest;
-    const folderPath = (path || '').replace(/^\/+|\/+$/g, '');
-    const submit = dialog.querySelector('button[type="submit"]');
-    if (submit) submit.disabled = true;
+  const folderPathKey = path => String(path || '').replace(/^\/+|\/+$/g, '');
+  const folderTreeData = async path => {
+    const response = await fetch(`/Files?handler=Tree&path=${encodeURIComponent(folderPathKey(path))}`,
+      {credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
+    if (!response.ok || response.redirected) throw new Error('Cannot read this location.');
+    const data = await response.json();
+    if (!Array.isArray(data?.folders) || typeof data.path !== 'string')
+      throw new Error('Invalid directory listing.');
+    return data;
+  };
+  function createFolderTreeNode(label, path) {
+    const node = document.createElement('div');
+    node.className = 'yrm-create-tree-node';
+    node.dataset.folderPath = folderPathKey(path);
+    node.setAttribute('role','treeitem');
+    const row = document.createElement('div');row.className='yrm-create-tree-row';
+    const toggle = document.createElement('button');
+    toggle.type='button';toggle.className='yrm-create-tree-toggle';
+    toggle.setAttribute('aria-label',`Expand ${label}`);toggle.setAttribute('aria-expanded','false');
+    const chevron=document.createElementNS('http://www.w3.org/2000/svg','svg');chevron.classList.add('ui-icon');
+    const use=document.createElementNS('http://www.w3.org/2000/svg','use');use.setAttribute('href','#i-chevron');
+    chevron.append(use);toggle.append(chevron);
+    const select=document.createElement('button');select.type='button';
+    select.className='yrm-create-tree-select';select.dataset.folderTreeSelect='';
+    select.setAttribute('aria-current','false');select.title=label;
+    const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.classList.add('ui-icon');
+    const iconUse=document.createElementNS('http://www.w3.org/2000/svg','use');
+    iconUse.setAttribute('href','#i-folder');icon.append(iconUse);
+    const text=document.createElement('span');text.textContent=label;
+    select.append(icon,text);row.append(toggle,select);
+    const children=document.createElement('div');children.className='yrm-create-tree-children';
+    children.setAttribute('role','group');children.hidden=true;
+    node.append(row,children);
+    select.addEventListener('click',()=>void listFolders(node.dataset.folderPath));
+    toggle.addEventListener('click',()=>void expandFolderTreeNode(node,toggle.getAttribute('aria-expanded')!=='true'));
+    return node;
+  }
+  async function expandFolderTreeNode(node, expanded) {
+    const toggle=node.querySelector(':scope > .yrm-create-tree-row > .yrm-create-tree-toggle');
+    const children=node.querySelector(':scope > .yrm-create-tree-children');
+    if (!toggle || !children) return;
+    toggle.setAttribute('aria-expanded',String(expanded));
+    if (!expanded) {children.hidden=true;return;}
+    if (children.dataset.loaded==='1') {children.hidden=!children.children.length;return;}
+    if (children.dataset.loading==='1') {
+      // Revealing a path and manually expanding it can overlap. Share the
+      // same request rather than drawing a partial tree or losing selection.
+      if (node.folderLoadPromise) await node.folderLoadPromise;
+      children.hidden=!children.children.length || toggle.getAttribute('aria-expanded')!=='true';
+      return;
+    }
+    children.dataset.loading='1';
+    node.folderLoadPromise=folderTreeData(node.dataset.folderPath);
     try {
-      const response = await fetch(`/Files?handler=Tree&path=${encodeURIComponent(folderPath)}`,
-        {credentials:'same-origin',cache:'no-store',headers:{'Accept':'application/json'}});
-      if (!response.ok || response.redirected) throw new Error('Cannot read this location.');
-      const data = await response.json();
-      if (request !== folderLocationRequest || !tree.isConnected) return;
-      if (!Array.isArray(data.folders)) throw new Error('Invalid directory listing.');
-      const parent = document.querySelector('#new-folder-parent');
-      if (parent) parent.value = data.path;
-      const selected = document.querySelector('#new-folder-parent-text');
-      if (selected) selected.textContent = data.absolute;
-      const volume = document.querySelector('#yrm-folder-volume');
-      let volumeRoot = false;
-      if (volume instanceof HTMLSelectElement) {
-        const choices = Array.from(volume.options).filter(o => o.value &&
-          (data.path === o.value || data.path.startsWith(o.value + '/')));
-        choices.sort((a,b) => b.value.length-a.value.length);
-        if (choices.length) volume.value = choices[0].value;
-        else volume.value = '';
-        volumeRoot = choices.some(o => o.value === data.path);
+      const data=await node.folderLoadPromise;
+      if (!children.isConnected) return;
+      children.replaceChildren();
+      for (const name of data.folders) {
+        const child=data.path ? `${data.path}/${name}` : name;
+        children.append(createFolderTreeNode(name,child));
       }
-      const canCreate = Boolean(data.canManage || !data.path || (data.canEnable && volumeRoot));
-      if (submit) submit.disabled = !canCreate;
-      const rights = dialog.querySelector('#new-folder-rights');
-      if (rights) rights.textContent = canCreate ? '' : 'This location is read-only.';
-      const form = dialog.querySelector('.explorer-create-form');
+      children.dataset.loaded='1';
+      // Empty folders still rotate their chevron; no fake empty row is added.
+      children.hidden=!children.children.length || toggle.getAttribute('aria-expanded')!=='true';
+    } catch (error) {
+      if (children.isConnected) {
+        children.replaceChildren();
+        const warning=document.createElement('span');warning.className='yrm-create-tree-empty';
+        warning.textContent=error.message || 'Cannot read folder.';
+        children.append(warning);children.hidden=false;
+        toggle.setAttribute('aria-expanded','false');
+      }
+    } finally {delete children.dataset.loading;delete node.folderLoadPromise;}
+  }
+  function resetFolderTree() {
+    const tree=document.querySelector('#new-folder-tree');
+    const volume=document.querySelector('#yrm-folder-volume');
+    if (!tree || !(volume instanceof HTMLSelectElement)) return;
+    tree.replaceChildren();
+    for (const opt of volume.options) tree.append(createFolderTreeNode(opt.textContent.trim(),opt.value));
+    tree.dataset.ready='1';
+  }
+  async function revealFolderTree(path, request) {
+    const tree=document.querySelector('#new-folder-tree');if (!tree) return;
+    const normalized=folderPathKey(path);
+    const roots=Array.from(tree.children).filter(node=>{
+      const key=node.dataset.folderPath;
+      return key==='' || normalized===key || normalized.startsWith(key+'/');
+    }).sort((a,b)=>b.dataset.folderPath.length-a.dataset.folderPath.length);
+    let node=roots[0];if (!node) return;
+    const base=node.dataset.folderPath;
+    const rest=normalized.slice(base.length).replace(/^\//,'').split('/').filter(Boolean);
+    for (const name of rest) {
+      await expandFolderTreeNode(node,true);
+      if (request!==folderLocationRequest || !tree.isConnected) return;
+      const nextPath=node.dataset.folderPath ? node.dataset.folderPath+'/'+name : name;
+      const children=node.querySelector(':scope > .yrm-create-tree-children');
+      const next=Array.from(children?.children||[]).find(item=>item.dataset.folderPath===nextPath);
+      if (!next) break;
+      node=next;
+    }
+    await expandFolderTreeNode(node,true);
+    if (request!==folderLocationRequest || !tree.isConnected) return;
+    for (const item of tree.querySelectorAll('[data-folder-tree-select]'))
+      item.setAttribute('aria-current',String(item.parentElement?.parentElement?.dataset.folderPath===normalized));
+  }
+  async function listFolders(path) {
+    const dialog=document.querySelector('#new-folder-dialog');
+    const tree=document.querySelector('#new-folder-tree');
+    if (!dialog || !tree) return;
+    if (tree.dataset.ready!=='1') resetFolderTree();
+    const request=++folderLocationRequest;
+    const submit=dialog.querySelector('button[type="submit"]');
+    if (submit) submit.disabled=true;
+    try {
+      const data=await folderTreeData(path);
+      if (request!==folderLocationRequest || !tree.isConnected) return;
+      const parent=dialog.querySelector('#new-folder-parent');
+      if (parent) parent.value=data.path;
+      const selected=dialog.querySelector('#new-folder-parent-text');
+      if (selected) selected.textContent=data.absolute;
+      const volume=dialog.querySelector('#yrm-folder-volume');
+      let volumeRoot=false;
+      if (volume instanceof HTMLSelectElement) {
+        const choices=Array.from(volume.options).filter(o=>o.value &&
+          (data.path===o.value || data.path.startsWith(o.value+'/')));
+        choices.sort((a,b)=>b.value.length-a.value.length);
+        volume.value=choices[0]?.value || '';
+        volumeRoot=choices.some(o=>o.value===data.path);
+      }
+      const canCreate=Boolean(data.canManage || !data.path || (data.canEnable && volumeRoot));
+      if (submit) submit.disabled=!canCreate;
+      const rights=dialog.querySelector('#new-folder-rights');
+      if (rights) rights.textContent=canCreate?'':'This location is read-only.';
+      const form=dialog.querySelector('.explorer-create-form');
       if (form) {
         if (data.canEnable && volumeRoot && !data.canManage)
-          form.dataset.requiresAdmin = 'Enable volume access and create folder';
+          form.dataset.requiresAdmin='Enable volume access and create folder';
         else delete form.dataset.requiresAdmin;
       }
-      const add = (label, targetPath, parentItem=false) => {
-        const button=document.createElement('button');
-        button.type='button';button.className='explorer-tree-item yrm-create-tree-item';
-        if(parentItem) button.classList.add('is-parent');
-        const glyph=document.createElement('span');glyph.setAttribute('aria-hidden','true');
-        glyph.textContent=parentItem?'←':'📁';
-        const text=document.createElement('span');text.textContent=label;
-        button.append(glyph,text);
-        button.addEventListener('click',()=>void listFolders(targetPath));
-        tree.append(button);
-      };
-      tree.replaceChildren();
-      if (data.path) add('Parent folder', data.path.split('/').slice(0,-1).join('/'),true);
-      for (const folder of data.folders) {
-        const child = data.path ? data.path + '/' + folder : folder;
-        add(folder,child);
-      }
+      await revealFolderTree(data.path,request);
     } catch (error) {
-      if (request !== folderLocationRequest || !tree.isConnected) return;
-      tree.replaceChildren();
-      const warning=document.createElement('p');warning.className='muted';
-      warning.textContent=error.message || 'Could not read this folder.';
-      tree.append(warning);
+      if (request!==folderLocationRequest || !tree.isConnected) return;
+      const rights=dialog.querySelector('#new-folder-rights');
+      if (rights) rights.textContent=error.message || 'Cannot read this folder.';
     }
   }
   async function listActionFolders(path) {
@@ -756,6 +841,7 @@
     if (button.hasAttribute("data-open-new-folder")) {
       openDialog("new-folder-dialog");
       const initial = document.querySelector("#new-folder-tree")?.dataset.initialFolder || "";
+      resetFolderTree();
       void listFolders(initial);
       return;
     }
@@ -808,6 +894,9 @@
       if (editing) $("application-delete-index").value = button.dataset.editAppIndex;
       openDialog("application-editor-dialog");
     }
+  });
+  document.addEventListener('click',event=>{
+    if (event.target.closest?.('[data-create-tree-root]')) void listFolders('');
   });
   document.addEventListener("change", event => {
     if (event.target.id === "yrm-folder-volume") void listFolders(event.target.value);
