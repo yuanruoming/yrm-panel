@@ -144,19 +144,14 @@
       console.warn('Files nested folder preview could not load:', error);
     }
   }
-  function navigationTarget(target) {
-    if (!(target instanceof Element) || !target.closest('.fm-explorer') ||
-        target.closest('.explorer-item-menu,details,summary,form,input,textarea,select,[data-open-file],[data-b12-open-file],button,[contenteditable="true"]')) return null;
-    const nested = target.closest('[data-fm-tree-folder]') ||
-      target.closest('.fm-tree-node-header')?.querySelector('[data-fm-tree-folder]');
-    if (nested) return nested;
-    const row = target.closest('tr[data-fm-inline-root]');
-    return row?.dataset.fmInlineRoot ? row.querySelector('[data-fm-inline-folder]') : null;
-  }
+  // Intercept only the exact folder link whose single click must select.
+  // Do not cancel clicks on other links, controls or empty row space: the
+  // existing desktop shell and Files selection handler already own them.
   document.addEventListener('click', event => {
     const target = event.target instanceof Element ? event.target : null;
-    const expand = target?.closest('[data-fm-expand]');
-    if (expand?.closest('.fm-explorer')) {
+    if (!target?.closest('.fm-explorer')) return;
+    const expand = target.closest('[data-fm-expand]');
+    if (expand) {
       if (event.button !== 0) return;
       event.preventDefault();
       const row = expand.closest('tr[data-fm-inline-root]');
@@ -164,15 +159,18 @@
       else void toggleNested(expand);
       return;
     }
-    const anchor = navigationTarget(target);
-    if (anchor?.dataset.fmNavigate !== '1' && event.button === 0 &&
+    const folderLink = target.closest('a[data-fm-inline-folder],a[data-fm-tree-folder]');
+    if (folderLink && folderLink.dataset.fmNavigate !== '1' && event.button === 0 &&
         !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey)
-      event.preventDefault(); // Single click selects. No timers, no navigation.
+      event.preventDefault(); // Only a folder label needs double-click to navigate.
   }, true);
   document.addEventListener('dblclick', event => {
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest('[data-fm-expand]') || event.button !== 0) return;
-    const anchor = navigationTarget(target);
+    if (!target?.closest('.fm-explorer') || event.button !== 0 ||
+        target.closest('[data-fm-expand],.explorer-item-menu,details,summary,form,input,textarea,select,button,[contenteditable="true"]')) return;
+    const anchor = target.closest('a[data-fm-inline-folder],a[data-fm-tree-folder]') ||
+      target.closest('.fm-tree-node-header')?.querySelector('a[data-fm-tree-folder]') ||
+      target.closest('tr[data-fm-inline-root]')?.querySelector('a[data-fm-inline-folder]');
     if (!anchor) return;
     event.preventDefault();
     anchor.dataset.fmNavigate = '1';

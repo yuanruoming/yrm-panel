@@ -120,7 +120,7 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertNotIn('class="fm-location-crumb">Folders', view)
         self.assertIn('yrm-panel:files-storage-open', view)
         self.assertIn('node.dataset.persistDisclosure', actions)
-        self.assertIn("target.closest('[data-fm-tree-folder]')", tree)
+        self.assertIn("target.closest('a[data-fm-inline-folder],a[data-fm-tree-folder]')", tree)
         self.assertIn('fm-root-upload-body', view)
         self.assertIn('data-file-picker="fm-root-upload-file"', view)
         self.assertIn('IsPanelInstallArtifact', model)
@@ -235,9 +235,9 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertIn('fm-folder-chevron-spacer', view)
         self.assertIn("link.dataset.fmTreeFolder = '';", tree)
         self.assertNotIn('fm-tree-toggle', tree)
-        self.assertIn("const row = target.closest('tr[data-fm-inline-root]')", tree)
-        self.assertIn("const nested = target.closest('[data-fm-tree-folder]')", tree)
-        self.assertIn("target?.closest('[data-fm-expand]')", tree)
+        self.assertIn("const row = expand.closest('tr[data-fm-inline-root]')", tree)
+        self.assertIn("target.closest('a[data-fm-inline-folder],a[data-fm-tree-folder]')", tree)
+        self.assertIn("const expand = target.closest('[data-fm-expand]')", tree)
         self.assertIn("document.addEventListener('dblclick'", tree)
         self.assertIn("anchor.click()", tree)
         self.assertNotIn('clickDelay = 240', tree)
@@ -247,6 +247,18 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertNotIn("anchor.dataset.yrmOpenOnDouble", actions)
         self.assertIn('.fm-tree-preview-row>td{padding:0!important;background:transparent!important;', css)
         self.assertIn('user-select:none;', css)
+
+    def test_file_click_interception_is_not_global(self):
+        tree = content('YrmPanel/wwwroot/js/v1-tree-navigation.js')
+        shell = content('YrmPanel/wwwroot/js/panel.js')
+        # Only a folder-label link cancels native single-click navigation.
+        # Other links and the rest of the Panel must reach the shell untouched.
+        self.assertNotIn('function navigationTarget(', tree)
+        self.assertIn("if (!target?.closest('.fm-explorer')) return;", tree)
+        self.assertIn("const folderLink = target.closest('a[data-fm-inline-folder],a[data-fm-tree-folder]')", tree)
+        self.assertIn("if (folderLink && folderLink.dataset.fmNavigate !== '1'", tree)
+        self.assertIn("if (!anchor || event.defaultPrevented", shell)
+        self.assertNotIn('const anchor = navigationTarget(target)', tree)
 
     def test_progressive_files_panel_and_known_installer_remnants(self):
         view = content('YrmPanel/Pages/Files.cshtml')
