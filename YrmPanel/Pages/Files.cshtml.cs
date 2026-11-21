@@ -42,6 +42,40 @@ public sealed class FilesModel : PageModel
     }
     public SambaOverview Samba { get; private set; } = new(false, "Samba unavailable", "", false, []);
     [TempData] public string? Notice { get; set; }
+    public sealed record FileBreadcrumb(string Label, string Route);
+    public IReadOnlyList<FileBreadcrumb> Breadcrumbs
+    {
+        get
+        {
+            var list = new List<FileBreadcrumb>();
+            if (IsMyFolders) { list.Add(new("My Files", FolderHome)); return list; }
+            var absolute = Absolute;
+            var myRoot = MyFiles.Where(x => absolute == x || absolute.StartsWith(x + "/", StringComparison.Ordinal))
+                .OrderByDescending(x => x.Length).FirstOrDefault();
+            string relative;
+            string current;
+            if (myRoot is not null)
+            {
+                list.Add(new("My Files", FolderHome));
+                current = myRoot.TrimStart('/');
+                list.Add(new(System.IO.Path.GetFileName(myRoot), current));
+                relative = absolute == myRoot ? "" : absolute[(myRoot.Length + 1)..];
+            }
+            else
+            {
+                list.Add(new("System Files", "/"));
+                current = "";
+                relative = Path.Trim('/');
+            }
+            foreach (var part in relative.Split('/', StringSplitOptions.RemoveEmptyEntries))
+            {
+                current = string.IsNullOrEmpty(current) ? part : current + "/" + part;
+                list.Add(new(part, current));
+            }
+            return list;
+        }
+    }
+
     public string Parent => string.IsNullOrEmpty(Path) ? FolderHome : FileManagerService.ParentOf(Path);
     public string Absolute => IsMyFolders ? "" : FileManagerService.Absolute(Path);
     public string HomePath => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile).TrimStart('/');
@@ -148,6 +182,30 @@ public sealed class FilesModel : PageModel
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                                       or ArgumentException or NotSupportedException)
         { Notice = "Error: " + FileManagerService.SafeError(ex); return Back(); }
+    }
+
+    public async Task<IActionResult> OnPostBulkDownloadAsync(string[] names)
+    {
+        try
+        {
+            var items = names?.Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.Ordinal).ToArray() ?? [];
+            if (items.Length == 0) return BadRequest("No files selected.");
+            Response.ContentType = "application/zip";
+            Response.Headers["Content-Disposition"] =
+                $"attachment; filename=\"yrm-files-{DateTime.UtcNow:yyyyMMdd-HHmmss}.zip\"";
+            Response.Headers["Cache-Control"] = "private, no-store";
+            await _files.WriteDownloadZipAsync("system", CurrentRelative, items,
+                Response.Body, HttpContext.RequestAborted);
+            return new EmptyResult();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException
+            or NotSupportedException)
+        {
+            if (Response.HasStarted) { HttpContext.Abort(); return new EmptyResult(); }
+            Response.Headers.Remove("Content-Disposition");
+            return BadRequest("Could not prepare download: " + FileManagerService.SafeError(ex));
+        }
     }
 
     public IActionResult OnPostAddExisting(string folderPath)

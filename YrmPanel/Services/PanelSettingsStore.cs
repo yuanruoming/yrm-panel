@@ -120,6 +120,32 @@ public sealed class PanelSettingsStore
         _ => "application/octet-stream"
     };
 
+    private static string WallpaperDigest(string path)
+    {
+        using var file = File.OpenRead(path);
+        return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(file));
+    }
+
+    private IEnumerable<string> StoredWallpaperHistory() =>
+        Directory.Exists(WallpaperHistoryRoot)
+            ? Directory.EnumerateFiles(WallpaperHistoryRoot)
+                .Where(path => IsWallpaperHistoryId(Path.GetFileName(path)) &&
+                    !File.GetAttributes(path).HasFlag(FileAttributes.ReparsePoint))
+            : Enumerable.Empty<string>();
+
+    // Deduplicate by bytes, not names (history filenames contain random GUIDs).
+    // Always keep the newest occurrence and retain the existing 10-image limit.
+    private void PruneWallpaperHistory()
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var path in StoredWallpaperHistory().OrderByDescending(File.GetLastWriteTimeUtc))
+        {
+            if (!seen.Add(WallpaperDigest(path))) File.Delete(path);
+        }
+        foreach (var old in StoredWallpaperHistory().OrderByDescending(File.GetLastWriteTimeUtc).Skip(10))
+            File.Delete(old);
+    }
+
     // Only archive files managed in the existing Panel data directory.
     // No new database, symlink traversal or arbitrary filesystem paths.
     public IReadOnlyList<WallpaperHistoryItem> ListWallpaperHistory()
@@ -127,9 +153,10 @@ public sealed class PanelSettingsStore
         try
         {
             if (!Directory.Exists(WallpaperHistoryRoot)) return [];
-            return Directory.EnumerateFiles(WallpaperHistoryRoot)
-                .Where(path => IsWallpaperHistoryId(Path.GetFileName(path)))
+            return StoredWallpaperHistory()
                 .OrderByDescending(File.GetLastWriteTimeUtc)
+                .GroupBy(WallpaperDigest, StringComparer.Ordinal)
+                .Select(group => group.First())
                 .Take(10)
                 .Select(path => new FileInfo(path))
                 .Select(file => new WallpaperHistoryItem(file.Name,
@@ -157,6 +184,14 @@ public sealed class PanelSettingsStore
         var current = GetWallpaper();
         if (current is null) return null;
         Directory.CreateDirectory(WallpaperHistoryRoot);
+        var digest = WallpaperDigest(current.Value.path);
+        var existing = StoredWallpaperHistory().FirstOrDefault(path => WallpaperDigest(path) == digest);
+        if (existing is not null)
+        {
+            File.SetLastWriteTimeUtc(existing, DateTime.UtcNow);
+            PruneWallpaperHistory();
+            return existing;
+        }
         var extension = Path.GetExtension(current.Value.path);
         var id = DateTime.UtcNow.ToString("yyyyMMddHHmmssfff",
             System.Globalization.CultureInfo.InvariantCulture) + "-" + Guid.NewGuid().ToString("N") + extension;
@@ -164,10 +199,7 @@ public sealed class PanelSettingsStore
         File.Copy(current.Value.path, archive, overwrite: false);
         if (OperatingSystem.IsLinux()) File.SetUnixFileMode(archive,
             UnixFileMode.UserRead | UnixFileMode.UserWrite);
-        foreach (var old in Directory.EnumerateFiles(WallpaperHistoryRoot)
-            .Where(p => IsWallpaperHistoryId(Path.GetFileName(p)))
-            .OrderByDescending(File.GetLastWriteTimeUtc).Skip(10))
-            File.Delete(old);
+        PruneWallpaperHistory();
         return archive;
     }
 
@@ -176,6 +208,8 @@ public sealed class PanelSettingsStore
         var image = FindWallpaperHistoryImage(id)
             ?? throw new InvalidOperationException("Wallpaper history item is unavailable.");
         var bytes = await File.ReadAllBytesAsync(image.Path);
+        // Retain the selected historical image even if the archive reaches 10 items.
+        File.SetLastWriteTimeUtc(image.Path, DateTime.UtcNow);
         using var stream = new MemoryStream(bytes);
         await SetWallpaperAsync(stream, bytes.Length);
     }
@@ -224,6 +258,10 @@ public sealed class PanelSettingsStore
         await _gate.WaitAsync();
         try
         {
+            // Applying an already active image is a no-op, not a new history entry.
+            var current = GetWallpaper();
+            if (current is not null && File.ReadAllBytes(current.Value.path).AsSpan().SequenceEqual(bytes))
+                return;
             var temp = Path.Combine(_root, "wallpaper.upload");
             await File.WriteAllBytesAsync(temp, bytes);
             if (OperatingSystem.IsLinux()) File.SetUnixFileMode(temp,

@@ -30,7 +30,7 @@
   }
 
   // Capture the change event: RC4's old panel.js automatically submitted
-  // wallpaper uploads. RC4.1 intentionally requires a visible Apply action.
+  // wallpaper uploads. The selected valid wallpaper is submitted immediately.
   document.addEventListener('change', event => {
     const field = event.target;
     if (!(field instanceof HTMLInputElement)) return;
@@ -56,6 +56,8 @@
       const preview = id('wallpaper-preview');
       if (preview instanceof HTMLImageElement) preview.src = previewUrl;
       if (apply) apply.disabled = false;
+      // Apply immediately after choosing a valid image; one action, no extra click.
+      field.closest('form')?.requestSubmit();
       return;
     }
     if (field.id === 'fm-upload-file') {

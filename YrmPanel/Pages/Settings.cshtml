@@ -34,7 +34,6 @@
   <div class="server-settings-content">
     @if (activeTab == "overview")
     {
-      
         var overviewVolumes = Model.StorageDevices
           .Where(d => (d.Type is "part" or "disk") && d.Uuid.Length > 0 &&
             new[] { "ext4", "xfs", "btrfs", "vfat", "exfat", "ntfs" }.Contains(d.FileSystem, StringComparer.OrdinalIgnoreCase) &&
@@ -45,7 +44,6 @@
         var primaryAdapter = info.Adapters.FirstOrDefault(a => !Model.IsVirtualAdapter(a.Name) && a.Ipv4.Length > 0)
           ?? info.Adapters.FirstOrDefault(a => !Model.IsVirtualAdapter(a.Name));
         var primaryNet = primaryAdapter is null ? null : Model.GetNetworkDetails(primaryAdapter.Name);
-      
       <div class="yrm-overview-grid" aria-label="Server overview">
         <section class="yrm-overview-card">
           <h3>Device</h3><strong class="yrm-overview-large">@info.Hostname</strong>
@@ -229,7 +227,7 @@
         <section class="yrm-network-interface" aria-label="Network interface @adapter.Name">
           <div class="yrm-network-interface-head">
             <h3>@adapter.Name</h3>
-            <span class="yrm-network-meta">@net.LinkSpeed · MTU @net.Mtu · MAC @net.Mac</span>
+            
           </div>
           <section class="yrm-network-family">
             <h4>IPv4</h4>
@@ -250,15 +248,16 @@
               <div><dt>Gateway</dt><dd>@net.Ipv6Gateway</dd></div>
               <div><dt>DNS</dt><dd>@net.Ipv6Dns</dd></div>
             </dl>
+           </section>
+           <section class="yrm-network-family yrm-network-interface-details">
+             <h4>Interface Details</h4>
+             <dl>
+               <div><dt>Link Speed</dt><dd>@net.LinkSpeed</dd></div>
+               <div><dt>MTU</dt><dd>@net.Mtu</dd></div>
+               <div><dt>MAC Address</dt><dd>@net.Mac</dd></div>
+             </dl>
           </section>
         </section>
-      }
-      @if (info.Adapters.Any(x => Model.IsVirtualAdapter(x.Name)))
-      {
-        <details class="yrm-network-virtual"><summary>Virtual &amp; secondary interfaces (@info.Adapters.Count(x => Model.IsVirtualAdapter(x.Name)))</summary>
-          @foreach (var adapter in info.Adapters.Where(x => Model.IsVirtualAdapter(x.Name)))
-          { <div class="yrm-network-virtual-row"><strong>@adapter.Name</strong><span>@string.Join(", ", adapter.Ipv4.Concat(adapter.Ipv6))</span></div> }
-        </details>
       }
       @if (info.Adapters.Count == 0) { <p class="muted">No network interfaces detected.</p> }
       </div>
@@ -592,7 +591,7 @@
           <form method="post" asp-page-handler="Wallpaper" asp-route-tab="appearance" enctype="multipart/form-data" id="wallpaper-upload-form" class="wallpaper-upload-actions">
             <input type="file" name="wallpaper" id="wallpaper-select" class="fm-visually-hidden" accept="image/jpeg,image/png,image/webp" required/>
             <button type="button" class="button button-secondary wallpaper-choose" data-file-picker="wallpaper-select">Choose Image</button>
-            <button id="wallpaper-apply" type="submit" class="button button-primary" disabled>Apply</button>
+            <button id="wallpaper-apply" type="submit" hidden style="display:none" disabled>Apply</button>
           </form>
           <form method="post" asp-page-handler="ClearWallpaper" asp-route-tab="appearance" class="wallpaper-reset-form">
             <button type="submit" class="button button-secondary">Restore Default</button>
@@ -622,7 +621,8 @@
     {
 
       <section class="yrm-flat-panel settings-update-card">
-        <div class="settings-row-top"><h3>Updates</h3><span class="tag">@Model.UpdateChannel</span></div>
+        <div class="settings-row-top"><h3>Updates</h3></div>
+        <div class="yrm-updates-current"><span>Current Version</span><strong>@info.PanelVersion.Split('+')[0]</strong></div>
         @if (Model.LastUpdateCheck?.HasUpdate == true)
         {
           <div class="yrm-update-available">

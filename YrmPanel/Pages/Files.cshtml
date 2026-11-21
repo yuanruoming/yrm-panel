@@ -25,10 +25,19 @@
       {
         var relative = folderPath.TrimStart('/');
         var displayName = System.IO.Path.GetFileName(folderPath);
-        <a class="fm-location-link fm-location-child @(Model.Path == relative && (Model.HttpContext.Request.Query["nav"] == "library") ? "is-active" : "")"
-           asp-page="/Files" asp-route-path="@relative" asp-route-nav="library">
-          <svg class="ui-icon"><use href="#i-folder"/></svg><span>@displayName</span>
-        </a>
+        <div class="fm-tree-node" data-fm-tree-root="@relative">
+          <div class="fm-tree-node-header">
+            <button type="button" class="fm-tree-toggle" data-fm-tree-toggle data-fm-tree-path="@relative"
+                    aria-expanded="false" aria-label="Expand @displayName">
+              <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+            </button>
+            <a class="fm-location-link fm-location-child @(Model.Path == relative && (Model.HttpContext.Request.Query["nav"] == "library") ? "is-active" : "")"
+               asp-page="/Files" asp-route-path="@relative" asp-route-nav="library">
+              <svg class="ui-icon"><use href="#i-folder"/></svg><span>@displayName</span>
+            </a>
+          </div>
+          <div class="fm-tree-descendants" hidden></div>
+        </div>
       }
       </div>
       <div class="yrm-b10-nav-divider"></div>
@@ -73,10 +82,22 @@
       </details>
     </aside>
     <div class="fm-content">
+      <div class="explorer-path-row fm-unified-path" aria-label="File location">
+        <button class="mini-button fm-history-back" type="button" data-fm-history-back
+                disabled="@Model.IsMyFolders" title="Back to the previous folder">Back</button>
+        <nav class="fm-breadcrumbs" aria-label="Folder breadcrumb">
+          @foreach (var crumb in Model.Breadcrumbs)
+          {
+            @if (crumb != Model.Breadcrumbs.First())
+            { <svg class="ui-icon fm-crumb-chevron" aria-hidden="true"><use href="#i-chevron"/></svg> }
+            <a asp-page="/Files" asp-route-path="@crumb.Route" asp-route-hidden="@Model.Hidden">@crumb.Label</a>
+          }
+        </nav>
+      </div>
       @if (Model.IsMyFolders)
       {
         <div class="fm-page-title">
-          <div class="fm-location-crumb">My Files</div>
+          <div class="fm-location-crumb">Folders</div>
           <div class="fm-action-row">
             <button type="button" class="button button-primary" data-open-new-folder>＋ New Folder</button>
           </div>
@@ -103,8 +124,12 @@
               var exists = System.IO.Directory.Exists(folderPath);
               var relative = folderPath.TrimStart('/');
               var matching = shared.FirstOrDefault(x => string.Equals(x.Path, folderPath, StringComparison.Ordinal));
-              <tr>
+              <tr data-fm-inline-root="@relative">
                 <td class="explorer-name">
+                  <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@relative"
+                          aria-label="Expand @name" aria-expanded="false" title="Preview subfolders">
+                    <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+                  </button>
                   <a asp-page="/Files" asp-route-path="@relative"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@name</span></a>
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared">Shared</small> }
                 </td>
@@ -155,12 +180,6 @@
       }
       else
       {
-        <div class="explorer-path-row">
-          <a class="mini-button" asp-page="/Files" asp-route-path="@Model.Parent" asp-route-hidden="@Model.Hidden" aria-label="Parent folder">←</a>
-          <a class="mini-button" asp-page="/Files" asp-route-path="/" title="Filesystem root" aria-label="Filesystem root">⌂</a>
-          <div class="explorer-address"><strong>/</strong>@Model.Path</div>
-          <a class="mini-button" asp-page="/Files" asp-route-path="@currentRoute" asp-route-hidden="@Model.Hidden" aria-label="Refresh">↻</a>
-        </div>
         <div class="explorer-toolbar fm-compact-toolbar">
           <button type="button" class="button button-secondary" data-open-new-folder>＋ New Folder</button>
           @if (Model.View.Available && Model.View.CanWrite)
@@ -188,6 +207,10 @@
             <button type="button" class="button button-danger" data-b10-file-delete disabled>Delete</button>
           </div>
           }
+          <form method="post" asp-page-handler="BulkDownload" asp-route-path="@currentRoute"
+                data-bulk-download-form hidden>
+            <button type="submit">Download selected items as ZIP</button>
+          </form>
           <form method="post" asp-page-handler="BulkDelete" asp-route-path="@currentRoute"
                 data-bulk-delete-form data-confirm="Delete selected items? This cannot be undone." hidden>
             <button type="submit">Confirm delete</button>
@@ -209,10 +232,15 @@
               var matching = shared.FirstOrDefault(x => string.Equals(x.Path, absolute, StringComparison.Ordinal));
               var canShare = item.IsDirectory && FileAccess.IsManaged(absolute);
               var canEnable = item.IsDirectory && FileAccess.CanEnable(absolute) && !canShare;
-              <tr data-b10-file-row data-b10-filename="@item.Name" aria-selected="false" tabindex="0">
+              <tr data-b10-file-row data-b10-filename="@item.Name" data-fm-inline-root="@(item.IsDirectory ? child : "")"
+                  aria-selected="false" tabindex="0">
                 <td class="explorer-name">
                   @if (item.IsDirectory)
-                  { <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
+                  { <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@child"
+                              aria-label="Expand @item.Name" aria-expanded="false" title="Preview subfolders">
+                        <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+                      </button>
+                      <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a> }
                   else { <span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" >@item.Name</button> }
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared folder">Shared</small> }
                 </td>

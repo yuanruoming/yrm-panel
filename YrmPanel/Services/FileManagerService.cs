@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 
 namespace YrmPanel.Services;
@@ -313,6 +314,76 @@ public sealed class FileManagerService
             File.Move(temp, target, replace);
         }
         finally { if (File.Exists(temp)) File.Delete(temp); }
+    }
+
+    /// <summary>
+    /// Stream one ZIP for an explicit selection; do not buffer the archive in memory.
+    /// Validate all entries before starting the response; reject symlinks and
+    /// directories spanning nested mounts. Never modify the source files.
+    /// </summary>
+    public async Task WriteDownloadZipAsync(string root, string? relative,
+        IReadOnlyList<string> names, Stream output, CancellationToken ct)
+    {
+        if (names.Count == 0 || names.Count > 200)
+            throw new ArgumentException("Select between 1 and 200 items for a ZIP download.");
+        var parent = Resolve(root, relative, true);
+        if (!Directory.Exists(parent)) throw new IOException("Source folder is unavailable.");
+        var queue = new Queue<(string Full, string ZipName)>();
+        foreach (var name in names.Distinct(StringComparer.Ordinal))
+        {
+            ValidateName(name);
+            var source = Resolve(root, Combine(relative, name), true);
+            queue.Enqueue((source, name));
+        }
+        var prepared = new List<(string Full, string Name, bool Directory)>();
+        // Read mountinfo once, before writing headers, to avoid creating a ZIP
+        // that silently includes an unrelated filesystem mounted inside a folder.
+        var nestedMounts = new HashSet<string>(StringComparer.Ordinal);
+        if (OperatingSystem.IsLinux())
+        {
+            foreach (var line in File.ReadLines("/proc/self/mountinfo"))
+            {
+                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length < 5) continue;
+                nestedMounts.Add(parts[4].Replace("\\040", " ").Replace("\\011", "\t")
+                    .Replace("\\012", "\n").Replace("\\134", "\\"));
+            }
+        }
+        while (queue.Count > 0)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (prepared.Count + queue.Count > 20000)
+                throw new IOException("Too many files to download together.");
+            var (full, zipName) = queue.Dequeue();
+            var attrs = File.GetAttributes(full);
+            if (attrs.HasFlag(FileAttributes.ReparsePoint))
+                throw new UnauthorizedAccessException("ZIP downloads do not follow symbolic links.");
+            var directory = attrs.HasFlag(FileAttributes.Directory);
+            if (directory && nestedMounts.Any(m => m.StartsWith(full + "/", StringComparison.Ordinal)))
+                throw new IOException("This folder contains another mounted filesystem. Choose its files separately.");
+            // ZIP paths always use slash separators and are relative to the selection.
+            prepared.Add((full, directory ? zipName + "/" : zipName, directory));
+            if (directory)
+            {
+                foreach (var child in Directory.EnumerateFileSystemEntries(full))
+                {
+                    var childName = Path.GetFileName(child);
+                    ValidateName(childName);
+                    queue.Enqueue((child, zipName + "/" + childName));
+                }
+            }
+        }
+        using var zip = new ZipArchive(output, ZipArchiveMode.Create, leaveOpen: true);
+        foreach (var (full, name, directory) in prepared)
+        {
+            ct.ThrowIfCancellationRequested();
+            var entry = zip.CreateEntry(name, CompressionLevel.Fastest);
+            if (directory) continue;
+            await using var input = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read,
+                1024 * 128, FileOptions.Asynchronous | FileOptions.SequentialScan);
+            using var target = entry.Open();
+            await input.CopyToAsync(target, ct);
+        }
     }
 
     public (FileStream Stream, string Name) OpenDownload(string root, string? relative, string name)

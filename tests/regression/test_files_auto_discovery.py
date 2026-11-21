@@ -24,10 +24,11 @@ class MyFilesContracts(unittest.TestCase):
         self.assertIn('asp-page-handler="PinFolder"',view)
         self.assertIn('IsMyFilesEntryAsync(absolute)',handler)
         self.assertIn('AssertNoSharesAsync(absolute)',handler)
-    def test_no_duplicate_files_page_heading(self):
+    def test_files_home_has_the_same_breadcrumb_as_nested_folders(self):
         view=source('YrmPanel/Pages/Files.cshtml')
         self.assertNotIn('<h1>Files',view)
-        self.assertIn('class="fm-location-crumb">My Files',view)
-        self.assertNotIn('class="fm-locations-heading">FILES',view)
+        self.assertIn('class="fm-breadcrumbs"',view)
+        self.assertIn('data-fm-history-back',view)
         self.assertIn('data-my-files-toggle',view)
+        self.assertNotIn('class="fm-locations-heading">FILES',view)
 if __name__=='__main__':unittest.main()

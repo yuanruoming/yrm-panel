@@ -366,6 +366,47 @@
       applyWindowBounds();
     });
   }
+  // Eight-direction resize; the native bottom-right CSS grip is disabled.
+  // Geometry remains owned by the existing windowBounds controller.
+  if(appWindow && stage){
+    for(const edge of ['n','ne','e','se','s','sw','w','nw']){
+      const handle=document.createElement('div');handle.className='yrm-resize-handle';
+      handle.dataset.edge=edge;handle.setAttribute('aria-hidden','true');appWindow.append(handle);
+      handle.addEventListener('pointerdown',event=>{
+        if(event.button!==0||!activeUrl||appWindow.classList.contains('is-maximized'))return;
+        const start=readWindowBounds();if(!start)return;
+        const original={x:event.clientX,y:event.clientY};
+        handle.setPointerCapture(event.pointerId);
+        const move=e=>{
+          const bounds=availableSpace();
+          const dx=e.clientX-original.x,dy=e.clientY-original.y;
+          const minW=Math.min(420,bounds.width),minH=Math.min(290,bounds.height);
+          let {left,top,width,height}=start;
+          if(edge.includes('e'))width=Math.max(minW,Math.min(bounds.width-left,start.width+dx));
+          if(edge.includes('s'))height=Math.max(minH,Math.min(bounds.height-top,start.height+dy));
+          if(edge.includes('w')){
+            left=Math.max(0,Math.min(start.left+start.width-minW,start.left+dx));
+            width=start.width+start.left-left;
+          }
+          if(edge.includes('n')){
+            top=Math.max(0,Math.min(start.top+start.height-minH,start.top+dy));
+            height=start.height+start.top-top;
+          }
+          Object.entries({left,top,width,height}).forEach(([k,v])=>appWindow.style[k]=Math.round(v)+'px');
+        };
+        const end=()=>{
+          handle.removeEventListener('pointermove',move);
+          handle.removeEventListener('pointerup',end);
+          handle.removeEventListener('pointercancel',end);
+          storeWindowBounds();
+        };
+        handle.addEventListener('pointermove',move);
+        handle.addEventListener('pointerup',end);
+        handle.addEventListener('pointercancel',end);
+        event.preventDefault();event.stopPropagation();
+      });
+    }
+  }
   // BETA12.1 notification center: single-admin browser history, bounded and
   // deduplicated by origin/message. Never store credentials or authorization data.
   const notificationKey='yrm-panel:notifications-v1';
@@ -793,9 +834,31 @@
     const oldContent=oldRoot.querySelector(contentSelector), newContent=newRoot.querySelector(contentSelector);
     const oldNav=oldRoot.querySelector(navSelector), newNav=newRoot.querySelector(navSelector);
     if (!oldContent || !newContent || !oldNav || !newNav) return false;
-    // Update selection highlighting, not the actual navigation elements.
+    // Keep expanded tree DOM, but reconcile newly created/removed top-level
+    // My Files roots. Do not replace the whole sidebar on each navigation.
+    if(incoming==='/Files'){
+      const oldFolders=oldNav.querySelector('#yrm-my-files-children');
+      const freshFolders=newNav.querySelector('#yrm-my-files-children');
+      if(oldFolders&&freshFolders){
+        const oldByPath=new Map(Array.from(oldFolders.querySelectorAll(':scope > [data-fm-tree-root]'),
+          node=>[node.dataset.fmTreeRoot,node]));
+        const ordered=Array.from(freshFolders.querySelectorAll(':scope > [data-fm-tree-root]'),node=>{
+          return oldByPath.get(node.dataset.fmTreeRoot)||document.importNode(node,true);
+        });
+        oldFolders.replaceChildren(...ordered);
+      }
+      const oldQuick=oldNav.querySelector('.yrm-b10-quick-links');
+      const freshQuick=newNav.querySelector('.yrm-b10-quick-links');
+      if(oldQuick&&freshQuick&&oldQuick.textContent!==freshQuick.textContent)
+        oldQuick.replaceChildren(...Array.from(freshQuick.childNodes,node=>document.importNode(node,true)));
+    }
     const selected=new Set(Array.from(newNav.querySelectorAll('a.is-active'),a=>a.getAttribute('href')));
-    oldNav.querySelectorAll('a').forEach(link=>link.classList.toggle('is-active',selected.has(link.getAttribute('href'))));
+    const requestedPath=incoming==='/Files'?new URL(targetUrl,location.origin).searchParams.get('path'):null;
+    oldNav.querySelectorAll('a').forEach(link=>{
+      const linkPath=incoming==='/Files'?new URL(link.href,location.origin).searchParams.get('path'):null;
+      link.classList.toggle('is-active',selected.has(link.getAttribute('href'))||
+        (requestedPath!==null&&requestedPath!=='@folders'&&linkPath===requestedPath));
+    });
     oldContent.replaceWith(document.importNode(newContent,true));
     // Replace route-sensitive dialogs and notices, keeping the original sidebar.
     for (const child of Array.from(page.children)) if (child !== oldRoot) child.remove();
@@ -806,6 +869,7 @@
     return true;
   }
   async function loadPage(url, refresh = false, push = true) {
+    const previousRoute = activeUrl;
     const token = ++navigationId;
     const sameWorkspace = !!activeUrl && ["/Files","/Settings"].includes(canonicalPath(url.split("?")[0])) &&
       canonicalPath(activeUrl.split("?")[0]) === canonicalPath(url.split("?")[0]);
@@ -849,7 +913,7 @@
       setPageShell(false, title);
       renderTabs();
       closePopup(launcher, launcherButton);
-      if (push) history.pushState({yrmPanelRoute:url}, "", "/");
+      if (push) history.pushState({yrmPanelRoute:url,yrmPrevRoute:previousRoute}, "", "/");
     } catch (error) {
       if (token === navigationId) errorToast(`Could not open application: ${error.message}`);
     } finally {
@@ -925,6 +989,17 @@
     const refresh = url === activeUrl && !!anchor.closest("#window-page");
     void openPage(url, {refresh});
   });
+  document.addEventListener('click',event=>{
+    const button=event.target instanceof Element?event.target.closest('[data-fm-history-back]'):null;
+    if(!button)return;
+    event.preventDefault();
+    const previous=history.state?.yrmPrevRoute;
+    if(typeof previous==='string'&&canonicalPath(previous.split('?')[0])==='/Files'){
+      history.back();
+    }else if(activeUrl?.startsWith('/Files')){
+      void openPage('/Files?path=%40folders');
+    }
+  });
   window.addEventListener("popstate", event => {
     const url = event.state?.yrmPanelRoute;
     if (!url) showDesktop(false);
@@ -937,6 +1012,7 @@
   document.addEventListener("submit", async (event) => {
     const form = event.target;
     if (!(form instanceof HTMLFormElement) || !form.closest("#window-page")) return;
+    if (form.hasAttribute('data-bulk-download-form')) return;
     if (form.method.toLowerCase() !== "post" || !activeUrl || !form.reportValidity()) return;
     const action = new URL(form.action, location.href);
     if (action.origin !== location.origin || !internalUrl(action.href)) return;

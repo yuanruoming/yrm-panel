@@ -126,21 +126,11 @@ public sealed class SettingsModel : PageModel
             var v6 = props.UnicastAddresses.FirstOrDefault(x =>
                 x.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6 &&
                 !x.Address.IsIPv6LinkLocal);
-            var dhcp = "Unknown";
-            try { dhcp = props.GetIPv4Properties()?.IsDhcpEnabled == true ? "DHCP" : "Static / Other"; }
-            catch (Exception ex) when (ex is PlatformNotSupportedException or System.Net.NetworkInformation.NetworkInformationException) { }
-            var ipv6Mode = "Unknown";
-            try
-            {
-                ipv6Mode = v6?.PrefixOrigin switch
-                {
-                    System.Net.NetworkInformation.PrefixOrigin.Dhcp => "DHCPv6",
-                    System.Net.NetworkInformation.PrefixOrigin.RouterAdvertisement => "SLAAC",
-                    System.Net.NetworkInformation.PrefixOrigin.Manual => "Static",
-                    _ => "Unknown"
-                };
-            }
-            catch (PlatformNotSupportedException) { }
+            // Linux does not support the Windows-only .NET DHCP/PrefixOrigin properties.
+            // Read systemd-networkd/NetworkManager configuration without modifying it.
+            var configured = NetworkConfigurationReader.Read(name);
+            var dhcp = configured.Ipv4Mode;
+            var ipv6Mode = configured.Ipv6Mode;
             static string FirstAddress(System.Net.NetworkInformation.IPAddressCollection addresses,
                 System.Net.Sockets.AddressFamily family) => addresses.FirstOrDefault(x => x.AddressFamily == family)?.ToString() ?? "—";
             var macBytes = nic.GetPhysicalAddress().GetAddressBytes();
@@ -155,9 +145,9 @@ public sealed class SettingsModel : PageModel
             var ipv6Gateway = props.GatewayAddresses.FirstOrDefault(x =>
                 x.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)?.Address.ToString() ?? na;
             return new NetworkDetails(dhcp, v4?.IPv4Mask?.ToString() ?? na, ipv4Gateway,
-                FirstAddress(props.DnsAddresses, System.Net.Sockets.AddressFamily.InterNetwork),
+                (configured.Ipv4Dns.Length > 0 ? configured.Ipv4Dns : FirstAddress(props.DnsAddresses, System.Net.Sockets.AddressFamily.InterNetwork)),
                 ipv6Mode, v6 is null ? na : v6.PrefixLength.ToString(), ipv6Gateway,
-                FirstAddress(props.DnsAddresses, System.Net.Sockets.AddressFamily.InterNetworkV6), mac, speed, mtu);
+                (configured.Ipv6Dns.Length > 0 ? configured.Ipv6Dns : FirstAddress(props.DnsAddresses, System.Net.Sockets.AddressFamily.InterNetworkV6)), mac, speed, mtu);
         }
         catch (Exception ex) when (ex is System.Net.NetworkInformation.NetworkInformationException or
             PlatformNotSupportedException or InvalidOperationException or UnauthorizedAccessException)

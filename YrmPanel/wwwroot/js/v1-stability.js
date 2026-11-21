@@ -203,8 +203,9 @@
     const rename=toolbar.querySelector('[data-b10-file-rename]');
     if(rename)rename.disabled=current.length!==1||!writable;
     const download=toolbar.querySelector('[data-b12-file-download]');
-    if(download){download.disabled=current.length!==1||!current[0]?.querySelector('a[data-native-download]');
-      download.title=current.length>1?'Download is currently single-file only.':'';}
+    if(download){download.disabled=current.length===0;
+      download.title=current.length===1&&current[0]?.querySelector('a[data-native-download]')?
+        'Download selected file':'Download selected items as one ZIP';}
   }
   function setFileSelection(row,{toggle=false,range=false,add=false}={}){
     const rows=fileRows();
@@ -224,7 +225,7 @@
     const target=event.target;
     if (!(target instanceof Element))return;
     const row=target.closest('[data-b10-file-row]');
-    if(row&&!target.closest('.explorer-item-menu,form,details,summary,input')){
+    if(row&&!target.closest('.explorer-item-menu,form,details,summary,input,[data-fm-inline-toggle]')){
       setFileSelection(row,{toggle:event.ctrlKey||event.metaKey,range:event.shiftKey,add:event.ctrlKey||event.metaKey});
       return;
     }
@@ -233,7 +234,21 @@
     const selected=selectedRows();
     if(!action||!selected.length)return;
     const first=selected[0];
-    if(action.matches('[data-b12-file-download]'))first.querySelector('a[data-native-download]')?.click();
+    if(action.matches('[data-b12-file-download]')){
+      if(selected.length===1&&first.querySelector('a[data-native-download]')){
+        first.querySelector('a[data-native-download]').click();
+      }else{
+        const form=document.querySelector('[data-bulk-download-form]');
+        if(form instanceof HTMLFormElement){
+          form.querySelectorAll('input[name="names"]').forEach(node=>node.remove());
+          for(const name of bulkNames()){
+            const input=document.createElement('input');input.type='hidden';input.name='names';input.value=name;form.append(input);
+          }
+          form.requestSubmit();
+        }
+      }
+      return;
+    }
     if(action.matches('[data-b10-file-rename]')&&selected.length===1)first.querySelector('[data-rename-item]')?.click();
     if(action.matches('[data-b10-file-delete]')){
       const form=document.querySelector('[data-bulk-delete-form]');
