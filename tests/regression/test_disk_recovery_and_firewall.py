@@ -119,7 +119,14 @@ class UiIntegration(TestCase):
         self.assertIn('@if (Model.CanSelectStorage)',files)
         self.assertIn('Storage disk',files)
         self.assertNotIn('Double-click to open',files)
-        self.assertNotIn('No file selected',files)
+        # The upload picker is custom-styled, with a hidden native file input.
+        # "No file selected" is an intentional status message until a file is chosen.
+        self.assertIn('class="fm-visually-hidden" id="fm-root-upload-file" type="file"',files)
+        self.assertIn('data-file-picker="fm-root-upload-file"',files)
+        self.assertIn('id="fm-root-upload-name" class="muted" aria-live="polite"',files)
+        picker_js=source('YrmPanel/wwwroot/js/rc41-ui.js')
+        self.assertIn("field.id === 'fm-upload-file' || field.id === 'fm-root-upload-file'",picker_js)
+        self.assertIn("field.files?.[0]?.name || 'No file selected'",picker_js)
         self.assertIn('var fixedLocation = returnTo != FolderHome',model)
     def test_image_only_shows_after_decode_and_private_revalidation(self):
         js=source('YrmPanel/wwwroot/js/v1-files.js')

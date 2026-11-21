@@ -58,7 +58,13 @@ class LayoutTests(unittest.TestCase):
         self.assertNotIn('open="@(!Model.IsMyFolders)"',view)
         self.assertIn('id="yrm-folder-volume"',view)
         self.assertIn('MountedVolumes',model)
-        self.assertIn('sessionStorage.setItem(fileNavKey',js)
+        # Storage/System Files <details> retain disclosure state across DOM refreshes.
+        self.assertIn('data-persist-disclosure', view)
+        self.assertIn('disclosureState.set(key,node.open)',js)
+        self.assertIn('sessionStorage.setItem(key,node.open',js)
+        # My Files uses its own key, separate from the generic disclosure state.
+        self.assertIn("const myFilesTreeKey='yrm-panel:files-nav-open'",js)
+        self.assertIn('sessionStorage.setItem(myFilesTreeKey',js)
     def test_disk_rows_identified_by_actual_parent_device(self):
         service=source('YrmPanel/Services/StorageDeviceService.cs')
         view=source('YrmPanel/Pages/Settings.cshtml')
