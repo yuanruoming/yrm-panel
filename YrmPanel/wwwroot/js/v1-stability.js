@@ -235,7 +235,7 @@
     const target=event.target;
     if (!(target instanceof Element))return;
     const row=target.closest('[data-b10-file-row]');
-    if(row&&!target.closest('.explorer-item-menu,form,details,summary,input,[data-fm-inline-toggle]')){
+    if(row&&!target.closest('.explorer-item-menu,form,details,summary,input,textarea,select')){
       setFileSelection(row,{toggle:event.ctrlKey||event.metaKey,range:event.shiftKey,add:event.ctrlKey||event.metaKey});
       return;
     }
@@ -312,24 +312,8 @@
   });
   selectionObserver.observe(document.body,{childList:true,subtree:true});
 
-  // fnOS-style: click selects a folder; double-click enters it.
-  document.addEventListener('click',event=>{
-    const node=event.target instanceof Element?event.target:null;
-    const anchor=node?.closest('[data-b10-file-row] td.explorer-name a[href]');
-    if(!anchor || anchor.dataset.yrmOpenOnDouble==='1')return;
-    event.preventDefault();
-    event.stopPropagation();
-    // Row selection was already handled; suppress single-click navigation.
-  },true);
-  document.addEventListener('dblclick',event=>{
-    const node=event.target instanceof Element?event.target:null;
-    const anchor=node?.closest('[data-b10-file-row] td.explorer-name a[href]');
-    if(!anchor)return;
-    event.preventDefault();
-    anchor.dataset.yrmOpenOnDouble='1';
-    anchor.click();
-    delete anchor.dataset.yrmOpenOnDouble;
-  },true);
+  // Folder click and double-click are handled only by v1-tree-navigation.js.
+  // File selection, row actions, and their existing controls remain here.
 
   // Native Files context and More share the existing source action buttons.
   // Properties are read-only; they do not request administrator privileges.
@@ -680,8 +664,8 @@
   const fwObserver=new MutationObserver(initializeFirewall);
   fwObserver.observe(document.body,{childList:true,subtree:true});initializeFirewall();
 
-  /* My Files: collapsed by default; only the arrow toggles the folder tree.
-     The label itself always opens the My Files overview. */
+  /* My Files: one static folder icon, one full-width surface.
+     Single click toggles the list; double click opens My Files. */
   const myFilesTreeKey='yrm-panel:files-nav-open';
   function syncMyFilesTree(){
     const button=document.querySelector('[data-my-files-toggle]');
@@ -692,14 +676,41 @@
     button.setAttribute('aria-expanded',String(expanded));
     button.setAttribute('aria-label',expanded?'Collapse My Files':'Expand My Files');
   }
-  document.addEventListener('click',event=>{
-    const button=event.target instanceof Element?event.target.closest('[data-my-files-toggle]'):null;
-    if(!button)return;
+  let myFilesClickTimer=null;
+  function toggleMyFiles(button){
+    if(!button.isConnected)return;
     const expanded=button.getAttribute('aria-expanded')!=='true';
-    const children=document.getElementById('yrm-my-files-children');if(children)children.hidden=!expanded;
+    const children=document.getElementById('yrm-my-files-children');
+    if(children)children.hidden=!expanded;
     button.setAttribute('aria-expanded',String(expanded));
     button.setAttribute('aria-label',expanded?'Collapse My Files':'Expand My Files');
     try{sessionStorage.setItem(myFilesTreeKey,expanded?'1':'0');}catch{}
+  }
+  function cancelMyFilesClick(){
+    if(myFilesClickTimer!==null)clearTimeout(myFilesClickTimer);
+    myFilesClickTimer=null;
+  }
+  document.addEventListener('click',event=>{
+    const button=event.target instanceof Element?event.target.closest('[data-my-files-toggle]'):null;
+    if(!button||button.dataset.fmNavigate==='1')return;
+    if(event.button!==0||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+    event.preventDefault();
+    cancelMyFilesClick();
+    if(event.detail>1)return;
+    if(!event.detail){toggleMyFiles(button);return;}
+    myFilesClickTimer=setTimeout(()=>{myFilesClickTimer=null;toggleMyFiles(button);},240);
+  },true);
+  document.addEventListener('dblclick',event=>{
+    const button=event.target instanceof Element?event.target.closest('[data-my-files-toggle]'):null;
+    if(!button||event.button!==0)return;
+    event.preventDefault();cancelMyFilesClick();
+    button.dataset.fmNavigate='1';
+    try{button.click();}finally{delete button.dataset.fmNavigate;}
+  },true);
+  document.addEventListener('keydown',event=>{
+    const button=event.target instanceof Element?event.target.closest('[data-my-files-toggle]'):null;
+    if(!button||event.target!==button||event.key!==' ')return;
+    event.preventDefault();cancelMyFilesClick();toggleMyFiles(button);
   },true);
   new MutationObserver(syncMyFilesTree).observe(document.body,{childList:true,subtree:true});
   syncMyFilesTree();

@@ -441,8 +441,6 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .fm-my-files-header>.fm-location-link{flex:1;min-width:0;}
 .fm-my-files-toggle{background:transparent;color:#b9c7d7;border:0;cursor:pointer;display:grid;place-items:center;width:23px;height:31px;flex:none;border-radius:5px;}
 .fm-my-files-toggle:hover{background:#363b44;}
-.fm-my-files-toggle .ui-icon{width:14px;height:14px;transition:transform .14s;}
-.fm-my-files-toggle[aria-expanded=true] .fm-my-files-chevron{transform:rotate(90deg);}
 .fm-my-files-children{padding-left:12px;max-height:min(400px,42vh);overflow:auto;}
 .fm-my-files-children[hidden]{display:none!important;}
 .fm-location-crumb{font-weight:600;font-size:14px;color:#e6e8ec;}
@@ -889,10 +887,6 @@ body.is-desktop .workspace-stage{display:none!important;}
 .fm-crumb-chevron{width:12px;height:12px;flex-shrink:0;opacity:.55;}
 .fm-history-back{white-space:nowrap;min-width:52px;font-size:12px;}
 .fm-history-back:disabled{opacity:.35;cursor:default;}
-.fm-inline-toggle,.fm-tree-toggle{display:inline-flex;align-items:center;justify-content:center;flex:0 0 22px;width:22px;height:26px;padding:3px;color:#aab8c8;background:transparent;border:0;border-radius:5px;cursor:pointer;vertical-align:middle;}
-.fm-inline-toggle:hover,.fm-tree-toggle:hover{background:#38465a;color:#fff;}
-.fm-inline-toggle .ui-icon,.fm-tree-toggle .ui-icon{width:14px;height:14px;transition:transform .15s ease;}
-.fm-inline-toggle[aria-expanded="true"] .ui-icon,.fm-tree-toggle[aria-expanded="true"] .ui-icon{transform:rotate(90deg);}
 .fm-tree-node{min-width:0;}
 .fm-tree-node-header{display:flex;align-items:center;min-width:0;}
 .fm-tree-node-header>.fm-location-link{flex:1;min-width:0;}
@@ -973,7 +967,6 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-network-interface-details{padding-top:11px;padding-bottom:11px;}
 .yrm-network-interface-details dl>div{gap:4px;}
 /* File browser: consistent full-width selection/hover and natural inline chevrons. */
-.fm-inline-toggle-spacer{display:inline-flex;flex:0 0 22px;width:22px;height:26px;vertical-align:middle;}
 .fm-explorer .explorer-table tbody tr[data-b10-file-row]:hover>td,
 .fm-explorer .explorer-table tbody tr[data-b10-file-row]:focus-within>td{background:rgba(100,146,199,.12);}
 .fm-explorer .explorer-table tbody tr[data-b10-file-row].is-selected>td{background:#334155!important;}
@@ -981,7 +974,6 @@ body.is-desktop .workspace-stage{display:none!important;}
 .fm-explorer .fm-tree-node-header{border-radius:5px;min-height:30px;}
 .fm-explorer .fm-tree-node-header:hover{background:transparent;}
 .fm-explorer .fm-tree-node-header>.fm-location-link{width:100%;min-height:29px;}
-.fm-explorer .fm-inline-toggle:hover,.fm-explorer .fm-tree-toggle:hover{background:transparent;color:#d8e9ff;}
 .fm-explorer .fm-history-back,.fm-explorer .fm-history-refresh{display:inline-grid;place-items:center;flex-shrink:0;
   padding:5px;width:30px;min-width:30px;height:30px;text-decoration:none;border-radius:6px;}
 .fm-explorer .fm-history-back .ui-icon,.fm-explorer .fm-history-refresh .ui-icon{width:17px;height:17px;}
@@ -1023,28 +1015,23 @@ body.is-desktop .workspace-stage{display:none!important;}
  .yrm-overview-timing>div{grid-template-columns:82px 1fr;}
 }
 
-/* Cohesive Files sidebar: My Files is one full-width disclosure surface. */
-.fm-explorer .fm-my-files-header{display:flex;align-items:center;gap:0;border-radius:7px;overflow:hidden;}
-.fm-explorer .fm-my-files-header .fm-my-files-toggle{
-  flex:0 0 25px;display:grid;place-items:center;width:25px;height:36px;min-height:36px;
-  padding:0;border:0;border-radius:7px 0 0 7px;color:#8bbedc;background:transparent;
+/* My Files is one static-icon surface, not separate arrow and folder controls. */
+.fm-explorer .fm-my-files-header{display:block;min-width:0;border-radius:7px;overflow:hidden;}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-my-files-home{
+  display:flex;align-items:center;gap:9px;width:100%;min-height:36px;height:36px;
+  padding:0 10px;box-sizing:border-box;border:0;border-radius:7px;
+  color:#e4ebf5;background:transparent;text-align:left;text-decoration:none;
+  cursor:pointer;white-space:nowrap;
 }
-.fm-explorer .fm-my-files-header .fm-my-files-toggle:hover{background:transparent;}
-.fm-explorer .fm-my-files-header .fm-my-files-toggle .fm-my-files-chevron{
-  width:14px;height:14px;transition:transform .14s ease;transform-origin:center;
-}
-.fm-explorer .fm-my-files-header .fm-my-files-home{
-  display:flex;align-items:center;gap:9px;flex:1;min-width:0;min-height:36px;
-  padding:0 10px 0 5px;background:transparent!important;border-radius:0 7px 7px 0;
-  color:#e4ebf5;text-decoration:none;
-}
-.fm-explorer .fm-my-files-header .fm-my-files-folder{width:16px;height:16px;flex:0 0 16px;transform:none!important;}
-.fm-explorer .fm-my-files-header .fm-my-files-home.is-active{background:#354253!important;}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-my-files-home:hover{background:#303d4e;}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-my-files-home.is-active{background:#354253;}
+.fm-explorer .fm-my-files-header .fm-my-files-folder{width:16px;height:16px;flex:0 0 16px;transform:none;transition:none;}
+.fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-my-files-home span{overflow:hidden;text-overflow:ellipsis;}
+.fm-explorer .fm-my-files-header .fm-my-files-home,.fm-explorer .fm-my-files-header .fm-my-files-home *{-webkit-user-select:none;user-select:none;}
 .fm-explorer .fm-my-files-children{padding-left:14px;}
 .fm-explorer .fm-my-files-children .fm-location-link{padding-left:10px!important;min-height:32px;}
 .fm-explorer .fm-history-back,.fm-explorer .fm-history-refresh{width:36px;min-width:36px;height:36px;padding:8px;box-sizing:border-box;}
 .fm-explorer .fm-history-back .ui-icon,.fm-explorer .fm-history-refresh .ui-icon{width:18px;height:18px;}
-.fm-explorer .explorer-name .fm-inline-toggle{margin-right:2px;flex:0 0 auto;}
 .fm-explorer .explorer-name>a,.fm-explorer .explorer-name>.fm-file-open{display:inline-flex;align-items:center;gap:7px;min-height:27px;max-width:100%;overflow-wrap:anywhere;}
 .fm-explorer .explorer-name>.fm-file-open{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 26px);}
 .fm-explorer .explorer-name{padding-left:13px!important;}
@@ -1147,13 +1134,19 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-create-folder-dialog .panel-modal-actions{margin:0;padding:14px 22px;border-top:1px solid #3b4552;display:flex;justify-content:flex-end;gap:10px;}
 @media(max-width:620px){.yrm-create-folder-content{grid-template-columns:1fr;min-height:0;gap:15px;}.yrm-create-folder-chooser{min-height:190px;height:210px;}.yrm-create-folder-fields>label:not(:first-child){margin-top:2px;}}
 
-/* Every right-pane folder has one chevron slot; the folder icon never shifts. */
-.fm-explorer .explorer-name .fm-inline-toggle,
-.fm-explorer .explorer-name .fm-inline-toggle-spacer{display:inline-flex;box-sizing:border-box;flex:0 0 22px;width:22px;height:26px;margin-right:2px;vertical-align:middle;align-items:center;justify-content:center;}
-.fm-explorer .explorer-name .fm-inline-toggle .ui-icon{transform-origin:center center;}
-.fm-explorer .explorer-name .fm-inline-toggle[aria-expanded="true"] .ui-icon{transform:rotate(90deg);}
-.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-height:32px;}
-.fm-explorer .fm-tree-node-header>.fm-location-link{align-items:center;}
+/* One full-width folder entry per row; icons never rotate or animate. */
+.fm-explorer .explorer-name>.fm-folder-entry{display:inline-flex;align-items:center;gap:8px;min-height:27px;max-width:100%;text-decoration:none;}
+.fm-explorer .fm-folder-icon{width:16px;height:16px;flex:0 0 16px;transition:none;transform:none;}
+.fm-explorer .fm-folder-chevron,.fm-explorer .fm-folder-chevron-spacer{width:14px;height:18px;flex:0 0 14px;display:inline-block;transition:none;transform:none;}
+.fm-explorer tr[data-fm-inline-root][aria-expanded="true"] .fm-folder-chevron,
+.fm-explorer .fm-tree-folder[aria-expanded="true"] .fm-folder-chevron{transform:rotate(90deg);}
+.fm-explorer .fm-folder-chevron-spacer{vertical-align:middle;margin-right:8px;}
+.fm-explorer .explorer-table tr[data-fm-inline-root]:not([data-fm-inline-root=""]){cursor:pointer;}
+.fm-explorer .explorer-table tr[data-fm-inline-root]:not([data-fm-inline-root=""]):focus-visible{outline:1px solid #79addd;outline-offset:-1px;}
+.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-height:32px;padding:0;border-radius:5px;}
+.fm-explorer .fm-tree-node-header>.fm-tree-folder{display:flex;align-items:center;gap:9px;flex:1;width:100%;min-height:32px;padding:4px 10px;border-radius:5px;box-sizing:border-box;}
+.fm-explorer .fm-tree-node-header>.fm-tree-folder:hover{background:#344052;color:#fff;}
+.fm-explorer .fm-tree-node-header>.fm-tree-folder .fm-folder-icon{width:16px;height:16px;flex:0 0 16px;transition:none;transform:none;}
 .fm-explorer .fm-tree-preview-row[hidden]{display:none!important;}
 
 /* DDNS: balanced column proportions in the existing five-column table. */

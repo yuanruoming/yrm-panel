@@ -13,13 +13,10 @@
   <div class="fm-columns">
     <aside class="fm-locations" aria-label="File locations">
       <div class="fm-my-files-header">
-        <button type="button" class="fm-my-files-toggle" data-my-files-toggle
-                aria-controls="yrm-my-files-children" aria-expanded="false"
-                aria-label="Expand My Files" title="Expand or collapse My Files">
-          <svg class="ui-icon fm-my-files-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
-        </button>
-        <a class="fm-location-link fm-my-files-home @(Model.IsMyFolders ? "is-active" : "")"
-           asp-page="/Files" asp-route-path="@@folders" title="Open My Files">
+        <a class="fm-location-link fm-my-files-toggle fm-my-files-home @(Model.IsMyFolders ? "is-active" : "")"
+           asp-page="/Files" asp-route-path="@@folders" data-my-files-toggle
+           aria-controls="yrm-my-files-children" aria-expanded="false"
+           title="Click to expand or collapse; double-click to open My Files">
           <svg class="ui-icon fm-my-files-folder" aria-hidden="true"><use href="#i-folder"/></svg><span>My Files</span>
         </a>
       </div>
@@ -160,16 +157,13 @@
               var relative = folderPath.TrimStart('/');
               var matching = shared.FirstOrDefault(x => string.Equals(x.Path, folderPath, StringComparison.Ordinal));
               <tr data-b10-file-row data-b10-filename="@folderPath" data-b10-absolute="@folderPath"
-                  data-fm-inline-root="@relative" aria-selected="false" tabindex="0">
+                  data-fm-inline-root="@(exists ? relative : "")" aria-selected="false" aria-expanded="false" tabindex="0">
                 <td class="explorer-name">
-                  @if (exists)
-                  {
-                    <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@relative"
-                            aria-label="Expand @name" aria-expanded="false" title="Expand or collapse">
-                      <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
-                    </button>
-                  }
-                  <a asp-page="/Files" asp-route-path="@relative"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@name</span></a>
+                  <a class="fm-folder-entry" data-fm-inline-folder asp-page="/Files" asp-route-path="@relative"
+                     title="Click to expand or collapse; double-click to open">
+                    <svg class="ui-icon fm-folder-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+                    <svg class="ui-icon fm-folder-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>@name</span>
+                  </a>
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared">Shared</small> }
                 </td>
                 <td class="muted">@(exists ? System.IO.Directory.GetLastWriteTimeUtc(folderPath).ToLocalTime().ToString("yyyy-MM-dd HH:mm") : "—")</td>
@@ -246,13 +240,13 @@
                 <td class="explorer-name">
                   @if (item.IsDirectory)
                   {
-                    <button class="fm-inline-toggle" type="button" data-fm-inline-toggle data-fm-tree-path="@child"
-                            aria-label="Expand @item.Name" aria-expanded="false" title="Expand or collapse">
-                      <svg class="ui-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
-                    </button>
-                    <a asp-page="/Files" asp-route-path="@child" asp-route-hidden="@Model.Hidden"><svg class="ui-icon"><use href="#i-folder"/></svg> <span>@item.Name</span></a>
+                    <a class="fm-folder-entry" data-fm-inline-folder asp-page="/Files" asp-route-path="@child"
+                       asp-route-hidden="@Model.Hidden" title="Click to expand or collapse; double-click to open">
+                      <svg class="ui-icon fm-folder-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
+                      <svg class="ui-icon fm-folder-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>@item.Name</span>
+                    </a>
                   }
-                  else { <span class="fm-inline-toggle-spacer" aria-hidden="true"></span><span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" title="@item.Name" >@item.Name</button> }
+                  else { <span class="fm-folder-chevron-spacer" aria-hidden="true"></span><span class="explorer-file-icon">▤</span> <button type="button" class="fm-file-open" data-open-file="@item.Name" title="@item.Name" >@item.Name</button> }
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared folder">Shared</small> }
                 </td>
                 <td class="muted">@item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
