@@ -583,12 +583,12 @@ body>.explorer-actions-popover button+button{margin-top:2px;}
 /* BETA12.1: one existing window, movable/resizable below the 49px top bar. */
 .workspace-stage{position:fixed!important;inset:49px 0 0!important;display:block!important;padding:0!important;margin:0!important;min-height:0!important;height:calc(100dvh - 49px)!important;z-index:2;pointer-events:none;}
 body.is-desktop .workspace-stage{display:none!important;}
-.workspace-stage>.workspace-window{position:absolute;box-sizing:border-box;width:min(1320px,calc(100vw - 32px));height:min(820px,calc(100dvh - 70px));min-width:420px;min-height:290px;max-width:100%;max-height:100%;margin:0;pointer-events:auto;resize:both;overflow:hidden;}
+.workspace-stage>.workspace-window{position:absolute;box-sizing:border-box;width:min(1320px,calc(100vw - 32px));height:min(820px,calc(100dvh - 70px));min-width:640px;min-height:360px;margin:0;pointer-events:auto;resize:both;overflow:hidden;}
 .workspace-stage>.workspace-window.is-maximized{left:0!important;top:0!important;width:100%!important;height:100%!important;max-width:100%!important;max-height:100%!important;min-width:0!important;border-radius:0!important;border-left:0;border-right:0;border-bottom:0;box-shadow:none;resize:none;}
 .workspace-window:not(.is-maximized)>.window-titlebar{cursor:grab;touch-action:none;}
 .workspace-window:not(.is-maximized)>.window-titlebar:active{cursor:grabbing;}
 .workspace-window .window-controls,.workspace-window .window-controls *{cursor:pointer;}
-@media(max-width:650px){.workspace-stage>.workspace-window:not(.is-maximized){min-width:0;width:100%;height:100%;left:0!important;top:0!important;border-radius:0;resize:none;}}
+@media(max-width:650px) and (pointer:coarse){.workspace-stage>.workspace-window:not(.is-maximized){min-width:0;width:100%;height:100%;left:0!important;top:0!important;border-radius:0;resize:none;}}
 /* Restore the native-size file chooser: only the destination tree scrolls. */
 #file-action-dialog[open]{box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;width:min(590px,calc(100vw - 30px));height:min(500px,calc(100dvh - 40px));padding:0;}
 #file-action-dialog .panel-modal-head{flex:none;padding:18px 22px;border-bottom:1px solid rgba(160,189,216,.16);}
@@ -914,12 +914,13 @@ body.is-desktop .workspace-stage{display:none!important;}
   .server-settings-layout.settings-rc41 .server-settings-nav{height:auto!important;min-height:0!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;position:static!important;padding:9px!important;border-bottom:1px solid #3b424c;gap:4px;}
   .server-settings-layout.settings-rc41 .settings-nav-link{flex:0 0 auto;}
   .yrm-overview-grid{grid-template-columns:1fr!important;}
-  .fm-columns{display:flex!important;flex-direction:column!important;}
-  .yrm-flat-files .fm-locations{display:flex;flex-direction:row;flex-wrap:wrap;min-height:0;gap:4px;border-right:0!important;border-bottom:1px solid #454950;padding:8px!important;}
-  .yrm-flat-files .fm-content{min-width:0;padding:10px!important;}
   .fm-my-files-children{width:100%;}
   .yrm-network-family dl>div{grid-template-columns:110px minmax(0,1fr);}
 }
+/* Maintain desktop window integrity and 2-column layout when DevTools opens or window is resized */
+body.os-shell .workspace-stage>.workspace-window:not(.is-maximized){min-width:640px;min-height:360px;}
+body.os-shell .fm-explorer .fm-columns{display:grid!important;grid-template-columns:176px minmax(0,1fr)!important;gap:16px!important;min-height:380px!important;flex-direction:row!important;}
+body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-direction:column!important;flex-wrap:nowrap!important;border-right:1px solid #454950!important;border-bottom:0!important;padding:9px 12px 9px 0!important;}
 @container (max-width: 500px){
   .yrm-network-interface-details dl{grid-template-columns:1fr;}
   .yrm-network-interface-details dl>div{display:grid;grid-template-columns:110px minmax(0,1fr);}
@@ -1042,6 +1043,30 @@ body.is-desktop .workspace-stage{display:none!important;}
 .fm-explorer .fm-file-entry>.fm-file-open{text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1;max-width:100%;}
 .fm-explorer .explorer-name{padding-left:13px!important;}
 .fm-explorer .explorer-name,.fm-explorer .explorer-name *, .fm-explorer .fm-tree-node-header .fm-location-link, .fm-explorer .fm-tree-node-header .fm-location-link *{-webkit-user-select:none;user-select:none;}
+/* Complete table selection prevention: Name, Modified, Type, Size, Actions,
+   and headers behave like native desktop list items (no accidental text selection).
+   Only form inputs and editable text areas retain text selection. */
+.fm-explorer .explorer-table,
+.fm-explorer .explorer-table thead,
+.fm-explorer .explorer-table thead th,
+.fm-explorer .explorer-table tbody,
+.fm-explorer .explorer-table tbody tr,
+.fm-explorer .explorer-table tbody td,
+.fm-explorer .explorer-name,
+.fm-explorer .explorer-menu-cell,
+.fm-explorer [data-fm-href],
+.fm-explorer .fm-location-link,
+.fm-explorer .fm-breadcrumbs {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+.fm-explorer .explorer-table :where(input,textarea,select,[contenteditable="true"]){
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+.fm-explorer [data-fm-href] {
+  cursor: pointer;
+}
 .fm-explorer .fm-tree-preview-row[hidden]{display:none!important;}
 /* File upload modal uses the existing design language, not native file/select widgets. */
 .fm-root-upload-dialog{width:min(520px,calc(100vw - 32px));padding:0;overflow:hidden;border-radius:11px;}

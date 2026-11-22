@@ -704,8 +704,13 @@
     const button=event.target instanceof Element?event.target.closest('[data-my-files-toggle]'):null;
     if(!button||event.button!==0)return;
     event.preventDefault();cancelMyFilesClick();
-    button.dataset.fmNavigate='1';
-    try{button.click();}finally{delete button.dataset.fmNavigate;}
+    const href=button.dataset.fmHref||button.getAttribute('href');
+    if(href){
+      window.dispatchEvent(new CustomEvent('yrm-panel:navigate',{detail:href}));
+    }else{
+      button.dataset.fmNavigate='1';
+      try{button.click();}finally{delete button.dataset.fmNavigate;}
+    }
   },true);
   document.addEventListener('keydown',event=>{
     const button=event.target instanceof Element?event.target.closest('[data-my-files-toggle]'):null;

@@ -41,20 +41,6 @@
     latestUptimeText=`Uptime · ${d ? `${d}d ${h}h ${m}m ${sec}s` : h ? `${h}h ${m}m ${sec}s` : `${m}m ${sec}s`}`;
     put("uptime",latestUptimeText);
   }
-  // EventSource and polling update metrics only. Neither is allowed to unhide
-  // the compact monitor while an application window is active.
-  if (typeof EventSource === "function") {
-    const stream = new EventSource("/api/metrics/stream");
-    stream.onmessage = event => { try { apply(JSON.parse(event.data)); } catch {} };
-  } else {
-    async function poll() {
-      if (document.hidden) return;
-      try {
-        const response = await fetch("/api/metrics", {credentials: "same-origin", cache: "no-store"});
-        if (response.ok) apply(await response.json());
-      } catch {}
-    }
-    void poll();
-    setInterval(() => void poll(), 1000);
-  }
+  // The shared metrics channel owns SSE/polling and pauses while hidden.
+  if (window.YrmMetrics) window.YrmMetrics.subscribe(apply);
 })();

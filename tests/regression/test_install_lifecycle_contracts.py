@@ -17,20 +17,47 @@ class InstallLifecycleContracts(unittest.TestCase):
         move = install.index('mv -f -- "$sudoers_tmp" /etc/sudoers.d/yrm-panel')
         self.assertLess(validate, move)
         self.assertIn('mktemp /etc/sudoers.d/.yrm-panel.XXXXXX', install)
-        # The live file must never be written or checked in place.
-        self.assertNotIn('visudo -cf /etc/sudoers.d/yrm-panel', install)
+        # The live policy is checked after the atomic move, never written in place.
+        self.assertGreater(install.index('visudo -cf /etc/sudoers.d/yrm-panel'), move)
         self.assertNotIn('>/etc/sudoers.d/yrm-panel <<', install)
+        # A broken runner image must not be reported as a product regression.
+        self.assertIn('sudoers_baseline_ok=0', install)
+        self.assertIn('the existing sudoers configuration already fails visudo -c', install)
 
     def test_failed_upgrade_restores_helpers_sudoers_units_and_program(self):
         install = read('scripts/install.sh')
         for managed in ('/etc/sudoers.d/yrm-panel', '/usr/local/libexec/yrm-panel-firewall',
-                        '/etc/systemd/system/yrm-panel.service', '/usr/local/sbin/yrm-panel-update'):
+                        '/etc/systemd/system/yrm-panel.service', '/usr/local/sbin/yrm-panel-update',
+                        '/etc/pam.d/yrm-panel', '/etc/yrm-panel/panel.env',
+                        '/etc/yrm-panel/source.env', '/etc/yrm-panel/samba-user'):
             self.assertIn(managed, install[:install.index('trap cleanup EXIT')])
         self.assertIn('trap cleanup EXIT', install)
-        self.assertLess(install.index('backup_managed_files\n  rollback_armed=1'),
-                        install.index('/usr/local/libexec/yrm-panel-samba\n'))
+        # Back up before the first host mutation (config files are now written
+        # after the verified release has been extracted).
+        backup = install.index('backup_managed_files')
+        self.assertLess(backup, install.index('/etc/pam.d/yrm-panel <<'))
         self.assertLess(install.index('rollback_armed=1'), install.index('mv -f -- "$sudoers_tmp"'))
         self.assertIn('rollback_armed=0', install[install.index('health_ok == 0'):])
+
+    def test_failed_first_install_removes_only_what_it_created(self):
+        install = read('scripts/install.sh')
+        self.assertIn('fresh_install=1', install)
+        self.assertIn('systemctl disable yrm-panel.service yrm-panel-firewall-restore.service', install)
+        self.assertIn('docker_group_added=1', install)
+        self.assertIn('gpasswd -d "$PANEL_USER" docker', install)
+
+    def test_update_uses_the_verified_tarball_installer(self):
+        update = read('scripts/update.sh')
+        self.assertNotIn('raw.githubusercontent.com', update)
+        self.assertIn('release.json.minisig', update)
+        self.assertIn('verify_release_signature', update)
+        self.assertIn('deployment/install.sh', update)
+        self.assertIn('--local-dir', update)
+        self.assertIn('--allow-unsigned', update)
+        install = read('scripts/install.sh')
+        self.assertIn('MINISIGN_PUBKEYS=(', install)
+        self.assertIn('release_keys_configured', install)
+        self.assertIn('--allow-unsigned', install)
 
     def test_older_previous_directory_is_never_swapped_in_by_mistake(self):
         install = read('scripts/install.sh')

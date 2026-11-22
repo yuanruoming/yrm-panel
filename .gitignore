@@ -15,3 +15,6 @@ TestResults/
 artifacts/
 publish/
 *.tar.gz
+__pycache__/
+*.pyc
+*.zip

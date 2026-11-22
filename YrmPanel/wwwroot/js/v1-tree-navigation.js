@@ -1,6 +1,7 @@
 /* Files folder navigation: immediate chevron expand, static folder icon.
    Clicking a folder selects it; double-click navigates without a fixed delay.
-   Keep native links for desktop-shell navigation and no-JS fallback. */
+   Folder labels carry data-fm-href instead of href, so hovering never shows a
+   browser status-bar URL; the desktop shell performs the navigation. */
 (() => {
   'use strict';
   const cache = new Map();
@@ -40,9 +41,11 @@
     header.className = 'fm-tree-node-header';
     const link = document.createElement('a');
     link.className = 'fm-location-link fm-tree-folder';
-    link.href = route(path, library);
+    link.dataset.fmHref = route(path, library);
     link.dataset.fmTreeFolder = '';
     link.dataset.fmTreePath = path;
+    link.setAttribute('role', 'link');
+    link.tabIndex = 0;
     link.title = 'Double-click to open';
     const expand = document.createElement('button');
     expand.type = 'button';
@@ -164,17 +167,36 @@
         !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey)
       event.preventDefault(); // Only a folder label needs double-click to navigate.
   }, true);
+  function navigateFolder(anchor) {
+    const href = anchor?.dataset.fmHref;
+    if (!href) return false;
+    window.dispatchEvent(new CustomEvent('yrm-panel:navigate', {detail: href}));
+    return true;
+  }
   document.addEventListener('dblclick', event => {
     const target = event.target instanceof Element ? event.target : null;
     if (!target?.closest('.fm-explorer') || event.button !== 0 ||
         target.closest('[data-fm-expand],.explorer-item-menu,details,summary,form,input,textarea,select,button,[contenteditable="true"]')) return;
-    const anchor = target.closest('a[data-fm-inline-folder],a[data-fm-tree-folder]') ||
-      target.closest('.fm-tree-node-header')?.querySelector('a[data-fm-tree-folder]') ||
-      target.closest('tr[data-fm-inline-root]')?.querySelector('a[data-fm-inline-folder]');
+    const anchor = target.closest('[data-fm-href]') ||
+      target.closest('.fm-tree-node-header')?.querySelector('[data-fm-href]') ||
+      target.closest('tr[data-fm-inline-root]')?.querySelector('[data-fm-href]');
     if (!anchor) return;
     event.preventDefault();
     anchor.dataset.fmNavigate = '1';
-    try { anchor.click(); } finally { delete anchor.dataset.fmNavigate; }
+    try {
+      if (!navigateFolder(anchor)) anchor.click();
+    } finally {
+      delete anchor.dataset.fmNavigate;
+    }
+  }, true);
+  // Keyboard parity with the removed href: Enter opens the selected folder.
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target instanceof Element ? event.target : null;
+    const anchor = target?.closest('[data-fm-href]');
+    if (!anchor || !anchor.closest('.fm-explorer')) return;
+    event.preventDefault();
+    navigateFolder(anchor);
   }, true);
   // Prefetch child names on intent so first expansion can paint immediately.
   // No rendering, icon rotation or loading animation happens on hover.

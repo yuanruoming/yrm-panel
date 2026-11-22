@@ -1,9 +1,11 @@
+using System.IO.Compression;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.ResponseCompression;
 using System.Threading.RateLimiting;
 using YrmPanel.Services;
 
@@ -41,6 +43,21 @@ if (isLinux && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("YRM
 }
 
 var builder = WebApplication.CreateBuilder(args);
+// Compress text responses. SSE (text/event-stream) is deliberately excluded so
+// metrics frames are never buffered by a compression stream.
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(new[]
+    {
+        "application/json", "application/javascript", "text/javascript",
+        "image/svg+xml", "application/manifest+json"
+    });
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(options => options.Level = CompressionLevel.Fastest);
 var httpPort = int.TryParse(builder.Configuration["Panel:HttpPort"], out var hp) ? hp : 6080;
 var localOnly = builder.Configuration["Panel:Bind"] == "127.0.0.1";
 var httpsPort = int.TryParse(builder.Configuration["Panel:HttpsPort"], out var parsedHttpsPort) ? parsedHttpsPort : 6081;

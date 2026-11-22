@@ -35,9 +35,32 @@ jobs:
               scripts/yrm-panel-mount.py scripts/yrm-panel-firewall.py \
               "publish/$target/deployment/"
             cp scripts/update.sh scripts/uninstall.sh "publish/$target/deployment/"
+            cp scripts/install.sh scripts/release-manifest.sh scripts/verify-release.sh "publish/$target/deployment/"
             (cd "publish/$target" && tar -czf "../../artifacts/yrm-panel-$target.tar.gz" .)
             (cd artifacts && sha256sum "yrm-panel-$target.tar.gz" > "yrm-panel-$target.tar.gz.sha256")
           done
+      - name: Build and sign the release manifest
+        env:
+          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/release-manifest.sh artifacts stable "$GITHUB_REF_NAME" "$GITHUB_SHA" "$(date -u +%FT%TZ)"
+          if grep -Eq "^[[:space:]]*'RW" scripts/install.sh; then
+            [[ -n "${MINISIGN_SECRET_KEY:-}" ]] || {
+              echo 'Release keys are configured but MINISIGN_SECRET_KEY is missing.' >&2; exit 1; }
+            command -v minisign >/dev/null 2>&1 || { sudo apt-get update && sudo apt-get install -y minisign; }
+            keyfile="$RUNNER_TEMP/minisign.key"
+            printf '%s' "$MINISIGN_SECRET_KEY" > "$keyfile"
+            chmod 0600 "$keyfile"
+            minisign -S -s "$keyfile" -m artifacts/release.json -x artifacts/release.json.minisig
+            rm -f "$keyfile"
+            bash scripts/verify-release.sh artifacts/release.json artifacts \
+              "$(grep -Eo "RW[A-Za-z0-9+/=]{40,}" scripts/install.sh | head -n 1)"
+          else
+            echo 'No release public keys are configured; publishing checksum-only assets.'
+            bash scripts/verify-release.sh artifacts/release.json artifacts
+          fi
       - name: Release stable assets
         env:
           GH_TOKEN: ${{ github.token }}

@@ -2,7 +2,7 @@
 # YRM Panel RC4: choose an EXISTING Linux user; preserve host services and data.
 set -Eeuo pipefail
 umask 027
-REPO=''; CHANNEL='dev'; BRANCH='master'; PORT='6080'; HTTPS_PORT='6081'; BIND='0.0.0.0'; PANEL_USER=''; NONINTERACTIVE=0; LOCAL_DIR=''
+REPO=''; CHANNEL='dev'; BRANCH='master'; PORT='6080'; HTTPS_PORT='6081'; BIND='0.0.0.0'; PANEL_USER=''; NONINTERACTIVE=0; LOCAL_DIR=''; ALLOW_UNSIGNED=0
 while (($#)); do
   case "$1" in
     --repo) REPO="${2:?}"; shift 2;;
@@ -15,6 +15,8 @@ while (($#)); do
     --noninteractive) NONINTERACTIVE=1; shift;;
     # Install a release already on disk (used by the lifecycle test); skips every download.
     --local-dir) LOCAL_DIR="${2:?}"; shift 2;;
+    # Emergency only: keep checksum verification but accept an unsigned manifest.
+    --allow-unsigned) ALLOW_UNSIGNED=1; shift;;
     *) echo "Unknown option: $1" >&2; exit 2;;
   esac
 done
@@ -34,6 +36,48 @@ valid_port "$PORT" && valid_port "$HTTPS_PORT" && [[ "$PORT" != "$HTTPS_PORT" ]]
 }
 arch=$(dpkg --print-architecture)
 case "$arch" in amd64) platform=linux-x64;; arm64) platform=linux-arm64;; *) echo "Unsupported architecture: $arch" >&2; exit 1;; esac
+
+# Release trust root. Generate a key pair once with `minisign -G`, keep the
+# secret offline/in a GitHub Actions secret, and paste the two public keys here.
+# Both keys are accepted so a key can be rotated without breaking installed
+# panels. An empty list means "checksum only" during the initial rollout; once
+# any key is present, every downloaded release must carry a valid signature.
+MINISIGN_PUBKEYS=(
+  # 'RWQ...primary...'
+  # 'RWQ...rotation...'
+)
+release_keys_configured() {
+  local key
+  for key in "${MINISIGN_PUBKEYS[@]}"; do
+    [[ -n "$key" && "$key" != \#* ]] && return 0
+  done
+  return 1
+}
+verify_release_signature() {
+  local manifest=$1 signature=$2
+  release_keys_configured || return 0
+  if ((ALLOW_UNSIGNED == 1)); then
+    echo 'WARNING: --allow-unsigned was given; the release signature was not checked.' >&2
+    return 0
+  fi
+  [[ -s "$manifest" && -s "$signature" ]] || {
+    echo 'The release manifest or its signature is missing; refusing to install.' >&2; return 1; }
+  command -v minisign >/dev/null 2>&1 || apt_install minisign
+  local key
+  for key in "${MINISIGN_PUBKEYS[@]}"; do
+    [[ -n "$key" && "$key" != \#* ]] || continue
+    if minisign -V -q -P "$key" -m "$manifest" -x "$signature" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  echo 'The release signature does not match any trusted YRM Panel key.' >&2
+  return 1
+}
+manifest_asset_sha() {
+  python3 -c 'import json,sys
+d=json.load(open(sys.argv[1],encoding="utf-8"))
+print(d.get("assets",{}).get(sys.argv[2],""))' "$1" "$2"
+}
 
 # The updater passes --user. For an interactive install, choose the invoking
 # Linux user if the option is omitted. Never silently select root.
@@ -117,49 +161,6 @@ if [[ ! -s "$cert" || ! -s "$key" ]]; then
   chmod 0644 "$cert"
 fi
 
-cat >/etc/pam.d/yrm-panel <<'PAM'
-#%PAM-1.0
-auth       include      common-auth
-account    include      common-account
-PAM
-chmod 0644 /etc/pam.d/yrm-panel
-
-cat >/etc/yrm-panel/panel.env <<ENV
-YRM_PANEL_DATA_DIR=/var/lib/yrm-panel
-YRM_PANEL_USER=$PANEL_USER
-YRM_PANEL_CHANNEL=$CHANNEL
-Panel__Bind=$BIND
-Panel__HttpPort=$PORT
-Panel__HttpsPort=$HTTPS_PORT
-Panel__Url=https://$host:$HTTPS_PORT
-Docker__Enabled=true
-Docker__EnableControls=true
-ENV
-chown root:"$PANEL_GROUP" /etc/yrm-panel/panel.env
-chmod 0640 /etc/yrm-panel/panel.env
-printf '%s\n' "$PANEL_USER" >/etc/yrm-panel/samba-user
-chmod 0600 /etc/yrm-panel/samba-user
-cat >/etc/yrm-panel/source.env <<ENV
-REPO=$REPO
-CHANNEL=$CHANNEL
-BRANCH=$BRANCH
-PANEL_USER=$PANEL_USER
-PORT=$PORT
-HTTPS_PORT=$HTTPS_PORT
-BIND=$BIND
-ENV
-chmod 0600 /etc/yrm-panel/source.env
-
-# Docker socket has root-equivalent access; keep it explicit and track membership
-# so uninstall never removes a membership that existed before RC4 installation.
-if getent group docker >/dev/null 2>&1; then
-  if ! id -nG "$PANEL_USER" | tr ' ' '\n' | grep -qx docker; then
-    usermod -aG docker "$PANEL_USER"
-    printf '%s\n' "$PANEL_USER" >/etc/yrm-panel/docker-group-added
-    echo 'NOTICE: Docker group membership is root-equivalent on this host.'
-  fi
-fi
-
 # The updater may pass a fixed status-file path. Ordinary installs do not write UI progress.
 progress_file="${YRM_PANEL_UPDATE_STATUS_FILE:-}"
 if [[ "$progress_file" != '/var/lib/yrm-panel/update-status.json' ]]; then progress_file=''; fi
@@ -184,10 +185,14 @@ managed_files=(
   /etc/sudoers.d/yrm-panel
   /etc/systemd/system/yrm-panel.service /etc/systemd/system/yrm-panel-firewall-restore.service
   /usr/local/sbin/yrm-panel-update /usr/local/sbin/yrm-panel-uninstall
+  /etc/pam.d/yrm-panel /etc/yrm-panel/panel.env /etc/yrm-panel/source.env
+  /etc/yrm-panel/samba-user /etc/yrm-panel/docker-group-added
 )
 backup="$workdir/backup"
-rollback_armed=0   # 1 once an existing installation has been backed up
+rollback_armed=0   # 1 once the host state has been backed up
+fresh_install=0    # 1 when no /opt/yrm-panel existed before this run
 app_swapped=0      # 1 only after /opt/yrm-panel was moved to /opt/yrm-panel.previous by THIS run
+docker_group_added=0
 backup_managed_files() {
   local file
   mkdir -p "$backup/files"
@@ -211,8 +216,17 @@ restore_system_state() {
   while IFS= read -r file; do
     [[ -n "$file" ]] && rm -f -- "$file"
   done <"$backup/absent.list"
-  systemctl daemon-reload
-  systemctl restart yrm-panel.service || true
+  # Only remove a Docker membership this run actually added; a pre-existing one
+  # is restored by the generic file restore above.
+  if ((docker_group_added == 1)) && command -v gpasswd >/dev/null 2>&1; then
+    gpasswd -d "$PANEL_USER" docker >/dev/null 2>&1 || true
+  fi
+  systemctl daemon-reload || true
+  if ((fresh_install == 1)); then
+    systemctl disable yrm-panel.service yrm-panel-firewall-restore.service 2>/dev/null || true
+  else
+    systemctl restart yrm-panel.service || true
+  fi
 }
 cleanup() {
   local code=$?
@@ -244,6 +258,18 @@ fi
 base="https://github.com/$REPO/releases/download/$release_tag"
 echo "Downloading and verifying YRM Panel $CHANNEL ($platform)..."
 progress Checking 'Release identified; preparing download.'
+# Verify the signed manifest before requesting the tarball. The manifest binds
+# the channel, version and asset hashes, so a replaced release asset cannot be
+# paired with a stale checksum file.
+curl -fLSs --retry 3 --connect-timeout 15 "$base/release.json" -o "$workdir/release.json"
+if release_keys_configured; then
+  curl -fLSs --retry 3 --connect-timeout 15 "$base/release.json.minisig" -o "$workdir/release.json.minisig"
+fi
+progress Verifying 'Verifying the signed release manifest.'
+verify_release_signature "$workdir/release.json" "$workdir/release.json.minisig"
+manifest_sha=$(manifest_asset_sha "$workdir/release.json" "$asset")
+[[ "$manifest_sha" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "The release manifest does not list $asset." >&2; exit 1; }
 # The only displayed transfer percentage is actual received bytes / HTTP Content-Length.
 # If the server provides no reliable length, the download stays indeterminate.
 expected=0
@@ -282,7 +308,7 @@ else
   curl -fLSs --retry 3 "$base/$asset" -o "$workdir/$asset"
 fi
 progress Verifying 'Verifying release SHA256 and extracting files.'
-curl -fLSs --retry 3 "$base/$asset.sha256" -o "$workdir/$asset.sha256"
+printf '%s  %s\n' "$manifest_sha" "$asset" >"$workdir/$asset.sha256"
 fi
 (cd "$workdir" && sha256sum -c "$asset.sha256")
 mkdir -p "$workdir/publish"
@@ -290,17 +316,66 @@ tar -xzf "$workdir/$asset" -C "$workdir/publish"
 progress Installing 'Deploying and configuring the verified release.' 
 for path in YrmPanel deployment/yrm-panel.service deployment/yrm-panel-samba.py \
  deployment/yrm-panel-storage.py deployment/yrm-panel-power.sh deployment/yrm-panel-update-trigger.sh \
- deployment/update.sh deployment/uninstall.sh \
+ deployment/update.sh deployment/uninstall.sh deployment/install.sh \
  deployment/yrm-panel-mount.py deployment/yrm-panel-firewall.py \
  deployment/yrm-panel-firewall-restore.service; do
   [[ -f "$workdir/publish/$path" ]] || { echo "Missing release asset: $path" >&2; exit 1; }
 done
 
-# From here on a failure restores the previous helpers, sudoers policy, units and program.
+# From here on a failure restores the previous helpers, sudoers policy, units,
+# configuration and program. A first install also removes only what it created.
 if [[ -d /opt/yrm-panel ]]; then
   backup_managed_files
-  rollback_armed=1
+else
+  fresh_install=1
+  backup_managed_files
 fi
+rollback_armed=1
+
+cat >/etc/pam.d/yrm-panel <<'PAM'
+#%PAM-1.0
+auth       include      common-auth
+account    include      common-account
+PAM
+chmod 0644 /etc/pam.d/yrm-panel
+
+cat >/etc/yrm-panel/panel.env <<ENV
+YRM_PANEL_DATA_DIR=/var/lib/yrm-panel
+YRM_PANEL_USER=$PANEL_USER
+YRM_PANEL_CHANNEL=$CHANNEL
+Panel__Bind=$BIND
+Panel__HttpPort=$PORT
+Panel__HttpsPort=$HTTPS_PORT
+Panel__Url=https://$host:$HTTPS_PORT
+Docker__Enabled=true
+Docker__EnableControls=true
+ENV
+chown root:"$PANEL_GROUP" /etc/yrm-panel/panel.env
+chmod 0640 /etc/yrm-panel/panel.env
+printf '%s\n' "$PANEL_USER" >/etc/yrm-panel/samba-user
+chmod 0600 /etc/yrm-panel/samba-user
+cat >/etc/yrm-panel/source.env <<ENV
+REPO=$REPO
+CHANNEL=$CHANNEL
+BRANCH=$BRANCH
+PANEL_USER=$PANEL_USER
+PORT=$PORT
+HTTPS_PORT=$HTTPS_PORT
+BIND=$BIND
+ENV
+chmod 0600 /etc/yrm-panel/source.env
+
+# Docker socket has root-equivalent access; keep it explicit and track membership
+# so uninstall never removes a membership that existed before installation.
+if getent group docker >/dev/null 2>&1; then
+  if ! id -nG "$PANEL_USER" | tr ' ' '\n' | grep -qx docker; then
+    usermod -aG docker "$PANEL_USER"
+    docker_group_added=1
+    printf '%s\n' "$PANEL_USER" >/etc/yrm-panel/docker-group-added
+    echo 'NOTICE: Docker group membership is root-equivalent on this host.'
+  fi
+fi
+
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-samba.py" /usr/local/libexec/yrm-panel-samba
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-storage.py" /usr/local/libexec/yrm-panel-storage
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-power.sh" /usr/local/libexec/yrm-panel-power
@@ -308,6 +383,18 @@ install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-update-tr
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-mount.py" /usr/local/libexec/yrm-panel-mount
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-firewall.py" /usr/local/libexec/yrm-panel-firewall
 
+# A broken host sudoers file (for example one shipped by a CI runner image)
+# must not be blamed on YRM Panel, but it must also not hide a real conflict.
+# Record the baseline, then always validate the YRM policy on its own.
+sudoers_baseline_ok=0
+sudoers_baseline_output=''
+if sudoers_baseline_output=$(visudo -c 2>&1); then
+  sudoers_baseline_ok=1
+else
+  echo 'NOTICE: the existing sudoers configuration already fails visudo -c.' >&2
+  printf '%s\n' "$sudoers_baseline_output" >&2
+  echo 'Only the YRM Panel policy will be validated; this pre-existing issue is left unchanged.' >&2
+fi
 # Mutations require the selected account's Linux password. Only an exact Samba
 # status action is available without a password; all inputs are validated by helper.
 # sudo skips sudoers.d files whose names contain a dot, so the temporary file is inert.
@@ -321,6 +408,20 @@ chmod 0440 "$sudoers_tmp"
 visudo -cf "$sudoers_tmp" >/dev/null || {
   echo 'The generated sudoers policy is invalid. The existing policy was left unchanged.' >&2; exit 1; }
 mv -f -- "$sudoers_tmp" /etc/sudoers.d/yrm-panel
+if ! policy_output=$(visudo -cf /etc/sudoers.d/yrm-panel 2>&1); then
+  echo 'ERROR: the installed YRM Panel sudoers policy is invalid.' >&2
+  printf '%s\n' "$policy_output" >&2
+  exit 1
+fi
+if ((sudoers_baseline_ok == 1)); then
+  if ! merged_output=$(visudo -c 2>&1); then
+    echo 'ERROR: the YRM Panel policy conflicts with the existing sudoers configuration.' >&2
+    printf '%s\n' "$merged_output" >&2
+    exit 1
+  fi
+else
+  echo 'NOTICE: the host sudoers baseline was already invalid; the YRM policy itself parsed OK.' >&2
+fi
 rm -f /etc/sudoers.d/yrm-panel-samba /etc/sudoers.d/yrm-panel-storage /etc/sudoers.d/yrm-panel-power
 /usr/local/libexec/yrm-panel-samba bootstrap
 

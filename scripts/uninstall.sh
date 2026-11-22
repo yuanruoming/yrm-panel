@@ -23,8 +23,8 @@ if [[ -s /etc/yrm-panel/docker-group-added ]] && command -v gpasswd >/dev/null 2
   if id "$user" >/dev/null 2>&1 && getent group docker >/dev/null 2>&1; then
     gpasswd -d "$user" docker >/dev/null 2>&1 || true
   fi
-  rm -f /etc/yrm-panel/docker-group-added
 fi
+rm -f /etc/yrm-panel/docker-group-added
 # RC3 had a dedicated yrm-panel account with ACL grants. Clear only those
 # legacy ACL entries, never current Linux-user ACLs or existing data.
 if [[ -r /etc/yrm-panel/managed-roots.json ]] && command -v setfacl >/dev/null 2>&1; then

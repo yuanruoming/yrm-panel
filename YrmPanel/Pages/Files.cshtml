@@ -168,7 +168,8 @@
                     </button>
                   }
                   else { <span class="fm-folder-chevron-spacer" aria-hidden="true"></span> }
-                  <a class="fm-folder-entry" data-fm-inline-folder asp-page="/Files" asp-route-path="@relative"
+                  <a class="fm-folder-entry" data-fm-inline-folder role="link" tabindex="0"
+                     data-fm-href="@Url.Page("/Files", new { path = relative })"
                      title="Double-click to open">
                     <svg class="ui-icon fm-folder-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>@name</span>
                   </a>
@@ -252,8 +253,9 @@
                             aria-label="Expand or collapse @item.Name" aria-expanded="false">
                       <svg class="ui-icon fm-folder-chevron" aria-hidden="true"><use href="#i-chevron"/></svg>
                     </button>
-                    <a class="fm-folder-entry" data-fm-inline-folder asp-page="/Files" asp-route-path="@child"
-                       asp-route-hidden="@Model.Hidden" title="Double-click to open">
+                    <a class="fm-folder-entry" data-fm-inline-folder role="link" tabindex="0"
+                       data-fm-href="@Url.Page("/Files", new { path = child, hidden = Model.Hidden })"
+                       title="Double-click to open">
                       <svg class="ui-icon fm-folder-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>@item.Name</span>
                     </a>
                   }

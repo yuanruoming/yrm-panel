@@ -293,10 +293,17 @@
     width: Math.max(280, stage?.clientWidth || innerWidth),
     height: Math.max(250, stage?.clientHeight || innerHeight - 49)
   });
+  function clampWindowPosition(bounds) {
+    const space=availableSpace();
+    const width=Math.max(1,Number(bounds.width)||0);
+    const height=Math.max(1,Number(bounds.height)||0);
+    return {left:Math.max(0,Math.min(Math.max(0,space.width-width),Number(bounds.left)||0)),
+      top:Math.max(0,Math.min(Math.max(0,space.height-height),Number(bounds.top)||0)),width,height};
+  }
   function clampWindowBounds(bounds) {
     const space=availableSpace();
-    const minWidth=Math.min(420,space.width);
-    const minHeight=Math.min(290,space.height);
+    const minWidth=Math.min(640,space.width);
+    const minHeight=Math.min(360,space.height);
     const width=Math.max(minWidth,Math.min(space.width, Number(bounds.width)||minWidth));
     const height=Math.max(minHeight,Math.min(space.height, Number(bounds.height)||minHeight));
     return {left:Math.max(0,Math.min(space.width-width,Number(bounds.left)||0)),
@@ -305,21 +312,31 @@
   function readWindowBounds() {
     if (!appWindow || !stage) return null;
     const r=appWindow.getBoundingClientRect(), sr=stage.getBoundingClientRect();
-    return clampWindowBounds({left:r.left-sr.left,top:r.top-sr.top,width:r.width,height:r.height});
+    // Keep the user's size when the viewport shrinks (for example when the
+    // browser's developer tools open); only the position is clamped.
+    return clampWindowPosition({left:r.left-sr.left,top:r.top-sr.top,width:r.width,height:r.height});
   }
   function storeWindowBounds() {
     if (!activeUrl || appWindow?.classList.contains('is-maximized'))return;
     const bounds=readWindowBounds();
     if (bounds)windowBounds.set(workspaceKey(),bounds);
   }
-  function applyWindowBounds() {
+  function applyWindowBounds(keepSize = false) {
     if (!appWindow || appWindow.classList.contains('is-maximized') || !activeUrl)return;
     const key=workspaceKey(),space=availableSpace();
-    const preferredWidth=key==='/Files'?1300:key==='/Settings'?1080:1120;
-    const width=Math.min(preferredWidth,space.width-32);
-    const height=Math.min(key==='/Files'?800:740,space.height-30);
-    const fallback={left:(space.width-width)/2,top:(space.height-height)/2,width,height};
-    const bounds=clampWindowBounds(windowBounds.get(key)||fallback);
+    const stored=windowBounds.get(key);
+    let bounds;
+    if (keepSize && stored) {
+      // A viewport resize must not resize the desktop window. It may move it
+      // back inside the stage, but width/height stay exactly as the user left them.
+      bounds=clampWindowPosition(stored);
+    } else {
+      const preferredWidth=key==='/Files'?1300:key==='/Settings'?1080:1120;
+      const width=Math.min(preferredWidth,space.width-32);
+      const height=Math.min(key==='/Files'?800:740,space.height-30);
+      const fallback={left:(space.width-width)/2,top:(space.height-height)/2,width,height};
+      bounds=clampWindowBounds(stored||fallback);
+    }
     for(const [name,value] of Object.entries(bounds))appWindow.style[name]=`${Math.round(value)}px`;
   }
   function toggleWindowMaximize() {
@@ -342,7 +359,7 @@
       const startX=event.clientX,startY=event.clientY;
       windowTitlebar.setPointerCapture(event.pointerId);
       const move=e=>{
-        const next=clampWindowBounds({...start,left:start.left+(e.clientX-startX),
+        const next=clampWindowPosition({...start,left:start.left+(e.clientX-startX),
           top:start.top+(e.clientY-startY)});
         appWindow.style.left=next.left+'px';appWindow.style.top=next.top+'px';
       };
@@ -361,9 +378,7 @@
     appWindow.addEventListener('pointerup',()=>storeWindowBounds());
     window.addEventListener('resize',()=>{
       if(appWindow.classList.contains('is-maximized'))return;
-      const current=readWindowBounds();
-      if(current && activeUrl)windowBounds.set(workspaceKey(),current);
-      applyWindowBounds();
+      applyWindowBounds(true);
     });
   }
   // Eight-direction resize; the native bottom-right CSS grip is disabled.
@@ -380,7 +395,7 @@
         const move=e=>{
           const bounds=availableSpace();
           const dx=e.clientX-original.x,dy=e.clientY-original.y;
-          const minW=Math.min(420,bounds.width),minH=Math.min(290,bounds.height);
+          const minW=Math.min(640,bounds.width),minH=Math.min(360,bounds.height);
           let {left,top,width,height}=start;
           if(edge.includes('e'))width=Math.max(minW,Math.min(bounds.width-left,start.width+dx));
           if(edge.includes('s'))height=Math.max(minH,Math.min(bounds.height-top,start.height+dy));
@@ -955,9 +970,9 @@
   document.addEventListener('pointerover', event => {
     if (!activeUrl?.startsWith('/Files')) return;
     const anchor = event.target instanceof Element ? event.target.closest(
-      '.fm-explorer [data-fm-inline-folder],.fm-explorer [data-fm-tree-folder],.fm-explorer .fm-locations a[href],.fm-explorer .fm-breadcrumbs a[href]') : null;
+      '.fm-explorer [data-fm-href],.fm-explorer [data-fm-inline-folder],.fm-explorer [data-fm-tree-folder],.fm-explorer .fm-locations a,.fm-explorer .fm-breadcrumbs a') : null;
     if (!anchor || (event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget))) return;
-    const url = internalUrl(anchor.href);
+    const url = internalUrl(anchor.getAttribute('href') || anchor.dataset.fmHref || '');
     if (!url || url === activeUrl || canonicalPath(url.split('?')[0]) !== '/Files' ||
         new URL(url,location.origin).searchParams.has('handler')) return;
     if (filesPrefetchTimer !== null) clearTimeout(filesPrefetchTimer);
@@ -992,15 +1007,33 @@
       oldCrumbs.replaceChildren(...Array.from(freshCrumbs.childNodes,node=>document.importNode(node,true)));
     const oldRefresh = oldPath.querySelector('.fm-history-refresh');
     const freshRefresh = freshPath.querySelector('.fm-history-refresh');
-    if (oldRefresh && freshRefresh) oldRefresh.href = freshRefresh.href;
+    if (oldRefresh && freshRefresh) {
+      const freshTarget = freshRefresh.getAttribute('href') || freshRefresh.dataset.fmHref;
+      if (freshTarget) oldRefresh.dataset.fmHref = freshTarget;
+      oldRefresh.removeAttribute('href');
+    }
     if (oldTools.innerHTML !== freshTools.innerHTML)
       oldTools.replaceChildren(...Array.from(freshTools.childNodes,node=>document.importNode(node,true)));
     // Replace the entries only; the directory's wrapper, layout, toolbar,
     // sidebar and window survive the navigation. No artificial fade/spinner.
     oldDirectory.replaceChildren(...Array.from(freshDirectory.childNodes,node=>document.importNode(node,true)));
     oldDirectory.querySelector('.responsive-table')?.scrollTo({top:0,left:0});
+    sanitizeFilesLinks(oldPath);
+    sanitizeFilesLinks(oldDirectory);
     window.dispatchEvent(new Event('yrm-panel:files-view-changed'));
     return true;
+  }
+
+  // Remove href from in-app Files explorer links so hovering never reveals a
+  // browser status bar URL preview. The desktop shell performs navigation.
+  function sanitizeFilesLinks(root = document) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('.fm-explorer a[href]:not([data-native-download]):not([download])').forEach(a => {
+      if (!a.dataset.fmHref) a.dataset.fmHref = a.getAttribute('href') || '';
+      a.removeAttribute('href');
+      a.setAttribute('role', 'link');
+      if (!a.hasAttribute('tabindex')) a.tabIndex = 0;
+    });
   }
 
   // Preserve Files/Settings navigation DOM when loading an inner view.
@@ -1032,6 +1065,7 @@
       // File preview, bulk actions and uploads read the live directory path
       // from this surviving root; never leave it at the previous folder.
       oldRoot.dataset.filesCurrentPath = newRoot.dataset.filesCurrentPath;
+      sanitizeFilesLinks(oldRoot);
       const oldFolders=oldNav.querySelector('#yrm-my-files-children');
       const freshFolders=newNav.querySelector('#yrm-my-files-children');
       if(oldFolders&&freshFolders){
@@ -1169,7 +1203,26 @@
   $("window-minimize")?.addEventListener("click", () => showDesktop());
   $("window-close")?.addEventListener("click", () => { if (activeUrl) closeTab(activeUrl); });
   $("window-maximize")?.addEventListener("click",toggleWindowMaximize);
+  // Folder labels have no href (no browser status-bar URL); the Files tree
+  // navigation module asks the shell to navigate instead.
+  window.addEventListener('yrm-panel:navigate', event => {
+    const url = typeof event.detail === 'string' ? internalUrl(event.detail) : null;
+    if (url) void openPage(url);
+  });
   document.addEventListener("click", (event) => {
+    const navItem = event.target instanceof Element ? event.target.closest("[data-fm-href]") : null;
+    if (navItem && !navItem.matches('[data-fm-inline-folder],[data-fm-tree-folder],[data-my-files-toggle]')) {
+      if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+        const url = internalUrl(navItem.dataset.fmHref);
+        if (url) {
+          event.preventDefault();
+          const refresh = url === activeUrl && !!navItem.closest("#window-page");
+          if (refresh && url.startsWith('/Files')) filesPageCache.clear();
+          void openPage(url, {refresh});
+          return;
+        }
+      }
+    }
     const anchor = event.target.closest?.("a[href]");
     if (anchor?.hasAttribute("data-log-viewer")) {
       event.preventDefault(); void openLogs(anchor.href); return;
@@ -1344,18 +1397,9 @@
     }
     storage.replaceChildren(list);
   }
-  let polling = false;
-  async function poll() {
-    if (polling || document.hidden) return;
-    polling = true;
-    try {
-      const response = await fetch("/api/metrics", {credentials:"same-origin", cache:"no-store"});
-      if (!response.ok) return;
-      applySnapshot(await response.json());
-    } catch { /* Next poll can reconnect. */ }
-    finally { polling = false; }
-  }
-  void poll();
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) void poll(); });
-  setInterval(() => void poll(), 5000);
+  // Metrics are rendered from the single shared channel (SSE with a polling
+  // fallback). panel.js must not start its own interval or EventSource.
+  if (window.YrmMetrics) window.YrmMetrics.subscribe(applySnapshot);
+  sanitizeFilesLinks(document);
+  window.addEventListener('yrm-panel:files-view-changed', () => sanitizeFilesLinks(page));
 })();
