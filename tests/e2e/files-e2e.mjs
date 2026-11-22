@@ -166,6 +166,22 @@ for (const tab of ['overview', 'network', 'appearance', 'about']) {
 }
 
 // ---------- No URL previews, stable wallpaper and window, filled cards -----
+// Emulates a docked DevTools panel: the viewport shrinks, the physical screen does not.
+// (page.setViewportSize would shrink window.screen too, which real DevTools never does.)
+let devtoolsSession = null;
+async function dockDevtools(width, height) {
+  devtoolsSession ??= await context.newCDPSession(page);
+  await devtoolsSession.send('Emulation.setDeviceMetricsOverride',
+    { width, height, deviceScaleFactor: 1, mobile: false, screenWidth: 1440, screenHeight: 900 });
+}
+await check('Settings sidebar keeps the active section highlighted across guarded navigation', async () => {
+  await page.goto(BASE + '/Settings?tab=overview');
+  await page.waitForSelector('.server-settings-layout');
+  for (const tab of ['network', 'overview']) {
+    await page.locator(`.settings-nav-link[data-panel-route*="tab=${tab}"]`).first().click();
+    await page.waitForFunction(t => document.querySelector('.settings-nav-link.is-active')?.dataset.panelRoute?.includes('tab=' + t), tab);
+  }
+});
 for (const route of ['/', '/Files?path=' + encodeURIComponent(FIXTURE_REL), '/Settings?tab=overview', '/Settings?tab=about']) {
   await check(`no link on ${route.split('?')[0]} can show a URL preview (even ones added later)`, async () => {
     await page.goto(BASE + route);
@@ -191,10 +207,10 @@ await check('wallpaper layer does not move or rescale when the viewport shrinks 
   await page.waitForSelector('.desktop-background', { state: 'attached' });
   const box = () => page.evaluate(() => { const r = document.querySelector('.desktop-background').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
   const before = await box();
-  await page.setViewportSize({ width: 1000, height: 600 });
+  await dockDevtools(1000, 600);
   await new Promise(resolve => setTimeout(resolve, 200));
   const during = await box();
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await dockDevtools(1440, 900);
   for (const key of Object.keys(before)) assert(Math.abs(before[key] - during[key]) <= 1, `wallpaper ${key} changed: ${before[key]} -> ${during[key]}`);
 });
 await check('desktop window keeps its position and size when the viewport shrinks (DevTools)', async () => {
@@ -203,10 +219,10 @@ await check('desktop window keeps its position and size when the viewport shrink
   await new Promise(resolve => setTimeout(resolve, 300));
   const rect = () => page.evaluate(() => { const r = document.getElementById('workspace-window').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
   const before = await rect();
-  await page.setViewportSize({ width: 1100, height: 700 });
+  await dockDevtools(1100, 700);
   await new Promise(resolve => setTimeout(resolve, 200));
   const during = await rect();
-  await page.setViewportSize({ width: 1440, height: 900 });
+  await dockDevtools(1440, 900);
   await new Promise(resolve => setTimeout(resolve, 200));
   const after = await rect();
   for (const key of Object.keys(before)) {
