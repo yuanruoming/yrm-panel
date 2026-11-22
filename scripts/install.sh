@@ -2,7 +2,7 @@
 # YRM Panel RC4: choose an EXISTING Linux user; preserve host services and data.
 set -Eeuo pipefail
 umask 027
-REPO=''; CHANNEL='dev'; BRANCH='master'; PORT='6080'; HTTPS_PORT='6081'; BIND='0.0.0.0'; PANEL_USER=''; NONINTERACTIVE=0
+REPO=''; CHANNEL='dev'; BRANCH='master'; PORT='6080'; HTTPS_PORT='6081'; BIND='0.0.0.0'; PANEL_USER=''; NONINTERACTIVE=0; LOCAL_DIR=''
 while (($#)); do
   case "$1" in
     --repo) REPO="${2:?}"; shift 2;;
@@ -13,6 +13,8 @@ while (($#)); do
     --bind) BIND="${2:?}"; shift 2;;
     --user|--file-user) PANEL_USER="${2:?}"; shift 2;;
     --noninteractive) NONINTERACTIVE=1; shift;;
+    # Install a release already on disk (used by the lifecycle test); skips every download.
+    --local-dir) LOCAL_DIR="${2:?}"; shift 2;;
     *) echo "Unknown option: $1" >&2; exit 2;;
   esac
 done
@@ -25,6 +27,7 @@ valid_port "$PORT" && valid_port "$HTTPS_PORT" && [[ "$PORT" != "$HTTPS_PORT" ]]
   echo 'Invalid HTTP/HTTPS ports.' >&2; exit 2;
 }
 [[ "$BIND" == '0.0.0.0' || "$BIND" == '127.0.0.1' ]] || { echo 'Invalid bind address.' >&2; exit 2; }
+[[ -z "$LOCAL_DIR" || ( "$LOCAL_DIR" == /* && -d "$LOCAL_DIR" ) ]] || { echo '--local-dir must be an existing absolute directory.' >&2; exit 2; }
 . /etc/os-release
 [[ "$ID" == ubuntu || "$ID" == debian ]] && [[ -d /run/systemd/system ]] || {
   echo 'Ubuntu/Debian with systemd is required.' >&2; exit 1;
@@ -171,8 +174,65 @@ progress() {
   mv -f -- "$temp_status" "$progress_file"
 }
 workdir=$(mktemp -d)
-trap 'rm -rf "$workdir"' EXIT
+
+# Everything an upgrade overwrites outside /opt/yrm-panel. If the upgrade fails
+# after the first change, all of it is put back together with the old program.
+managed_files=(
+  /usr/local/libexec/yrm-panel-samba /usr/local/libexec/yrm-panel-storage
+  /usr/local/libexec/yrm-panel-power /usr/local/libexec/yrm-panel-update-trigger
+  /usr/local/libexec/yrm-panel-mount /usr/local/libexec/yrm-panel-firewall
+  /etc/sudoers.d/yrm-panel
+  /etc/systemd/system/yrm-panel.service /etc/systemd/system/yrm-panel-firewall-restore.service
+  /usr/local/sbin/yrm-panel-update /usr/local/sbin/yrm-panel-uninstall
+)
+backup="$workdir/backup"
+rollback_armed=0   # 1 once an existing installation has been backed up
+app_swapped=0      # 1 only after /opt/yrm-panel was moved to /opt/yrm-panel.previous by THIS run
+backup_managed_files() {
+  local file
+  mkdir -p "$backup/files"
+  : >"$backup/absent.list"
+  for file in "${managed_files[@]}"; do
+    if [[ -e "$file" ]]; then cp -a --parents "$file" "$backup/files"
+    else printf '%s\n' "$file" >>"$backup/absent.list"; fi
+  done
+}
+restore_system_state() {
+  local file
+  systemctl stop yrm-panel.service 2>/dev/null || true
+  # Never swap in an older .previous left by an earlier update unless this run moved it.
+  if ((app_swapped == 1)) && [[ -d /opt/yrm-panel.previous ]]; then
+    rm -rf /opt/yrm-panel
+    mv /opt/yrm-panel.previous /opt/yrm-panel
+  fi
+  for file in "${managed_files[@]}"; do
+    [[ -e "$backup/files$file" ]] && cp -a "$backup/files$file" "$file"
+  done
+  while IFS= read -r file; do
+    [[ -n "$file" ]] && rm -f -- "$file"
+  done <"$backup/absent.list"
+  systemctl daemon-reload
+  systemctl restart yrm-panel.service || true
+}
+cleanup() {
+  local code=$?
+  trap - EXIT
+  rm -f /etc/sudoers.d/.yrm-panel.* 2>/dev/null || true
+  if ((code != 0 && rollback_armed == 1)); then
+    echo 'Installation failed after files were changed; restoring the previous version.' >&2
+    restore_system_state || echo 'WARNING: automatic rollback was incomplete; check systemctl status yrm-panel.' >&2
+  fi
+  rm -rf "$workdir"
+  exit "$code"
+}
+trap cleanup EXIT
 asset="yrm-panel-$platform.tar.gz"
+if [[ -n "$LOCAL_DIR" ]]; then
+  [[ -f "$LOCAL_DIR/$asset" && -f "$LOCAL_DIR/$asset.sha256" ]] || {
+    echo "Missing $asset or $asset.sha256 in --local-dir." >&2; exit 1; }
+  echo "Installing YRM Panel from local release files ($platform)..."
+  cp -- "$LOCAL_DIR/$asset" "$LOCAL_DIR/$asset.sha256" "$workdir/"
+else
 release_tag="$CHANNEL"
 if [[ "$CHANNEL" == stable ]]; then
   release_json=$(curl -fLSs --retry 2 "https://api.github.com/repos/$REPO/releases/latest") || {
@@ -223,6 +283,7 @@ else
 fi
 progress Verifying 'Verifying release SHA256 and extracting files.'
 curl -fLSs --retry 3 "$base/$asset.sha256" -o "$workdir/$asset.sha256"
+fi
 (cd "$workdir" && sha256sum -c "$asset.sha256")
 mkdir -p "$workdir/publish"
 tar -xzf "$workdir/$asset" -C "$workdir/publish"
@@ -235,6 +296,11 @@ for path in YrmPanel deployment/yrm-panel.service deployment/yrm-panel-samba.py 
   [[ -f "$workdir/publish/$path" ]] || { echo "Missing release asset: $path" >&2; exit 1; }
 done
 
+# From here on a failure restores the previous helpers, sudoers policy, units and program.
+if [[ -d /opt/yrm-panel ]]; then
+  backup_managed_files
+  rollback_armed=1
+fi
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-samba.py" /usr/local/libexec/yrm-panel-samba
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-storage.py" /usr/local/libexec/yrm-panel-storage
 install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-power.sh" /usr/local/libexec/yrm-panel-power
@@ -244,12 +310,17 @@ install -o root -g root -m 0755 "$workdir/publish/deployment/yrm-panel-firewall.
 
 # Mutations require the selected account's Linux password. Only an exact Samba
 # status action is available without a password; all inputs are validated by helper.
-cat >/etc/sudoers.d/yrm-panel <<SUDO
+# sudo skips sudoers.d files whose names contain a dot, so the temporary file is inert.
+sudoers_tmp=$(mktemp /etc/sudoers.d/.yrm-panel.XXXXXX)
+cat >"$sudoers_tmp" <<SUDO
 $PANEL_USER ALL=(root) PASSWD: /usr/local/libexec/yrm-panel-storage *, /usr/local/libexec/yrm-panel-samba *, /usr/local/libexec/yrm-panel-power *, /usr/local/libexec/yrm-panel-update-trigger start, /usr/local/libexec/yrm-panel-mount *, /usr/local/libexec/yrm-panel-firewall apply
 $PANEL_USER ALL=(root) NOPASSWD: /usr/local/libexec/yrm-panel-samba list, /usr/local/libexec/yrm-panel-firewall list, /usr/local/libexec/yrm-panel-firewall confirm *
 SUDO
-chmod 0440 /etc/sudoers.d/yrm-panel
-visudo -cf /etc/sudoers.d/yrm-panel >/dev/null
+chown root:root "$sudoers_tmp"
+chmod 0440 "$sudoers_tmp"
+visudo -cf "$sudoers_tmp" >/dev/null || {
+  echo 'The generated sudoers policy is invalid. The existing policy was left unchanged.' >&2; exit 1; }
+mv -f -- "$sudoers_tmp" /etc/sudoers.d/yrm-panel
 rm -f /etc/sudoers.d/yrm-panel-samba /etc/sudoers.d/yrm-panel-storage /etc/sudoers.d/yrm-panel-power
 /usr/local/libexec/yrm-panel-samba bootstrap
 
@@ -258,6 +329,7 @@ if [[ -d /opt/yrm-panel ]]; then
   systemctl stop yrm-panel.service 2>/dev/null || true
   rm -rf /opt/yrm-panel.previous
   mv /opt/yrm-panel /opt/yrm-panel.previous
+  app_swapped=1
 fi
 install -d -o root -g root -m 0755 /opt/yrm-panel
 cp -a "$workdir/publish/." /opt/yrm-panel/
@@ -295,17 +367,9 @@ fi
 if ((health_ok == 0)); then
   echo 'YRM Panel failed to start: journalctl -u yrm-panel -n 80' >&2
   systemctl stop yrm-panel.service 2>/dev/null || true
-  if [[ -d /opt/yrm-panel.previous ]]; then
-    rm -rf /opt/yrm-panel
-    mv /opt/yrm-panel.previous /opt/yrm-panel
-    if [[ -f "$workdir/previous.service" ]]; then
-      cp "$workdir/previous.service" /etc/systemd/system/yrm-panel.service
-    fi
-    systemctl daemon-reload
-    systemctl restart yrm-panel.service || true
-  fi
-  exit 1
+  exit 1   # the EXIT trap restores the previous installation when one existed
 fi
+rollback_armed=0
 awk '{print $1}' "$workdir/$asset.sha256" > /var/lib/yrm-panel/installed.sha256
 chown "$PANEL_USER:$PANEL_GROUP" /var/lib/yrm-panel/installed.sha256
 chmod 0644 /var/lib/yrm-panel/installed.sha256

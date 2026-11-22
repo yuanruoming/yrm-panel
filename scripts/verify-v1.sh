@@ -10,7 +10,7 @@ for file in Path('scripts').glob('*.py'):
     ast.parse(file.read_text(encoding='utf-8'), filename=str(file))
 print('PASS: Python helper syntax')
 PY
-for file in scripts/*.sh; do bash -n "$file"; done
+for file in scripts/*.sh tests/lifecycle/*.sh; do bash -n "$file"; done
 echo 'PASS: Bash syntax'
 # All feature regressions are mandatory. The legacy test_beta*.py files
 # are superseded by tests/regression and may be removed from the repository.

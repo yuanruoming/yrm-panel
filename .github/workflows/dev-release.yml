@@ -14,8 +14,11 @@ jobs:
   e2e:
     if: github.ref_name == github.event.repository.default_branch
     uses: ./.github/workflows/ci-e2e.yml
+  lifecycle:
+    if: github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/ci-lifecycle.yml
   publish:
-    needs: e2e
+    needs: [e2e, lifecycle]
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     steps:
