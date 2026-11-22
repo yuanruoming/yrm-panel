@@ -163,20 +163,15 @@ public sealed class FilesModel : PageModel
         var found = new HashSet<string>(StringComparer.Ordinal);
         foreach (var root in roots.Distinct(StringComparer.Ordinal))
         {
-            // FileManagerService already skips hidden entries, symlinks and lost+found.
-            var browse = _files.Browse("system", root.TrimStart('/'));
-            if (!browse.Available) continue;
-            foreach (var entry in browse.Items.Where(e => e.IsDirectory))
-            {
-                var path = System.IO.Path.Combine(root, entry.Name);
-                if (Directory.Exists(path)) found.Add(path);
-            }
+            // Skips hidden entries, symlinks and lost+found without a full listing.
+            foreach (var name in _files.ListChildDirectoryNames(root))
+                found.Add(System.IO.Path.Combine(root, name));
         }
         foreach (var old in _folders.List())
         {
             // Preserve formerly-added external folders even when their parent is
             // outside the two normal managed storage roots.
-            if (Directory.Exists(old) && _files.Browse("system", old.TrimStart('/')).Available)
+            if (Directory.Exists(old) && _files.CanBrowse(old))
                 found.Add(old);
         }
         return found.OrderBy(x => System.IO.Path.GetFileName(x), StringComparer.OrdinalIgnoreCase)

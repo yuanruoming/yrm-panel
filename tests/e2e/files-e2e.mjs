@@ -50,6 +50,11 @@ await check('login page can be viewed repeatedly without 429', async () => {
 });
 
 // ---------- Login -------------------------------------------------------
+await check('login page shows the neutral address and the plain panel title', async () => {
+  await page.goto(BASE + '/Account/Login');
+  await until(async () => new URL(page.url()).pathname === '/', 'address bar shows / instead of /Account/Login');
+  assert(await page.title() === 'YRM PANEL', 'title was ' + await page.title());
+});
 await check('wrong password is rejected with a visible error', async () => {
   await page.goto(BASE + '/Account/Login');
   await page.fill('#username', USER);
@@ -61,11 +66,8 @@ await check('real Linux (PAM) login succeeds and shows the desktop shell', async
   await page.goto(BASE + '/Account/Login');
   await page.fill('#username', USER);
   await page.fill('#password', PASS);
-  await Promise.all([
-    page.waitForURL(url => !url.pathname.includes('/Account/Login'), { timeout: 20000 }),
-    page.click('button.login-submit')
-  ]);
-  await page.waitForSelector('body.os-shell', { timeout: 15000 });
+  await page.click('button.login-submit');
+  await page.waitForSelector('body.os-shell', { timeout: 20000 });
 });
 
 // ---------- Open Files from the launcher (the way a user does) ----------

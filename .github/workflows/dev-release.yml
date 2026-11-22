@@ -9,7 +9,13 @@ concurrency:
   group: yrm-panel-dev-release
   cancel-in-progress: false
 jobs:
+  # The real-browser E2E must pass before anything reaches the rolling dev
+  # release that installed panels update from.
+  e2e:
+    if: github.ref_name == github.event.repository.default_branch
+    uses: ./.github/workflows/ci-e2e.yml
   publish:
+    needs: e2e
     if: github.ref_name == github.event.repository.default_branch
     runs-on: ubuntu-24.04
     steps:

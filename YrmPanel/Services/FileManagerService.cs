@@ -79,6 +79,57 @@ public sealed class FileManagerService
         }
     }
 
+    /// <summary>
+    /// Names of the visible child folders of an absolute directory (no hidden items,
+    /// symbolic links or lost+found). Reads directory entries only: no per-item
+    /// stat for files, so large folders stay cheap on the navigation path.
+    /// </summary>
+    public IReadOnlyList<string> ListChildDirectoryNames(string absoluteDirectory)
+    {
+        try
+        {
+            var directory = Resolve("system", absoluteDirectory.TrimStart('/'), true);
+            if (!Directory.Exists(directory)) return [];
+            var options = new System.IO.EnumerationOptions
+            {
+                AttributesToSkip = 0,
+                IgnoreInaccessible = true,
+                RecurseSubdirectories = false
+            };
+            var entries = new System.IO.Enumeration.FileSystemEnumerable<string>(
+                directory, (ref System.IO.Enumeration.FileSystemEntry entry) => entry.FileName.ToString(), options)
+            {
+                ShouldIncludePredicate = (ref System.IO.Enumeration.FileSystemEntry entry) =>
+                    entry.IsDirectory &&
+                    !entry.FileName.SequenceEqual("lost+found".AsSpan()) &&
+                    (entry.FileName.Length == 0 || entry.FileName[0] != '.') &&
+                    (entry.Attributes & FileAttributes.ReparsePoint) == 0
+            };
+            return entries.Take(MaxScannedEntries).ToArray();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return [];
+        }
+    }
+
+    /// <summary>True when the folder can be listed; reads at most one entry.</summary>
+    public bool CanBrowse(string absoluteDirectory)
+    {
+        try
+        {
+            var directory = Resolve("system", absoluteDirectory.TrimStart('/'), true);
+            if (!Directory.Exists(directory)) return false;
+            using var entries = Directory.EnumerateFileSystemEntries(directory).GetEnumerator();
+            entries.MoveNext();
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
     public bool IsManaged(string absolute)
     {
         var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(absolute));

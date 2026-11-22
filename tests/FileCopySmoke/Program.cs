@@ -123,6 +123,24 @@ try
     Expect(bigView.Items[1].Name == "f0000.txt" && bigView.Items[^1].Name == "f0998.txt",
         "large folder lists the alphabetically first files");
     Console.WriteLine("PASS: Files large-folder listing is sorted before truncation");
+
+    // My Files discovery: only visible real folders; no files, hidden folders,
+    // symbolic links or lost+found. CanBrowse must be true for a readable folder.
+    var discover = Path.Combine(fixture, "discover");
+    Directory.CreateDirectory(Path.Combine(discover, "Photos"));
+    Directory.CreateDirectory(Path.Combine(discover, "Docs"));
+    Directory.CreateDirectory(Path.Combine(discover, ".hidden-folder"));
+    Directory.CreateDirectory(Path.Combine(discover, "lost+found"));
+    await File.WriteAllTextAsync(Path.Combine(discover, "readme.txt"), "x");
+    File.CreateSymbolicLink(Path.Combine(discover, "link-to-docs"), Path.Combine(discover, "Docs"));
+    var names = fileManager.ListChildDirectoryNames(discover).OrderBy(x => x, StringComparer.Ordinal).ToArray();
+    Expect(names.SequenceEqual(new[] { "Docs", "Photos" }),
+        "folder discovery returns only visible real folders, got: " + string.Join(",", names));
+    Expect(fileManager.CanBrowse(discover), "CanBrowse true for a readable folder");
+    Expect(!fileManager.CanBrowse(Path.Combine(discover, "missing")), "CanBrowse false for a missing folder");
+    Expect(fileManager.ListChildDirectoryNames(Path.Combine(discover, "missing")).Count == 0,
+        "folder discovery returns nothing for a missing folder");
+    Console.WriteLine("PASS: Files lean My Files folder discovery");
 }
 finally
 {

@@ -1,12 +1,13 @@
 name: CI real-Linux browser E2E
 # Runs the real published panel on an Ubuntu runner (real PAM, real sudo-less
 # Linux user, real Kestrel HTTPS) and drives it with a browser.
-# It never publishes a release. Use it on a branch before merging to master.
+# It never publishes a release. dev-release.yml calls it and publishes only if it passes.
 on:
   push:
     branches-ignore: [main, master]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 concurrency:
   group: yrm-panel-e2e-${{ github.ref }}
   cancel-in-progress: true

@@ -30,6 +30,19 @@ class Batch1BackendFixes(unittest.TestCase):
         self.assertIn('GetNoLimiter', program)
         self.assertIn('PermitLimit = 8', program)
 
+    def test_navigation_hot_path_uses_stale_while_revalidate_and_lean_discovery(self):
+        snapshot = source('YrmPanel/Services/FilesNavigationSnapshot.cs')
+        files = source('YrmPanel/Pages/Files.cshtml.cs')
+        manager = source('YrmPanel/Services/FileManagerService.cs')
+        # An explicit refresh and every Panel mutation must still bypass stale data.
+        self.assertIn('if (!refresh)', snapshot)
+        self.assertIn('public void Invalidate()', snapshot)
+        self.assertIn('if (_generation == generation)', snapshot)
+        # My Files discovery must not run a full per-item listing on every click.
+        discover = files[files.index('private IReadOnlyList<string> DiscoverMyFiles()'):files.index('private async Task<bool> IsMyFilesEntryAsync')]
+        self.assertNotIn('.Browse(', discover)
+        self.assertIn('FileSystemEnumerable<string>', manager)
+
 
 if __name__ == '__main__':
     unittest.main()

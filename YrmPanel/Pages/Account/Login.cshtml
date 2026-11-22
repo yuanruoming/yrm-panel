@@ -10,12 +10,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <title>Sign in · YRM PANEL</title>
+    <title>YRM PANEL</title>
     <link rel="stylesheet" asp-append-version="true" href="~/css/panel.css" />
     <link rel="stylesheet" asp-append-version="true" href="~/css/desktop.css" />
     <link rel="stylesheet" asp-append-version="true" href="~/css/v1.css" />
     <link rel="stylesheet" asp-append-version="true" href="~/css/v1-stability.css" />
     <link rel="icon" type="image/x-icon" href="~/favicon.ico" asp-append-version="true" />
+    <script asp-append-version="true" src="~/js/login-url.js" defer></script>
 </head>
 <body class="login-body-v2 login-rc4">
     <div class="login-rc4-ambient" aria-hidden="true"></div>
@@ -27,7 +28,7 @@
             <p>Sign in using your @Model.AccountDescription.</p>
             @if (!string.IsNullOrEmpty(Model.Error))
             { <div class="notice error" role="alert">@Model.Error</div> }
-            <form method="post" class="login-form-v2">
+            <form method="post" action="/Account/Login" class="login-form-v2">
                 <label for="username">Username</label>
                 <input id="username" name="Username" value="@Model.Username" autocomplete="username" maxlength="32" required autofocus />
                 <label for="password">Password</label>
