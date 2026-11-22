@@ -293,7 +293,8 @@ class RoundTwoContracts(unittest.TestCase):
 
     def test_about_restores_version_without_dev_badge(self):
         view = content('YrmPanel/Pages/Settings.cshtml')
-        self.assertIn('class="yrm-updates-current"', view)
+        # The About tab shows the running version in the update card header.
+        self.assertIn('class="yrm-update-hero-version"', view)
         self.assertNotIn('<span class="tag">@Model.UpdateChannel</span>', view)
 
 if __name__ == '__main__': unittest.main()

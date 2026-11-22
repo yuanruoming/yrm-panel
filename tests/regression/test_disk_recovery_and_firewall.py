@@ -129,7 +129,13 @@ class UiIntegration(TestCase):
         self.assertIn("listFolders('')",js)
         self.assertNotIn('This folder will be created in the current location',files)
         self.assertNotIn('Parent location</span>',files)
-        self.assertIn('title="Double-click to open"',files)
+        # Folder rows navigate through data-fm-href, never a real href, so the browser
+        # does not show a URL in its status bar while the pointer rests on a row.
+        folder_entry=files[files.index('<a class="fm-folder-entry" data-fm-inline-folder'):]
+        folder_entry=folder_entry[:folder_entry.index('>')]   # opening tag only (the icon's <use href> is not a link)
+        self.assertIn('role="link"',folder_entry)
+        self.assertIn('data-fm-href=',folder_entry)
+        self.assertNotIn(' href=',folder_entry)
         # Existing custom upload remains functional from My Files.
         self.assertIn('class="fm-visually-hidden" id="fm-root-upload-file" type="file"',files)
         self.assertIn('data-file-picker="fm-root-upload-file"',files)
