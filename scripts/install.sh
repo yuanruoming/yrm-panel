@@ -209,6 +209,8 @@ restore_system_state() {
   if ((app_swapped == 1)) && [[ -d /opt/yrm-panel.previous ]]; then
     rm -rf /opt/yrm-panel
     mv /opt/yrm-panel.previous /opt/yrm-panel
+  elif ((fresh_install == 1)); then
+    rm -rf /opt/yrm-panel
   fi
   for file in "${managed_files[@]}"; do
     [[ -e "$backup/files$file" ]] && cp -a "$backup/files$file" "$file"
@@ -223,6 +225,7 @@ restore_system_state() {
   fi
   systemctl daemon-reload || true
   if ((fresh_install == 1)); then
+    rm -rf /opt/yrm-panel
     systemctl disable yrm-panel.service yrm-panel-firewall-restore.service 2>/dev/null || true
   else
     systemctl restart yrm-panel.service || true
