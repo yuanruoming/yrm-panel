@@ -12,7 +12,11 @@ body.os-shell::before, body.os-shell::after { content: none !important; }
 button, a { -webkit-tap-highlight-color: transparent; }
 .icon-definitions { position: absolute; width: 0; height: 0; overflow: hidden; }
 .ui-icon { display: block; width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-.desktop-background { position: fixed; inset: 0; background-image: linear-gradient(180deg,rgba(5,11,21,.16) 0%,rgba(7,16,28,.02) 48%,rgba(4,11,20,.24) 100%),var(--wallpaper-image); background-size: cover; background-position: center; background-repeat: no-repeat; z-index: 0; }
+/* Sized from the physical screen (panel.js sets the variables), so a docked developer-tools panel or a
+   resized browser only crops the wallpaper instead of rescaling or shifting it. */
+.desktop-background { position: fixed; top: 0; left: 0; width: var(--yrm-screen-w, 100%); height: var(--yrm-screen-h, 100%); background-image: linear-gradient(180deg,rgba(5,11,21,.16) 0%,rgba(7,16,28,.02) 48%,rgba(4,11,20,.24) 100%),var(--wallpaper-image); background-size: cover; background-position: center; background-repeat: no-repeat; z-index: 0; }
+/* Anchors lose their href (no browser URL preview), so the pointer cursor must be set explicitly. */
+a[role="link"]:not([href]) { cursor: pointer; }
 .desktop-background::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 32%, transparent 50%, rgba(2,8,18,.18) 100%); pointer-events: none; }
 .os-topbar { position: fixed; top: 12px; left: 14px; right: 14px; height: 54px; z-index: 65; padding: 0 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; background: rgba(9,19,32,.67); border: 1px solid rgba(225,238,252,.16); border-radius: 17px; box-shadow: 0 8px 30px rgba(0,0,0,.14); backdrop-filter: blur(22px) saturate(130%); -webkit-backdrop-filter: blur(22px) saturate(130%); }
 .os-top-left, .os-top-right { display: flex; align-items: center; gap: 12px; min-width: 0; }

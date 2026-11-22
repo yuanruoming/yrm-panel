@@ -225,7 +225,7 @@
   });
   function updateLauncherPins() {
     launcher?.querySelectorAll("a.launcher-app").forEach(link=>{
-      const id=taskbarId(new URL(link.href,location.href).pathname);
+      const id=taskbarId(new URL(linkRoute(link),location.href).pathname);
       if (!taskbarBuiltin.has(id))return;
       let cell=link.closest(".yrm-launcher-cell");
       if (!cell) {
@@ -286,20 +286,30 @@
   }
   // BETA12.1 - one owner for window geometry; no parallel window controller.
   // Settings and Files use the same movable, resizable desktop window.
+  // The stored bounds are the user's own state. A viewport change (a docked
+  // developer-tools panel, a resized browser) never rewrites them: the window
+  // keeps its size and position and may simply be partly covered. Only when
+  // the title bar would become unreachable is the displayed position nudged,
+  // and the stored bounds are shown again as soon as the space returns.
   const windowBounds = new Map();
+  let windowNudged = false;
+  const GRAB_WIDTH = 120, GRAB_HEIGHT = 40;
   const windowTitlebar = appWindow?.querySelector('.window-titlebar');
   const workspaceKey = () => canonicalPath((activeUrl || '/Settings').split('?')[0]);
   const availableSpace = () => ({
     width: Math.max(280, stage?.clientWidth || innerWidth),
     height: Math.max(250, stage?.clientHeight || innerHeight - 49)
   });
-  function clampWindowPosition(bounds) {
+  // Smallest position change that keeps the title bar reachable; size is never touched.
+  function reachableBounds(bounds) {
     const space=availableSpace();
     const width=Math.max(1,Number(bounds.width)||0);
     const height=Math.max(1,Number(bounds.height)||0);
-    return {left:Math.max(0,Math.min(Math.max(0,space.width-width),Number(bounds.left)||0)),
-      top:Math.max(0,Math.min(Math.max(0,space.height-height),Number(bounds.top)||0)),width,height};
+    const grab=Math.min(GRAB_WIDTH,width);
+    return {left:Math.max(grab-width,Math.min(space.width-grab,Number(bounds.left)||0)),
+      top:Math.max(0,Math.min(space.height-GRAB_HEIGHT,Number(bounds.top)||0)),width,height};
   }
+  // Used only for the first placement of a window that has no stored bounds.
   function clampWindowBounds(bounds) {
     const space=availableSpace();
     const minWidth=Math.min(640,space.width);
@@ -312,32 +322,36 @@
   function readWindowBounds() {
     if (!appWindow || !stage) return null;
     const r=appWindow.getBoundingClientRect(), sr=stage.getBoundingClientRect();
-    // Keep the user's size when the viewport shrinks (for example when the
-    // browser's developer tools open); only the position is clamped.
-    return clampWindowPosition({left:r.left-sr.left,top:r.top-sr.top,width:r.width,height:r.height});
+    return {left:r.left-sr.left,top:r.top-sr.top,width:r.width,height:r.height};
   }
-  function storeWindowBounds() {
+  // Only a finished drag/resize gesture (force) may overwrite bounds that are
+  // currently being displayed nudged; anything else would lose the original.
+  function storeWindowBounds(force = false) {
     if (!activeUrl || appWindow?.classList.contains('is-maximized'))return;
+    if (windowNudged && !force)return;
     const bounds=readWindowBounds();
-    if (bounds)windowBounds.set(workspaceKey(),bounds);
+    if (bounds){windowBounds.set(workspaceKey(),bounds);windowNudged=false;}
   }
-  function applyWindowBounds(keepSize = false) {
+  function showWindowBounds(bounds) {
+    const shown=reachableBounds(bounds);
+    windowNudged=Math.abs(shown.left-bounds.left)>0.5||Math.abs(shown.top-bounds.top)>0.5;
+    for(const [name,value] of Object.entries(shown))appWindow.style[name]=`${Math.round(value)}px`;
+  }
+  function applyWindowBounds() {
     if (!appWindow || appWindow.classList.contains('is-maximized') || !activeUrl)return;
-    const key=workspaceKey(),space=availableSpace();
-    const stored=windowBounds.get(key);
-    let bounds;
-    if (keepSize && stored) {
-      // A viewport resize must not resize the desktop window. It may move it
-      // back inside the stage, but width/height stay exactly as the user left them.
-      bounds=clampWindowPosition(stored);
-    } else {
+    const key=workspaceKey();
+    let bounds=windowBounds.get(key);
+    if (!bounds) {
+      // First placement: centre once, then remember it so later viewport
+      // changes never re-centre (and therefore never move) the window.
+      const space=availableSpace();
       const preferredWidth=key==='/Files'?1300:key==='/Settings'?1080:1120;
       const width=Math.min(preferredWidth,space.width-32);
       const height=Math.min(key==='/Files'?800:740,space.height-30);
-      const fallback={left:(space.width-width)/2,top:(space.height-height)/2,width,height};
-      bounds=clampWindowBounds(stored||fallback);
+      bounds=clampWindowBounds({left:(space.width-width)/2,top:(space.height-height)/2,width,height});
+      windowBounds.set(key,bounds);
     }
-    for(const [name,value] of Object.entries(bounds))appWindow.style[name]=`${Math.round(value)}px`;
+    showWindowBounds(bounds);
   }
   function toggleWindowMaximize() {
     if (!appWindow)return;
@@ -359,7 +373,7 @@
       const startX=event.clientX,startY=event.clientY;
       windowTitlebar.setPointerCapture(event.pointerId);
       const move=e=>{
-        const next=clampWindowPosition({...start,left:start.left+(e.clientX-startX),
+        const next=reachableBounds({...start,left:start.left+(e.clientX-startX),
           top:start.top+(e.clientY-startY)});
         appWindow.style.left=next.left+'px';appWindow.style.top=next.top+'px';
       };
@@ -367,18 +381,17 @@
         windowTitlebar.removeEventListener('pointermove',move);
         windowTitlebar.removeEventListener('pointerup',end);
         windowTitlebar.removeEventListener('pointercancel',end);
-        storeWindowBounds();
+        storeWindowBounds(true);
       };
       windowTitlebar.addEventListener('pointermove',move);
       windowTitlebar.addEventListener('pointerup',end);
       windowTitlebar.addEventListener('pointercancel',end);
       event.preventDefault();
     });
-    // Native CSS resize remains active; remember its result when the gesture ends.
-    appWindow.addEventListener('pointerup',()=>storeWindowBounds());
     window.addEventListener('resize',()=>{
-      if(appWindow.classList.contains('is-maximized'))return;
-      applyWindowBounds(true);
+      if(appWindow.classList.contains('is-maximized') || !activeUrl)return;
+      const stored=windowBounds.get(workspaceKey());
+      if(stored)showWindowBounds(stored);
     });
   }
   // Eight-direction resize; the native bottom-right CSS grip is disabled.
@@ -397,10 +410,11 @@
           const dx=e.clientX-original.x,dy=e.clientY-original.y;
           const minW=Math.min(640,bounds.width),minH=Math.min(360,bounds.height);
           let {left,top,width,height}=start;
-          if(edge.includes('e'))width=Math.max(minW,Math.min(bounds.width-left,start.width+dx));
-          if(edge.includes('s'))height=Math.max(minH,Math.min(bounds.height-top,start.height+dy));
+          // A window already wider/taller than the stage keeps its size until the user shrinks it.
+          if(edge.includes('e'))width=Math.max(minW,Math.min(Math.max(bounds.width-left,start.width),start.width+dx));
+          if(edge.includes('s'))height=Math.max(minH,Math.min(Math.max(bounds.height-top,start.height),start.height+dy));
           if(edge.includes('w')){
-            left=Math.max(0,Math.min(start.left+start.width-minW,start.left+dx));
+            left=Math.max(Math.min(0,start.left),Math.min(start.left+start.width-minW,start.left+dx));
             width=start.width+start.left-left;
           }
           if(edge.includes('n')){
@@ -413,7 +427,7 @@
           handle.removeEventListener('pointermove',move);
           handle.removeEventListener('pointerup',end);
           handle.removeEventListener('pointercancel',end);
-          storeWindowBounds();
+          storeWindowBounds(true);
         };
         handle.addEventListener('pointermove',move);
         handle.addEventListener('pointerup',end);
@@ -422,6 +436,7 @@
       });
     }
   }
+
   // BETA12.1 notification center: single-admin browser history, bounded and
   // deduplicated by origin/message. Never store credentials or authorization data.
   const notificationKey='yrm-panel:notifications-v1';
@@ -983,7 +998,7 @@
   }, true);
   document.addEventListener('pointerout', event => {
     if (filesPrefetchTimer === null || !(event.target instanceof Element)) return;
-    const anchor = event.target.closest('a[href]');
+    const anchor = event.target.closest('a[href],a[data-fm-href]');
     if (anchor && !(event.relatedTarget instanceof Node && anchor.contains(event.relatedTarget))) {
       clearTimeout(filesPrefetchTimer); filesPrefetchTimer = null;
     }
@@ -1018,36 +1033,78 @@
     // sidebar and window survive the navigation. No artificial fade/spinner.
     oldDirectory.replaceChildren(...Array.from(freshDirectory.childNodes,node=>document.importNode(node,true)));
     oldDirectory.querySelector('.responsive-table')?.scrollTo({top:0,left:0});
-    sanitizeFilesLinks(oldPath);
-    sanitizeFilesLinks(oldDirectory);
-    window.dispatchEvent(new Event('yrm-panel:files-view-changed'));
     return true;
   }
 
-  // Remove href from in-app Files explorer links so hovering never reveals a
-  // browser status bar URL preview. The desktop shell performs navigation.
-  function sanitizeFilesLinks(root = document) {
-    if (!root || !root.querySelectorAll) return;
-    root.querySelectorAll('.fm-explorer a[href]:not([data-native-download]):not([download])').forEach(a => {
-      if (!a.dataset.fmHref) a.dataset.fmHref = a.getAttribute('href') || '';
-      a.removeAttribute('href');
-      a.setAttribute('role', 'link');
-      if (!a.hasAttribute('tabindex')) a.tabIndex = 0;
-    });
+  // One owner for "hovering a link never shows a URL in the browser status bar".
+  // The browser only previews anchors that carry an href, so every anchor loses
+  // it the moment it enters the page (first render, fetched views, dialogs,
+  // anything a script inserts or re-points). The original target moves to a
+  // data attribute and the click handler below performs the action:
+  //   data-fm-href / data-panel-route  in-app navigation (Files / other windows)
+  //   data-yrm-download                file download, started from a detached anchor
+  //   data-yrm-external                new browser tab
+  //   data-yrm-open                    everything else (desktop, log viewer, other pages)
+  const GUARDED_LINKS = '[data-yrm-download],[data-yrm-external],[data-yrm-open]';
+  function linkRoute(a) {
+    return a.getAttribute('href') || a.dataset.fmHref || a.dataset.panelRoute || a.dataset.yrmOpen || '';
   }
-
-  // Remove href from Settings sidebar and other shell-internal navigation links
-  // so the browser status bar never shows internal URLs on hover.
-  function sanitizeDesktopLinks(root = document) {
-    if (!root || !root.querySelectorAll) return;
-    // Settings nav links (sidebar items) — exclude external links (target="_blank")
-    root.querySelectorAll('.server-settings-nav a[href]:not([target="_blank"]):not([data-native-download])').forEach(a => {
-      if (!a.dataset.panelRoute) a.dataset.panelRoute = a.getAttribute('href') || '';
-      a.removeAttribute('href');
-      if (!a.hasAttribute('role')) a.setAttribute('role', 'button');
-      if (!a.hasAttribute('tabindex')) a.tabIndex = 0;
-    });
+  function guardLink(a) {
+    const raw = a.getAttribute('href');
+    if (raw === null || a.hasAttribute('data-yrm-transient')) return;
+    a.removeAttribute('href');
+    if (!a.hasAttribute('role')) a.setAttribute('role', 'link');
+    if (!a.hasAttribute('tabindex')) a.tabIndex = 0;
+    if (!raw || raw === '#') return; // placeholder; a real href set later is guarded again
+    let url = null;
+    try { url = new URL(raw, location.href); } catch (_) { /* treated as external below */ }
+    if (a.hasAttribute('download') || a.hasAttribute('data-native-download')) { a.dataset.yrmDownload = raw; return; }
+    if (!url || url.origin !== location.origin || (a.target && a.target !== '_self')) { a.dataset.yrmExternal = raw; return; }
+    if (a.hasAttribute('data-log-viewer') || !internalUrl(url.href)) { a.dataset.yrmOpen = raw; return; }
+    if (a.closest('.fm-explorer')) a.dataset.fmHref = raw; else a.dataset.panelRoute = raw;
   }
+  function guardLinks(root) {
+    if (!(root instanceof Element) && root !== document) return;
+    if (root instanceof Element && root.matches('a[href]')) guardLink(root);
+    root.querySelectorAll('a[href]').forEach(guardLink);
+  }
+  function startLinkGuard() {
+    new MutationObserver(records => {
+      for (const record of records) {
+        if (record.type === 'attributes') {
+          if (record.target instanceof Element && record.target.matches('a[href]')) guardLink(record.target);
+        } else record.addedNodes.forEach(node => { if (node instanceof Element) guardLinks(node); });
+      }
+    }).observe(document.body, {childList: true, subtree: true, attributes: true, attributeFilter: ['href']});
+    guardLinks(document.body);
+  }
+  function activateGuardedLink(el) {
+    const raw = el.dataset.yrmDownload ?? el.dataset.yrmExternal ?? el.dataset.yrmOpen ?? '';
+    if (!raw || raw === '#') return;
+    if (el.dataset.yrmDownload !== undefined) {
+      // Streamed natively by the browser (no blob in memory). The anchor is
+      // removed within the same task, so it can never be hovered.
+      const a = document.createElement('a');
+      a.hidden = true; a.setAttribute('data-yrm-transient', '');
+      a.href = raw; a.download = el.getAttribute('download') || '';
+      document.body.append(a); a.click(); a.remove();
+      return;
+    }
+    if (el.dataset.yrmExternal !== undefined) { window.open(raw, '_blank', 'noopener,noreferrer'); return; }
+    if (el.hasAttribute('data-log-viewer')) { void openLogs(new URL(raw, location.href).href); return; }
+    if (isDesktopUrl(raw)) { showDesktop(); return; }
+    const url = internalUrl(raw);
+    if (url) { void openPage(url); return; }
+    location.assign(raw);
+  }
+  // Keyboard parity with the removed href: Enter activates a guarded link.
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    const el = event.target instanceof Element ? event.target.closest(GUARDED_LINKS + ',[data-panel-route]') : null;
+    if (!el) return;
+    event.preventDefault();
+    el.click();
+  });
 
   // Replacing a Settings pane recreates every <img>, so thumbnails that were
   // already decoded (Appearance > Recently Used) flash while they load again.
@@ -1098,14 +1155,13 @@
       // File preview, bulk actions and uploads read the live directory path
       // from this surviving root; never leave it at the previous folder.
       oldRoot.dataset.filesCurrentPath = newRoot.dataset.filesCurrentPath;
-      sanitizeFilesLinks(oldRoot);
       const oldFolders=oldNav.querySelector('#yrm-my-files-children');
       const freshFolders=newNav.querySelector('#yrm-my-files-children');
       if(oldFolders&&freshFolders){
-        const oldByHref=new Map(Array.from(oldFolders.querySelectorAll(':scope > a[href]'),
-          node=>[node.getAttribute('href'),node]));
+        const oldByRoute=new Map(Array.from(oldFolders.querySelectorAll(':scope > a'),
+          node=>[linkRoute(node),node]));
         const ordered=Array.from(freshFolders.querySelectorAll(':scope > a[href]'),node=>
-          oldByHref.get(node.getAttribute('href'))||document.importNode(node,true));
+          oldByRoute.get(linkRoute(node))||document.importNode(node,true));
         if (ordered.length !== oldFolders.children.length ||
             ordered.some((node,index)=>oldFolders.children[index]!==node))
           oldFolders.replaceChildren(...ordered);
@@ -1115,11 +1171,12 @@
       if(oldQuick&&freshQuick&&oldQuick.textContent!==freshQuick.textContent)
         oldQuick.replaceChildren(...Array.from(freshQuick.childNodes,node=>document.importNode(node,true)));
     }
-    const selected=new Set(Array.from(newNav.querySelectorAll('a.is-active'),a=>a.getAttribute('href')));
+    const selected=new Set(Array.from(newNav.querySelectorAll('a.is-active'),linkRoute));
     const requestedPath=incoming==='/Files'?new URL(targetUrl,location.origin).searchParams.get('path'):null;
     oldNav.querySelectorAll('a').forEach(link=>{
-      const linkPath=incoming==='/Files'?new URL(link.href,location.origin).searchParams.get('path'):null;
-      link.classList.toggle('is-active',selected.has(link.getAttribute('href'))||
+      const route=linkRoute(link);
+      const linkPath=incoming==='/Files'&&route?new URL(route,location.origin).searchParams.get('path'):null;
+      link.classList.toggle('is-active',(route!==''&&selected.has(route))||
         (requestedPath!==null&&requestedPath!=='@folders'&&linkPath===requestedPath));
     });
     if (incoming !== '/Files' || !reconcileFilesContent(oldContent,newContent)) {
@@ -1133,9 +1190,6 @@
       if (child.matches(rootSelector)) continue;
       page.append(document.importNode(child,true));
     }
-    // After the new content is in the DOM, re-sanitize so no internal link
-    // gains a browser status bar preview in the updated nav or content area.
-    if (incoming === '/Settings') sanitizeDesktopLinks(oldRoot);
     return true;
   }
   async function loadPage(url, refresh = false, push = true) {
@@ -1249,7 +1303,13 @@
     if (url) void openPage(url);
   });
   document.addEventListener("click", (event) => {
-    // Handle sanitized Settings-nav links (data-panel-route replaces href to hide URL preview)
+    const guardedEl = event.target instanceof Element ? event.target.closest(GUARDED_LINKS) : null;
+    if (guardedEl && event.button === 0) {
+      event.preventDefault();
+      activateGuardedLink(guardedEl);
+      return;
+    }
+    // data-panel-route replaces href on in-app links so the browser never previews a URL
     const panelRouteEl = event.target instanceof Element ? event.target.closest('[data-panel-route]') : null;
     if (panelRouteEl && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
       const url = internalUrl(panelRouteEl.dataset.panelRoute);
@@ -1476,7 +1536,15 @@
   // Metrics are rendered from the single shared channel (SSE with a polling
   // fallback). panel.js must not start its own interval or EventSource.
   if (window.YrmMetrics) window.YrmMetrics.subscribe(applySnapshot);
-  sanitizeFilesLinks(document);
-  sanitizeDesktopLinks(document);
-  window.addEventListener('yrm-panel:files-view-changed', () => sanitizeFilesLinks(page));
+  startLinkGuard();
+  // The wallpaper layer is sized from the physical screen, not the viewport, so a
+  // docked developer-tools panel or a resized browser only crops it (it never
+  // rescales or shifts). CSS falls back to the viewport until this runs.
+  function syncWallpaperBox() {
+    const style = document.documentElement.style;
+    style.setProperty('--yrm-screen-w', `${Math.max(screen.width || 0, innerWidth)}px`);
+    style.setProperty('--yrm-screen-h', `${Math.max(screen.height || 0, innerHeight)}px`);
+  }
+  syncWallpaperBox();
+  window.addEventListener('resize', syncWallpaperBox);
 })();

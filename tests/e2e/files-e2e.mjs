@@ -35,7 +35,7 @@ const until = async (predicate, message, timeout = 8000) => {
 };
 
 const browser = await chromium.launch();
-const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 } });
+const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 }, screen: { width: 1440, height: 900 } });
 page = await context.newPage();
 page.setDefaultTimeout(10000);   // fail quickly; CI runners are fast enough
 const pageErrors = [];
@@ -164,6 +164,74 @@ for (const tab of ['overview', 'network', 'appearance', 'about']) {
     assert(Math.abs(m.navHeight - m.pageHeight) <= 1, `sidebar is not pinned to the window height (${m.navHeight} vs ${m.pageHeight})`);
   });
 }
+
+// ---------- No URL previews, stable wallpaper and window, filled cards -----
+for (const route of ['/', '/Files?path=' + encodeURIComponent(FIXTURE_REL), '/Settings?tab=overview', '/Settings?tab=about']) {
+  await check(`no link on ${route.split('?')[0]} can show a URL preview (even ones added later)`, async () => {
+    await page.goto(BASE + route);
+    await page.waitForSelector('body.os-shell');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const m = await page.evaluate(async () => {
+      const inApp = document.createElement('a'); inApp.href = '/Settings?tab=network'; inApp.textContent = 'x';
+      const file = document.createElement('a'); file.href = '/Files?handler=Download&path=x'; file.setAttribute('download', ''); file.textContent = 'y';
+      document.body.append(inApp, file);
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const added = { inApp: inApp.hasAttribute('href'), file: file.hasAttribute('href'),
+        route: inApp.dataset.panelRoute, download: file.dataset.yrmDownload };
+      inApp.remove(); file.remove();
+      return { added, left: Array.from(document.querySelectorAll('a[href]'), a => a.outerHTML.slice(0, 90)) };
+    });
+    assert(!m.added.inApp && !m.added.file, 'a dynamically added link kept its href');
+    assert(m.added.route === '/Settings?tab=network' && m.added.download, 'the link target was not kept for the click handler');
+    assert(m.left.length === 0, 'links with a real href remain: ' + m.left.join(' | '));
+  });
+}
+await check('wallpaper layer does not move or rescale when the viewport shrinks (DevTools)', async () => {
+  await page.goto(BASE + '/');
+  await page.waitForSelector('.desktop-background', { state: 'attached' });
+  const box = () => page.evaluate(() => { const r = document.querySelector('.desktop-background').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+  const before = await box();
+  await page.setViewportSize({ width: 1000, height: 600 });
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const during = await box();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const key of Object.keys(before)) assert(Math.abs(before[key] - during[key]) <= 1, `wallpaper ${key} changed: ${before[key]} -> ${during[key]}`);
+});
+await check('desktop window keeps its position and size when the viewport shrinks (DevTools)', async () => {
+  await page.goto(BASE + '/Settings?tab=overview');
+  await page.waitForSelector('.server-settings-layout');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const rect = () => page.evaluate(() => { const r = document.getElementById('workspace-window').getBoundingClientRect(); return { left: r.left, top: r.top, width: r.width, height: r.height }; });
+  const before = await rect();
+  await page.setViewportSize({ width: 1100, height: 700 });
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const during = await rect();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const after = await rect();
+  for (const key of Object.keys(before)) {
+    assert(Math.abs(before[key] - during[key]) <= 1, `window ${key} moved while the viewport was smaller: ${before[key]} -> ${during[key]}`);
+    assert(Math.abs(before[key] - after[key]) <= 1, `window ${key} did not return: ${before[key]} -> ${after[key]}`);
+  }
+});
+await check('Network cards fill the window and do not scroll for a single adapter', async () => {
+  await page.goto(BASE + '/Settings?tab=network');
+  await page.waitForSelector('.server-settings-layout');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const m = await page.evaluate(() => {
+    const content = document.querySelector('.server-settings-content');
+    const layout = document.querySelector('.yrm-network-layout');
+    if (!content || !layout) return null;
+    const cs = getComputedStyle(content);
+    const innerBottom = content.getBoundingClientRect().bottom - parseFloat(cs.paddingBottom);
+    const last = layout.lastElementChild;
+    return { interfaces: layout.querySelectorAll('.yrm-network-interface').length,
+      scroll: content.scrollHeight - content.clientHeight, gap: innerBottom - last.getBoundingClientRect().bottom };
+  });
+  if (!m || m.interfaces !== 1) return; // nothing, or several adapters (which may legitimately scroll)
+  assert(m.scroll <= 1, `content scrolls by ${m.scroll}px`);
+  assert(m.gap <= 24, `cards leave ${Math.round(m.gap)}px unused below them`);
+});
 
 // ---------- HTTP behaviour with the logged-in session -------------------
 await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));

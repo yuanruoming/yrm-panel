@@ -808,15 +808,17 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-volume-amounts>div{display:grid;gap:2px;}
 .yrm-volume-amounts strong{font-size:15px;white-space:nowrap;}
 .yrm-overview-kv{display:grid;grid-template-columns:48px minmax(0,1fr);align-items:start;gap:12px;font-size:12px;}
-.yrm-network-layout{display:grid;gap:9px;}
-.yrm-network-interface{display:grid;gap:9px;}
+.server-settings-content:has(>.yrm-network-layout){display:flex;flex-direction:column;}
+.yrm-network-layout{display:flex;flex-direction:column;flex:1 0 auto;gap:9px;}
+.yrm-network-interface{display:flex;flex-direction:column;flex:1 0 auto;gap:9px;}
 .yrm-network-interface-head{display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap;padding:2px 0 6px;}
 .yrm-network-interface-head h3{margin:0;font-size:17px;}
 .yrm-network-meta{color:#b1bbc7;font-size:11px;overflow-wrap:anywhere;}
-.yrm-network-family{background:#24272c;border:1px solid #3d414a;border-radius:8px;padding:11px 16px;}
+.yrm-network-family{display:flex;flex-direction:column;background:#24272c;border:1px solid #3d414a;border-radius:8px;padding:11px 16px;}
+.yrm-network-family:not(.yrm-network-interface-details){flex:1 1 auto;}
 .yrm-network-family h4{font-size:14px;margin:0 0 7px;}
-.yrm-network-family dl{margin:0;display:grid;gap:0;}
-.yrm-network-family dl>div{display:grid;grid-template-columns:130px minmax(0,1fr);padding:8px 0;border-top:1px solid #383d45;gap:12px;}
+.yrm-network-family dl{margin:0;display:flex;flex-direction:column;flex:1 1 auto;}
+.yrm-network-family dl>div{display:grid;flex:1 1 auto;align-items:center;grid-template-columns:130px minmax(0,1fr);padding:6px 0;border-top:1px solid #383d45;gap:12px;}
 .yrm-network-family dt{font-size:12px;color:#aeb8c6;}
 .yrm-network-family dd{font-size:12px;color:#e4e7ec;margin:0;text-align:right;overflow-wrap:anywhere;}
 .yrm-network-virtual{border-top:1px solid #3d414a;padding:12px 4px;}
@@ -866,7 +868,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-wallpaper-lightbox>button{display:block;margin:0 0 8px auto;background:#313842;color:#fff;border:1px solid #4b535e;border-radius:6px;cursor:pointer;font-size:19px;min-width:30px;}
 
 /* BETA12.2 interaction refinements: fill the complete window height. */
-#window-scroll:has(.settings-rc41){display:flex;flex-direction:column;overflow:hidden;container:yrm-settings-window/size;}
+#window-scroll:has(.settings-rc41){display:flex;flex-direction:column;overflow:hidden;}
 #window-page:has(.settings-rc41){box-sizing:border-box;display:flex;flex:1 1 0;min-height:0;padding:0!important;}
 #window-page:has(.settings-rc41)>.server-settings-layout{display:grid;flex:1;min-height:0;min-width:0;width:100%;align-items:stretch;gap:0;grid-template-columns:205px minmax(0,1fr);grid-template-rows:minmax(0,1fr);}
 /* Sidebar is pinned to 100% window height. Only the content area scrolls internally.
@@ -992,14 +994,6 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
 .yrm-network-interface-head{padding:0 0 2px;}
 .yrm-network-interface-details{padding-top:11px;padding-bottom:11px;}
 .yrm-network-interface-details dl>div{gap:4px;}
-/* Short windows: tighten vertical rhythm so typical Settings pages fit without a scrollbar. */
-@container yrm-settings-window (max-height:800px){
-  .yrm-flat-panel{margin-bottom:16px;}
-  .yrm-network-family{padding-top:8px;padding-bottom:8px;}
-  .yrm-network-family dl>div{padding-top:5px;padding-bottom:5px;}
-  .yrm-network-interface-details dl>div{padding:0;}
-  .yrm-network-row{padding:11px 0;}
-}
 /* File browser: consistent full-width selection/hover and natural inline chevrons. */
 .fm-explorer .explorer-table tbody tr[data-b10-file-row]:hover>td,
 .fm-explorer .explorer-table tbody tr[data-b10-file-row]:focus-within>td{background:rgba(100,146,199,.12);}
