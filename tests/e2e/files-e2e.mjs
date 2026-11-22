@@ -37,6 +37,7 @@ const until = async (predicate, message, timeout = 8000) => {
 const browser = await chromium.launch();
 const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 900 } });
 page = await context.newPage();
+page.setDefaultTimeout(10000);   // fail quickly; CI runners are fast enough
 const pageErrors = [];
 page.on('pageerror', error => pageErrors.push(String(error)));
 
@@ -54,6 +55,8 @@ await check('login page shows the neutral address and the plain panel title', as
   await page.goto(BASE + '/Account/Login');
   await until(async () => new URL(page.url()).pathname === '/', 'address bar shows / instead of /Account/Login');
   assert(await page.title() === 'YRM PANEL', 'title was ' + await page.title());
+  assert(await page.locator('form.login-form-v2 input[name="__RequestVerificationToken"]').count() === 1,
+    'the login form has no antiforgery token, so every sign-in would be rejected');
 });
 await check('wrong password is rejected with a visible error', async () => {
   await page.goto(BASE + '/Account/Login');
@@ -69,6 +72,13 @@ await check('real Linux (PAM) login succeeds and shows the desktop shell', async
   await page.click('button.login-submit');
   await page.waitForSelector('body.os-shell', { timeout: 20000 });
 });
+
+if (failures.includes('real Linux (PAM) login succeeds and shows the desktop shell')) {
+  // Nothing after this can work without a session; stop instead of waiting for timeouts.
+  await browser.close();
+  console.log(`\nStopped early: sign-in failed.\n - ${failures.join('\n - ')}`);
+  process.exit(1);
+}
 
 // ---------- Open Files from the launcher (the way a user does) ----------
 await check('Files opens from the launcher and lists My Files', async () => {

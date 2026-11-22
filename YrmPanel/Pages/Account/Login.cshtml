@@ -28,7 +28,7 @@
             <p>Sign in using your @Model.AccountDescription.</p>
             @if (!string.IsNullOrEmpty(Model.Error))
             { <div class="notice error" role="alert">@Model.Error</div> }
-            <form method="post" action="/Account/Login" class="login-form-v2">
+            <form method="post" action="/Account/Login" asp-antiforgery="true" class="login-form-v2">
                 <label for="username">Username</label>
                 <input id="username" name="Username" value="@Model.Username" autocomplete="username" maxlength="32" required autofocus />
                 <label for="password">Password</label>

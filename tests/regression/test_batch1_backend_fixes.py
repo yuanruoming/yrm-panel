@@ -43,6 +43,12 @@ class Batch1BackendFixes(unittest.TestCase):
         self.assertNotIn('.Browse(', discover)
         self.assertIn('FileSystemEnumerable<string>', manager)
 
+    def test_login_form_with_explicit_action_keeps_its_antiforgery_token(self):
+        # A hand-written action attribute turns the tag helper's antiforgery off.
+        view = source('YrmPanel/Pages/Account/Login.cshtml')
+        self.assertIn('action="/Account/Login"', view)
+        self.assertIn('asp-antiforgery="true"', view)
+
 
 if __name__ == '__main__':
     unittest.main()
