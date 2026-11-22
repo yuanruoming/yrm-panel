@@ -75,7 +75,7 @@ class ProductChecks(TestCase):
         self.assertIn('v.MountPoint == absoluteParent',model)
         self.assertIn('_storage.RunAsync("grant", absoluteParent, adminPassword',model)
         self.assertIn('Model.FormatSize(item.Size)',ui)
-        self.assertIn('title="@(item.IsDirectory ? "Folder" : $"{item.Size:N0} bytes")"',ui)
+        self.assertNotIn('title="@(item.IsDirectory',ui)
 
     def test_files_ignores_lost_found_without_deleting_it(self):
         files=source('YrmPanel/Services/FileManagerService.cs')

@@ -286,8 +286,8 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertIn('name.StartsWith("systemctl show yrm-panel.service"', model)
         self.assertIn('name is "install.sh" or "uninstall.sh"', model)
         self.assertNotIn('if (!Hidden && View.Available', model)
-        # Long names stay alongside their glyphs and reveal the full tooltip.
-        self.assertIn('class="fm-file-entry" title="@item.Name"', view)
+        # Long names stay alongside their glyphs and are cut with an ellipsis (no hover tooltip).
+        self.assertIn('<span class="fm-file-entry">', view)
         self.assertIn('fm-file-entry>.fm-file-open{min-width:0;overflow:hidden;text-overflow:ellipsis;', css)
         self.assertIn('.fm-directory-view>.responsive-table', css)
 

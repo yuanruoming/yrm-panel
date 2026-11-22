@@ -24,7 +24,7 @@
     row.append(field('protocol',data.protocol||'tcp',[['tcp','TCP'],['udp','UDP']]));
     row.append(field('source',data.source||'any',null,'any · IP · CIDR'));
     row.append(field('remarks',data.remarks||'',null,'Optional remarks'));
-    const del=document.createElement('button');del.type='button';del.className='mini-button';del.textContent='×';del.title='Remove rule';
+    const del=document.createElement('button');del.type='button';del.className='mini-button';del.textContent='×';del.setAttribute('aria-label','Remove rule');
     del.addEventListener('click',()=>{row.remove();markDirty();});row.append(del);root.append(row);
     row.querySelectorAll('input,select').forEach(el=>el.addEventListener('input',markDirty));
   }

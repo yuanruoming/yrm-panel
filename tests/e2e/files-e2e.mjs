@@ -249,6 +249,56 @@ await check('Network cards fill the window and do not scroll for a single adapte
   assert(m.gap <= 24, `cards leave ${Math.round(m.gap)}px unused below them`);
 });
 
+// ---------- No tooltips, viewport-independent content, no pointless Update Now ----
+for (const route of ['/', '/Files?path=' + encodeURIComponent(FIXTURE_REL), '/Settings?tab=overview', '/Settings?tab=network', '/Settings?tab=appearance', '/Settings?tab=about']) {
+  await check(`${route.split('?')[0]}${route.includes('tab=') ? ' ' + route.split('tab=')[1] : ''} has no hover tooltips (title attributes)`, async () => {
+    await page.goto(BASE + route);
+    await page.waitForSelector('body.os-shell');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const found = await page.evaluate(() => Array.from(document.querySelectorAll('[title]'))
+      .filter(el => el.tagName !== 'IFRAME' && !(el instanceof SVGElement)).map(el => el.outerHTML.slice(0, 100)));
+    assert(found.length === 0, 'elements still carry a title: ' + found.join(' | '));
+  });
+}
+await check('Settings > About does not offer a disabled Update Now button', async () => {
+  await page.goto(BASE + '/Settings?tab=about');
+  await page.waitForSelector('.server-settings-layout');
+  const disabled = await page.evaluate(() => Array.from(document.querySelectorAll('button'))
+    .filter(b => b.textContent.trim() === 'Update Now' && b.disabled).length);
+  assert(disabled === 0, 'a disabled Update Now button is rendered');
+});
+await check('Appearance wallpaper preview keeps its size when the viewport gets shorter (DevTools)', async () => {
+  await page.goto(BASE + '/Settings?tab=appearance');
+  await page.waitForSelector('#wallpaper-preview');
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const height = () => page.evaluate(() => document.getElementById('wallpaper-preview').getBoundingClientRect().height);
+  const before = await height();
+  await dockDevtools(1440, 600);
+  await new Promise(resolve => setTimeout(resolve, 200));
+  const during = await height();
+  await dockDevtools(1440, 900);
+  assert(Math.abs(before - during) <= 1, `preview height changed: ${before} -> ${during}`);
+});
+await check('My Files list is capped by the window height and scrolls inside itself', async () => {
+  await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
+  await page.waitForSelector('.fm-explorer');
+  const m = await page.evaluate(() => {
+    const box = document.getElementById('yrm-my-files-children');
+    box.hidden = false;
+    for (let i = 0; i < 80; i++) {
+      const link = document.createElement('a');
+      link.className = 'fm-location-link fm-location-child';
+      link.innerHTML = '<svg class="ui-icon"><use href="#i-folder"/></svg><span></span>';
+      link.querySelector('span').textContent = 'folder-' + i;
+      box.append(link);
+    }
+    return { height: box.clientHeight, scrolls: box.scrollHeight > box.clientHeight + 1,
+      windowHeight: document.getElementById('window-scroll').clientHeight };
+  });
+  assert(m.scrolls, 'a long folder list does not scroll inside the sidebar');
+  assert(m.height <= m.windowHeight * 0.45 + 1 && m.height <= 401, `folder list is ${m.height}px in a ${m.windowHeight}px window`);
+});
+
 // ---------- HTTP behaviour with the logged-in session -------------------
 await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
 await page.waitForSelector('.fm-explorer');

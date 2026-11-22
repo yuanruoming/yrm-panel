@@ -213,9 +213,7 @@
     const rename=toolbar.querySelector('[data-b10-file-rename]');
     if(rename)rename.disabled=current.length!==1||!writable;
     const download=toolbar.querySelector('[data-b12-file-download]');
-    if(download){download.disabled=current.length===0;
-      download.title=current.length===1&&current[0]?.querySelector('a[data-native-download]')?
-        'Download selected file':'Download selected items as one ZIP';}
+    if(download)download.disabled=current.length===0;
   }
   function setFileSelection(row,{toggle=false,range=false,add=false}={}){
     const rows=fileRows();
@@ -454,7 +452,6 @@
             const failed=/^(failed|error)/i.test(record.status||'');
             error.hidden=true;
             error.textContent=failed?record.status:'';
-            row.title=failed?record.status:(record.status||'');
           }
         }
         if (status) {status.textContent=data.ok?'Normal':'Failed';status.dataset.b10State=data.ok?'normal':'failed';}

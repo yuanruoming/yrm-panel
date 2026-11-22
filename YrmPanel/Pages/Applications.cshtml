@@ -12,12 +12,12 @@
         var app = Model.Shortcuts[i]; var id = "link:" + i; var isPinned = Model.Pinned.Contains(id);
         <div class="unified-app-card">
             <form method="post" asp-page-handler="Pin" class="app-pin-form"><input type="hidden" name="id" value="@id"/><input type="hidden" name="pinned" value="@(!isPinned ? "true" : "false")"/>
-                <button class="app-pin-button @(isPinned ? "is-pinned" : "")" type="submit" title="@(isPinned ? "Unpin from desktop" : "Pin to desktop")" aria-label="@(isPinned ? "Unpin" : "Pin")"><svg class="ui-icon"><use href="@(isPinned ? "#i-pin-off" : "#i-pin")"/></svg></button></form>
+                <button class="app-pin-button @(isPinned ? "is-pinned" : "")" type="submit" aria-label="@(isPinned ? "Unpin" : "Pin")"><svg class="ui-icon"><use href="@(isPinned ? "#i-pin-off" : "#i-pin")"/></svg></button></form>
             <a class="unified-app-main" href="@app.Url" target="_blank" rel="noopener noreferrer">
                 <span class="unified-app-visual app-manual"><svg class="ui-icon"><use href="#i-globe"/></svg></span>
                 <strong>@app.Name</strong><small>Open app ↗</small>
             </a>
-            <button class="unified-app-edit" type="button" data-edit-app-index="@i" data-edit-app-name="@app.Name" data-edit-app-url="@app.Url" title="Edit application">Edit</button>
+            <button class="unified-app-edit" type="button" data-edit-app-index="@i" data-edit-app-name="@app.Name" data-edit-app-url="@app.Url">Edit</button>
         </div>
     }
     @if (Model.Docker.Available)
@@ -31,12 +31,12 @@
         var brand = image.Contains("nginx") ? "N" : image.Contains("redis") ? "R" : image.Contains("postgres") ? "P" : image.Contains("mariadb") ? "M" : image.Contains("nextcloud") ? "N" : "";
         <div class="unified-app-card">
             <form method="post" asp-page-handler="Pin" class="app-pin-form"><input type="hidden" name="id" value="@id"/><input type="hidden" name="pinned" value="@(!isPinned ? "true" : "false")"/>
-                <button class="app-pin-button @(isPinned ? "is-pinned" : "")" type="submit" title="@(isPinned ? "Unpin from desktop" : "Pin to desktop")"><svg class="ui-icon"><use href="@(isPinned ? "#i-pin-off" : "#i-pin")"/></svg></button></form>
+                <button class="app-pin-button @(isPinned ? "is-pinned" : "")" type="submit" aria-label="@(isPinned ? "Unpin from desktop" : "Pin to desktop")"><svg class="ui-icon"><use href="@(isPinned ? "#i-pin-off" : "#i-pin")"/></svg></button></form>
             <a class="unified-app-main" asp-page="/Docker">
                 <span class="unified-app-visual app-container">@if (brand.Length > 0) { <b>@brand</b> } else { <svg class="ui-icon"><use href="#i-docker-symbol"/></svg> }</span>
                 <strong>@label</strong><small>@running / @group.Count() running</small>
             </a>
-            <span class="status-circle @(running == group.Count() ? "on" : "off")" title="Docker status"></span>
+            <span class="status-circle @(running == group.Count() ? "on" : "off")" role="img" aria-label="@(running == group.Count() ? "Running" : "Stopped")"></span>
         </div>
       }
     }

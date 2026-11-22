@@ -370,7 +370,7 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b11-ddns-table th:nth-child(3),.yrm-b11-ddns-table th:nth-child(4){width:17%;}
 .yrm-b11-ddns-table th:nth-child(5){width:18%;}
 .yrm-b11-ddns-table .yrm-b11-action-row{justify-content:flex-end;}
-.settings-wallpaper-card .v1-wallpaper-preview{display:block;width:100%;height:clamp(185px,31vh,315px);object-fit:cover;border-radius:8px;margin:8px 0 12px;}
+.settings-wallpaper-card .v1-wallpaper-preview{display:block;width:100%;height:auto;aspect-ratio:3/1;min-height:185px;max-height:315px;object-fit:cover;border-radius:8px;margin:8px 0 12px;}
 .settings-wallpaper-card .wallpaper-helper{margin:4px 0 8px;}
 .settings-wallpaper-card .yrm-ui-wallpaper-history{margin-top:12px;}
 .settings-update-card .yrm-update-overview{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
@@ -465,7 +465,7 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .fm-my-files-header>.fm-location-link{flex:1;min-width:0;}
 .fm-my-files-toggle{background:transparent;color:#b9c7d7;border:0;cursor:pointer;display:grid;place-items:center;width:23px;height:31px;flex:none;border-radius:5px;}
 .fm-my-files-toggle:hover{background:#363b44;}
-.fm-my-files-children{padding-left:12px;max-height:min(400px,42vh);overflow-x:hidden;overflow-y:auto;}
+.fm-my-files-children{padding-left:12px;max-height:400px;max-height:min(400px,45cqh);overflow-x:hidden;overflow-y:auto;}
 .fm-my-files-children[hidden]{display:none!important;}
 .fm-location-crumb{font-weight:600;font-size:14px;color:#e6e8ec;}
 .fm-page-title{margin-bottom:12px;}
@@ -930,6 +930,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 
 /* Resize responds to the actual *window* width, not the browser viewport. */
 #window-page:has(.settings-rc41),#window-page:has(.fm-explorer){container-type:inline-size;}
+#window-scroll:has(.fm-explorer){container-type:size;}
 @container (max-width: 699px){
   .server-settings-layout.settings-rc41{display:flex!important;flex-direction:column!important;min-height:0!important;}
   .server-settings-layout.settings-rc41 .server-settings-nav{flex:none!important;height:auto!important;min-height:0!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;position:static!important;padding:9px!important;border-bottom:1px solid #3b424c;gap:4px;}

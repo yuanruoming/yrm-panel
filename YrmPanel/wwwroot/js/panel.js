@@ -103,7 +103,6 @@
     pinButton?.setAttribute("aria-pressed", String(pinnedEnabled));
     pinButton?.classList.toggle("is-active", pinnedEnabled);
     pinButton?.querySelector('use')?.setAttribute('href', pinnedEnabled ? '#i-pin-off' : '#i-pin');
-    pinButton?.setAttribute("title", pinnedEnabled ? "Unpin system monitor" : "Pin system monitor");
     pinButton?.setAttribute("aria-label", pinnedEnabled ? "Unpin system monitor" : "Pin system monitor");
   }
   try { pinnedEnabled = localStorage.getItem("yrm-panel:pinned-monitor") === "1"; } catch { /* blocked storage is okay */ }
@@ -172,7 +171,6 @@
     button.className="taskbar-pin-app taskbar-app" + (running?" is-running":"") + (running===activeUrl?" is-active":"");
     button.dataset.taskbarId=id;
     button.setAttribute("aria-label",`${info.name}, ${running?"running":"pinned"}`);
-    button.title=`${info.name} · Right-click for Taskbar options`;
     const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","ui-icon");
     const use=document.createElementNS("http://www.w3.org/2000/svg","use");
     use.setAttribute("href",`#${id.startsWith("docker:")?"i-docker-symbol":id.startsWith("link:")?"i-globe":iconName(info.url)}`);
@@ -240,7 +238,7 @@
         pin.addEventListener("click",event=>{event.preventDefault();event.stopPropagation();
           void setTaskbarPin(id,!taskbarPins.includes(id));});
       }
-      pin.title=taskbarPins.includes(id)?"Unpin from Taskbar":"Pin to Taskbar";
+      pin.setAttribute('aria-label',taskbarPins.includes(id)?"Unpin from Taskbar":"Pin to Taskbar");
       pin.classList.toggle('is-pinned',taskbarPins.includes(id));
       pin.innerHTML=`<svg class="ui-icon" aria-hidden="true"><use href="${taskbarPins.includes(id)?'#i-pin-off':'#i-pin'}"></use></svg>`;
       pin.setAttribute("aria-label",pin.title);
@@ -254,7 +252,7 @@
     const opener = document.createElement("button");
     opener.type = "button";
     opener.className = "taskbar-tab-open";
-    opener.title = `Open ${name}`;
+    opener.setAttribute("aria-label", `Open ${name}`);
     const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     svg.setAttribute("class", "ui-icon");
     const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
@@ -359,7 +357,7 @@
     appWindow.classList.toggle('is-maximized');
     if (!appWindow.classList.contains('is-maximized'))applyWindowBounds();
     const button=$('window-maximize');
-    if(button)button.title=appWindow.classList.contains('is-maximized')?'Restore':'Maximize';
+    if(button)button.setAttribute('aria-label',appWindow.classList.contains('is-maximized')?'Restore window':'Maximize window');
   }
   if(windowTitlebar && appWindow){
     windowTitlebar.addEventListener('dblclick',event=>{
@@ -450,7 +448,6 @@
   notificationTrigger.type='button';notificationTrigger.className='yrm-notif-trigger';
   notificationTrigger.setAttribute('aria-label','Notifications');
   notificationTrigger.setAttribute('aria-expanded','false');
-  notificationTrigger.title='Notifications';
   notificationTrigger.innerHTML='<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>';
   const count=document.createElement('span');count.className='yrm-notif-count';count.hidden=true;
   notificationTrigger.append(count);
@@ -674,8 +671,7 @@
   const updateAppPinLabels=()=>document.querySelectorAll('#window-page .app-pin-button').forEach(button=>{
     const form=button.closest('form');
     const pinned=form?.querySelector('input[name="pinned"]')?.value==='false';
-    button.title=pinned?'Unpin from Taskbar':'Pin to Taskbar';
-    button.setAttribute('aria-label',button.title);
+    button.setAttribute('aria-label',pinned?'Unpin from Taskbar':'Pin to Taskbar');
   });
   updateAppPinLabels();
   const appPinObserver=new MutationObserver(updateAppPinLabels);
@@ -709,7 +705,7 @@
     chevron.append(use);toggle.append(chevron);
     const select=document.createElement('button');select.type='button';
     select.className='yrm-create-tree-select';select.dataset.folderTreeSelect='';
-    select.setAttribute('aria-current','false');select.title=label;
+    select.setAttribute('aria-current','false');
     const icon=document.createElementNS('http://www.w3.org/2000/svg','svg');icon.classList.add('ui-icon');
     const iconUse=document.createElementNS('http://www.w3.org/2000/svg','use');
     iconUse.setAttribute('href','#i-folder');icon.append(iconUse);

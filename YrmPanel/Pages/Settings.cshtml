@@ -340,7 +340,7 @@
               var groupStatus = !active ? "Disabled" : failed ? "Failed" : group.Any(p => p.LastStatus is "Updated" or "Unchanged" or "IP unchanged") ? "Normal" : "Not checked";
               <tr class="yrm-b11-ddns-row" data-b9-ddns-provider="@group.Key.Provider" data-b9-ddns-hostname="@group.Key.Hostname">
                 <td class="yrm-b11-provider-cell"><strong>@(char.ToUpperInvariant(group.Key.Provider[0]) + group.Key.Provider.Substring(1))</strong><span data-b9-ddns-status data-b10-state="@groupStatus.ToLowerInvariant()" hidden>@groupStatus</span></td>
-                <td class="yrm-b11-domain" title="@group.Key.Hostname">@group.Key.Hostname</td>
+                <td class="yrm-b11-domain">@group.Key.Hostname</td>
                 @foreach (var profile in new[] { v4, v6 })
                 {
                   <td class="yrm-b11-ip-cell">
@@ -351,9 +351,9 @@
                       var isFailed = profile.LastStatus.StartsWith("Failed", StringComparison.OrdinalIgnoreCase);
                       var isOk = profile.LastStatus is "Updated" or "Unchanged" or "IP unchanged";
                       var state = isOff ? "Off" : isFailed ? "Failed" : isOk ? "Normal" : "Not checked";
-                      <div data-b9-ddns-record="@profile.Id" title="@profile.LastStatus" class="yrm-b11-ip-result" data-b12-ddns-detail tabindex="0" role="button" aria-label="View @profile.RecordType update details">
+                      <div data-b9-ddns-record="@profile.Id" class="yrm-b11-ip-result" data-b12-ddns-detail tabindex="0" role="button" aria-label="View @profile.RecordType update details">
                         <span class="yrm-b11-ip-state @(isFailed ? "is-failed" : isOff ? "is-off" : isOk ? "is-normal" : "is-unknown")" data-b11-family-state>@state</span>
-                        <small data-b9-ddns-ip title="Detected IP">@(isOff ? "Disabled" : profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</small>
+                        <small data-b9-ddns-ip>@(isOff ? "Disabled" : profile.LastIp.Length > 0 ? profile.LastIp : "Not checked")</small>
                         <span data-b9-ddns-checked hidden>@(profile.LastRun is { } checkedAt ? checkedAt.ToLocalTime().ToString("dd MMM yyyy HH:mm") : "Not checked yet")</span>
                         <span data-b9-ddns-error hidden>@(isFailed ? profile.LastStatus : "")</span>
                       </div>
@@ -666,7 +666,7 @@
 
       <section class="yrm-flat-panel settings-wallpaper-card">
         <div class="settings-row-top"><h3>Desktop Wallpaper</h3></div>
-        <button type="button" class="yrm-wallpaper-preview-trigger" data-wallpaper-preview-open title="Preview desktop wallpaper" aria-label="View desktop wallpaper">
+        <button type="button" class="yrm-wallpaper-preview-trigger" data-wallpaper-preview-open aria-label="View desktop wallpaper">
           <img class="v1-wallpaper-preview" id="wallpaper-preview" src="@(Model.HasWallpaper ? "/wallpaper?v=" + Model.WallpaperVersion : Url.Content("~/images/default-wallpaper.svg"))" alt="Wallpaper preview" />
         </button>
         <dialog class="yrm-wallpaper-lightbox" id="yrm-wallpaper-lightbox" aria-label="Desktop wallpaper preview">
@@ -694,7 +694,7 @@
               {
                 <form method="post" asp-page-handler="RestoreWallpaperHistory" asp-route-tab="appearance">
                   <input type="hidden" name="id" value="@history.Id" />
-                  <button type="submit" class="yrm-wallpaper-recent-item" title="Use this wallpaper" aria-label="Apply previously used wallpaper">
+                  <button type="submit" class="yrm-wallpaper-recent-item" aria-label="Apply previously used wallpaper">
                     <img src="@Url.Page("/Settings", "WallpaperHistoryImage", new { id = history.Id })" alt="Previously used wallpaper" loading="eager" decoding="async" />
                   </button>
                 </form>
@@ -744,7 +744,7 @@
         {
           <div class="yrm-update-build-row">
             <span class="yrm-update-build-label">Build</span>
-            <code class="yrm-update-build-pill" title="@latestBuild">@(latestBuild[..8])</code>
+            <code class="yrm-update-build-pill">@(latestBuild[..8])</code>
           </div>
         }
 
@@ -776,7 +776,6 @@
             { <button class="button button-primary" disabled type="button">Updating…</button> }
             else if (Model.LastUpdateCheck?.HasUpdate == true)
             { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" data-v1-update type="submit">Update Now</button></form> }
-            else { <button class="button button-primary" disabled type="button" title="Check for updates first">Update Now</button> }
           }
           <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel/releases" target="_blank" rel="noopener noreferrer" style="margin-left:auto;">View release notes ↗</a>
         </div>

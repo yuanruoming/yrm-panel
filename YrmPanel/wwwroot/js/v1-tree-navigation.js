@@ -46,7 +46,6 @@
     link.dataset.fmTreePath = path;
     link.setAttribute('role', 'link');
     link.tabIndex = 0;
-    link.title = 'Double-click to open';
     const expand = document.createElement('button');
     expand.type = 'button';
     expand.className = 'fm-folder-expand';

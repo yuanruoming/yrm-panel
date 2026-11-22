@@ -55,7 +55,7 @@
   <header class="os-topbar" aria-label="Panel taskbar">
     <div class="os-top-left"><button type="button" class="os-icon-button launcher-trigger" id="launcher-toggle" aria-label="Open applications" aria-expanded="false" aria-controls="app-launcher"><svg class="ui-icon"><use href="#i-grid" /></svg></button></div>
     <nav class="app-taskbar" id="app-taskbar" aria-label="Open applications">
-      <button type="button" id="taskbar-home" class="taskbar-home @(isDesktop ? "is-active" : "")" title="Desktop" aria-label="Show desktop"><svg class="ui-icon"><use href="#i-home" /></svg></button>
+      <button type="button" id="taskbar-home" class="taskbar-home @(isDesktop ? "is-active" : "")" aria-label="Show desktop"><svg class="ui-icon"><use href="#i-home" /></svg></button>
       <span class="taskbar-divider" aria-hidden="true"></span><div class="taskbar-tabs" id="taskbar-tabs" role="group" aria-label="Open application tabs"></div>
     </nav>
     <div class="os-top-right">
@@ -92,9 +92,9 @@
     <section class="workspace-window" id="workspace-window" aria-label="Application window">
       <div class="window-titlebar"><div class="window-title"><span id="window-active-title">@(isDesktop ? "Application" : title)</span></div>
         <div class="window-controls">
-          <button type="button" class="window-control" id="window-minimize" title="Minimize" aria-label="Minimize window"><svg class="ui-icon"><use href="#i-minus"/></svg></button>
-          <button type="button" class="window-control" id="window-maximize" title="Maximize" aria-label="Maximize window"><svg class="ui-icon"><use href="#i-max"/></svg></button>
-          <button type="button" class="window-control window-close" id="window-close" title="Close" aria-label="Close window"><svg class="ui-icon"><use href="#i-x"/></svg></button>
+          <button type="button" class="window-control" id="window-minimize" aria-label="Minimize window"><svg class="ui-icon"><use href="#i-minus"/></svg></button>
+          <button type="button" class="window-control" id="window-maximize" aria-label="Maximize window"><svg class="ui-icon"><use href="#i-max"/></svg></button>
+          <button type="button" class="window-control window-close" id="window-close" aria-label="Close window"><svg class="ui-icon"><use href="#i-x"/></svg></button>
         </div>
       </div>
       <div class="window-scroll" id="window-scroll"><div class="window-page" id="window-page">
@@ -104,8 +104,8 @@
   </main>
   <aside class="pinned-monitor" id="pinned-monitor" aria-label="Pinned system monitor" hidden>
     <div class="pinned-header"><span><span class="status-light"></span>System monitor</span><div class="pinned-actions">
-      <button type="button" class="os-icon-button" data-open-monitor title="Detailed monitor" aria-label="Open detailed monitor"><svg class="ui-icon"><use href="#i-activity"/></svg></button>
-      <button type="button" class="os-icon-button" id="pinned-unpin" title="Unpin system monitor" aria-label="Unpin system monitor"><svg class="ui-icon"><use href="#i-pin-off"/></svg></button>
+      <button type="button" class="os-icon-button" data-open-monitor aria-label="Open detailed monitor"><svg class="ui-icon"><use href="#i-activity"/></svg></button>
+      <button type="button" class="os-icon-button" id="pinned-unpin" aria-label="Unpin system monitor"><svg class="ui-icon"><use href="#i-pin-off"/></svg></button>
     </div></div>
     <div class="pinned-stats"><div><span>CPU</span><strong id="pinned-cpu">—</strong></div><div><span>RAM</span><strong id="pinned-ram">—</strong></div></div>
     <div class="pinned-meter"><span class="pinned-track"><span id="pinned-cpu-meter"></span></span><span class="pinned-track"><span id="pinned-ram-meter"></span></span></div>
@@ -113,7 +113,7 @@
   </aside>
   <aside class="monitor-drawer" id="monitor-drawer" aria-labelledby="monitor-title" aria-hidden="true" inert>
     <div class="monitor-header"><div><p class="eyebrow">SYSTEM MONITOR</p><h2 id="monitor-title">Overview</h2></div><div class="monitor-header-actions">
-      <button class="os-icon-button" type="button" id="monitor-pin" aria-label="Pin compact monitor to desktop" aria-pressed="false" title="Pin monitor"><svg class="ui-icon"><use href="#i-pin"/></svg></button>
+      <button class="os-icon-button" type="button" id="monitor-pin" aria-label="Pin compact monitor to desktop" aria-pressed="false"><svg class="ui-icon"><use href="#i-pin"/></svg></button>
       <button class="os-icon-button" type="button" id="monitor-close" aria-label="Close monitor"><svg class="ui-icon"><use href="#i-x"/></svg></button>
     </div></div>
     <div class="monitor-scroll">
