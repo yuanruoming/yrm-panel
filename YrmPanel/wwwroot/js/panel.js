@@ -1036,6 +1036,19 @@
     });
   }
 
+  // Remove href from Settings sidebar and other shell-internal navigation links
+  // so the browser status bar never shows internal URLs on hover.
+  function sanitizeDesktopLinks(root = document) {
+    if (!root || !root.querySelectorAll) return;
+    // Settings nav links (sidebar items) — exclude external links (target="_blank")
+    root.querySelectorAll('.server-settings-nav a[href]:not([target="_blank"]):not([data-native-download])').forEach(a => {
+      if (!a.dataset.panelRoute) a.dataset.panelRoute = a.getAttribute('href') || '';
+      a.removeAttribute('href');
+      if (!a.hasAttribute('role')) a.setAttribute('role', 'button');
+      if (!a.hasAttribute('tabindex')) a.tabIndex = 0;
+    });
+  }
+
   // Preserve Files/Settings navigation DOM when loading an inner view.
   // The server may return a full Razor document, but only the working pane
   // changes. This avoids collapsing and rebuilding the sidebar on every click.
@@ -1097,6 +1110,9 @@
       if (child.matches(rootSelector)) continue;
       page.append(document.importNode(child,true));
     }
+    // After the new content is in the DOM, re-sanitize so no internal link
+    // gains a browser status bar preview in the updated nav or content area.
+    if (incoming === '/Settings') sanitizeDesktopLinks(oldRoot);
     return true;
   }
   async function loadPage(url, refresh = false, push = true) {
@@ -1210,6 +1226,16 @@
     if (url) void openPage(url);
   });
   document.addEventListener("click", (event) => {
+    // Handle sanitized Settings-nav links (data-panel-route replaces href to hide URL preview)
+    const panelRouteEl = event.target instanceof Element ? event.target.closest('[data-panel-route]') : null;
+    if (panelRouteEl && event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
+      const url = internalUrl(panelRouteEl.dataset.panelRoute);
+      if (url) {
+        event.preventDefault();
+        void openPage(url, {refresh: url === activeUrl});
+        return;
+      }
+    }
     const navItem = event.target instanceof Element ? event.target.closest("[data-fm-href]") : null;
     if (navItem && !navItem.matches('[data-fm-inline-folder],[data-fm-tree-folder],[data-my-files-toggle]')) {
       if (event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey) {
@@ -1267,6 +1293,33 @@
     if (form.method.toLowerCase() !== "post" || !activeUrl || !form.reportValidity()) return;
     const action = new URL(form.action, location.href);
     if (action.origin !== location.origin || !internalUrl(action.href)) return;
+
+    // Optimistic wallpaper history: apply immediately from the thumbnail src,
+    // then POST silently in the background — no page reload needed.
+    if (action.searchParams.get('handler') === 'RestoreWallpaperHistory') {
+      event.preventDefault();
+      const btn = form.querySelector('button.yrm-wallpaper-recent-item');
+      const img = btn?.querySelector('img');
+      if (img?.src) {
+        // Apply the thumbnail URL immediately as the wallpaper preview.
+        const previewEl = document.getElementById('wallpaper-preview');
+        if (previewEl) previewEl.src = img.src;
+        // Update the CSS variable so the desktop background changes instantly.
+        document.documentElement.style.setProperty('--wallpaper-image', `url("${img.src}")`);
+        // Highlight selected thumbnail.
+        document.querySelectorAll('.yrm-wallpaper-recent-item').forEach(el => el.classList.remove('is-selected'));
+        btn.classList.add('is-selected');
+      }
+      // Fire-and-forget POST to persist the change server-side.
+      try {
+        await fetch(action.href, {
+          method:'POST', body:new FormData(form),
+          credentials:'same-origin', headers:{'Accept':'text/html'}, redirect:'follow'
+        });
+      } catch { /* non-critical — the visual change is already applied */ }
+      return;
+    }
+
     event.preventDefault();
     // Confirmation is handled once by v1-confirm.js before sudo authorization.
     if (actionPending) return; // Avoid overlapping state-changing POST requests from this shell.
@@ -1401,5 +1454,6 @@
   // fallback). panel.js must not start its own interval or EventSource.
   if (window.YrmMetrics) window.YrmMetrics.subscribe(applySnapshot);
   sanitizeFilesLinks(document);
+  sanitizeDesktopLinks(document);
   window.addEventListener('yrm-panel:files-view-changed', () => sanitizeFilesLinks(page));
 })();

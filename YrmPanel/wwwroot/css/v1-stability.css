@@ -420,6 +420,24 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .settings-update-card{padding:0;}
 .settings-update-card .yrm-update-tracker{padding:16px 0;border:0;border-top:1px solid rgba(160,185,209,.18);border-bottom:1px solid rgba(160,185,209,.18);border-radius:0;background:transparent;}
 .settings-update-card .yrm-update-overview>div{border:0;border-bottom:1px solid rgba(160,185,209,.17);border-radius:0;padding:12px 5px;}
+/* Updates hero card: version + status badge layout */
+.yrm-update-hero{display:flex;align-items:center;gap:14px;padding:0 0 16px;border-bottom:1px solid rgba(160,185,209,.14);margin-bottom:14px;}
+.yrm-update-hero-icon{width:44px;height:44px;flex:0 0 44px;border-radius:12px;background:#202836;border:1px solid rgba(107,145,185,.2);display:grid;place-items:center;color:#89b8e8;}
+.yrm-update-hero-icon .ui-icon{width:22px;height:22px;}
+.yrm-update-hero-body{min-width:0;flex:1;display:flex;flex-direction:column;gap:4px;}
+.yrm-update-hero-name{font-size:15px;font-weight:650;color:#e9f2fb;}
+.yrm-update-hero-version{font-size:12px;color:#8ca4bc;font-family:monospace;}
+.yrm-update-status-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:600;flex:none;white-space:nowrap;}
+.yrm-update-status-badge.badge-ok{background:rgba(44,164,98,.13);color:#43c47d;border:1px solid rgba(44,164,98,.22);}
+.yrm-update-status-badge.badge-available{background:rgba(236,154,47,.12);color:#f4a92e;border:1px solid rgba(236,154,47,.22);}
+.yrm-update-status-badge.badge-failed{background:rgba(210,70,80,.12);color:#e06070;border:1px solid rgba(210,70,80,.2);}
+.yrm-update-status-badge.badge-idle{background:rgba(130,155,185,.1);color:#9aafc4;border:1px solid rgba(130,155,185,.2);}
+.yrm-update-status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none;}
+.yrm-update-build-row{display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap;}
+.yrm-update-build-pill{padding:3px 9px;border-radius:6px;background:#1b2430;border:1px solid #384a5e;font-size:11px;font-family:monospace;color:#8bb8da;letter-spacing:.02em;}
+.yrm-update-build-label{font-size:11px;color:#7a8fa3;}
+.settings-button-row{display:flex;gap:10px;align-items:center;padding-top:16px;border-top:1px solid rgba(160,185,209,.14);}
+.settings-button-row>.button{min-height:36px;}
 .yrm-flat-files{background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important;padding:0 8px!important;margin:0!important;}
 .yrm-flat-files .fm-columns{border:0;min-height:0;}
 .yrm-flat-files .fm-locations{border-right:1px solid rgba(160,185,209,.18);padding:12px 16px 12px 2px;}
@@ -623,7 +641,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-notif-empty{padding:25px 18px;text-align:center;color:#91a7bc;font-size:12px;}
 
 /* Rename uses a compact dialog; only Copy/Move open the fixed folder picker. */
-#file-action-dialog[open]:has(#yrm-b12-action-picker[hidden]){height:auto;min-height:0;max-height:min(360px,calc(100dvh - 40px));}
+#file-action-dialog[open]:has(#yrm-b12-action-picker[hidden]){height:auto;min-height:0;max-height:min(360px,calc(100dvh - 40px));width:min(420px,calc(100vw - 28px));}
 #file-action-dialog[open]:has(#yrm-b12-action-picker[hidden]) form{overflow:visible;min-height:0;}
 #file-action-dialog[open]:has(#yrm-b12-action-picker[hidden]) .panel-modal-actions{margin-top:20px;}
 
@@ -813,6 +831,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-wallpaper-recent-grid form{margin:0;}
 .yrm-wallpaper-recent-item{width:100%;border:2px solid transparent;padding:0;background:#16191e;border-radius:7px;overflow:hidden;cursor:pointer;display:block;transition:border-color .15s,transform .15s;}
 .yrm-wallpaper-recent-item:hover,.yrm-wallpaper-recent-item:focus-visible{border-color:#81b9f0;transform:translateY(-1px);}
+.yrm-wallpaper-recent-item.is-selected{border-color:#4fa3f7;box-shadow:0 0 0 1px rgba(79,163,247,.3);}
 .yrm-wallpaper-recent-item img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;}
 .yrm-update-technical{font-size:11px;color:#a8b4c2;padding:4px 2px;margin:0 0 8px;}
 .yrm-update-technical summary{cursor:pointer;}
@@ -852,8 +871,10 @@ body.is-desktop .workspace-stage{display:none!important;}
 #window-scroll:has(.settings-rc41){display:flex;flex-direction:column;overflow-y:auto;}
 #window-page:has(.settings-rc41){box-sizing:border-box;display:flex;flex:1 0 auto;min-height:100%;padding:0!important;}
 #window-page:has(.settings-rc41)>.server-settings-layout{display:grid;flex:1;min-height:100%;width:100%;align-items:stretch;gap:0;grid-template-columns:205px minmax(0,1fr);}
-#window-page:has(.settings-rc41) .server-settings-nav{height:auto;min-height:100%;align-self:stretch;position:relative;top:auto;box-sizing:border-box;background:#181a1e;padding:12px 9px;}
-#window-page:has(.settings-rc41) .server-settings-content{min-width:0;padding:14px 18px 14px;}
+/* Sidebar is pinned to 100% window height. Only the content area scrolls internally.
+   This prevents the bottom avatar/update dock from jumping when tabs change height. */
+#window-page:has(.settings-rc41) .server-settings-nav{height:100%;min-height:100%;align-self:stretch;position:relative;top:auto;box-sizing:border-box;background:#181a1e;padding:12px 9px;display:flex;flex-direction:column;}
+#window-page:has(.settings-rc41) .server-settings-content{min-width:0;padding:14px 18px 14px;overflow-y:auto;}
 .yrm-network-interface-head{justify-content:flex-start;}
 .yrm-network-interface-details dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
 .yrm-network-interface-details dl>div{display:flex;flex-direction:column;gap:7px;padding:0;border-top:0;}
@@ -920,7 +941,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 /* Maintain desktop window integrity and 2-column layout when DevTools opens or window is resized */
 body.os-shell .workspace-stage>.workspace-window:not(.is-maximized){min-width:640px;min-height:360px;}
 body.os-shell .fm-explorer .fm-columns{display:grid!important;grid-template-columns:176px minmax(0,1fr)!important;gap:16px!important;min-height:380px!important;flex-direction:row!important;}
-body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-direction:column!important;flex-wrap:nowrap!important;border-right:1px solid #454950!important;border-bottom:0!important;padding:9px 12px 9px 0!important;}
+body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-direction:column!important;flex-wrap:nowrap!important;border-right:1px solid #454950!important;border-bottom:0!important;padding:8px 6px 8px 6px!important;}
 @container (max-width: 500px){
   .yrm-network-interface-details dl{grid-template-columns:1fr;}
   .yrm-network-interface-details dl>div{display:grid;grid-template-columns:110px minmax(0,1fr);}
@@ -930,13 +951,14 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
   .fm-compact-toolbar .button{font-size:11px;padding:7px;}
 }
 
-/* Settings: real two-zone sidebar with a separate signed-in account dock. */
+/* Settings: real two-zone sidebar with a separate signed-in account dock.
+   The >#window-page rule already sets height:100% and display:flex above.
+   These rules extend it: primary nav scrolls, bottom dock pins to the bottom. */
 #window-page:has(.settings-rc41) .server-settings-nav{
-  display:flex;flex-direction:column;min-width:0;min-height:100%;height:auto;
-  overflow:visible;gap:0;padding:12px 9px 9px;
+  overflow:visible;gap:0;
 }
-.yrm-settings-nav-primary{display:flex;flex-direction:column;gap:3px;min-width:0;min-height:0;overflow-y:auto;scrollbar-width:thin;}
-.yrm-settings-nav-bottom{margin-top:auto;display:flex;flex-direction:column;gap:7px;padding-top:14px;min-width:0;}
+.yrm-settings-nav-primary{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;overflow-y:auto;scrollbar-width:thin;}
+.yrm-settings-nav-bottom{margin-top:auto;flex:none;display:flex;flex-direction:column;gap:7px;padding-top:14px;min-width:0;}
 .yrm-settings-nav-bottom>.settings-nav-link{margin-bottom:2px;}
 .yrm-profile-dock{position:relative;border-top:1px solid #353b45;padding-top:9px;min-width:0;}
 .yrm-profile-trigger{border:0;background:transparent;color:#e5edf7;display:flex;align-items:center;gap:9px;
@@ -1023,7 +1045,7 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
 }
 
 /* My Files is one static-icon surface, not separate arrow and folder controls. */
-.fm-explorer .fm-my-files-header{display:block;min-width:0;border-radius:7px;overflow:hidden;}
+.fm-explorer .fm-my-files-header{display:block;min-width:0;border-radius:7px;overflow:hidden;margin:1px 2px;}
 .fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-my-files-home{
   display:flex;align-items:center;gap:9px;width:100%;min-height:36px;height:36px;
   padding:0 10px;box-sizing:border-box;border:0;border-radius:7px;
@@ -1035,8 +1057,9 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
 .fm-explorer .fm-my-files-header .fm-my-files-folder{width:16px;height:16px;flex:0 0 16px;transform:none;transition:none;}
 .fm-explorer .fm-my-files-header .fm-my-files-toggle.fm-my-files-home span{overflow:hidden;text-overflow:ellipsis;}
 .fm-explorer .fm-my-files-header .fm-my-files-home,.fm-explorer .fm-my-files-header .fm-my-files-home *{-webkit-user-select:none;user-select:none;}
+.fm-explorer .fm-location-link{margin:1px 2px;border-radius:6px;}
 .fm-explorer .fm-my-files-children{padding-left:14px;}
-.fm-explorer .fm-my-files-children .fm-location-link{padding-left:10px!important;min-height:32px;}
+.fm-explorer .fm-my-files-children .fm-location-link{padding-left:10px!important;min-height:32px;margin:1px 2px;}
 .fm-explorer .fm-history-back,.fm-explorer .fm-history-refresh{width:36px;min-width:36px;height:36px;padding:8px;box-sizing:border-box;}
 .fm-explorer .fm-history-back .ui-icon,.fm-explorer .fm-history-refresh .ui-icon{width:18px;height:18px;}
 .fm-explorer .explorer-name>a,.fm-explorer .fm-file-entry>.fm-file-open{display:inline-flex;align-items:center;gap:7px;min-height:27px;max-width:100%;min-width:0;}

@@ -170,7 +170,7 @@
                   else { <span class="fm-folder-chevron-spacer" aria-hidden="true"></span> }
                   <a class="fm-folder-entry" data-fm-inline-folder role="link" tabindex="0"
                      data-fm-href="@Url.Page("/Files", new { path = relative })"
-                     title="Double-click to open">
+                     title="@name">
                     <svg class="ui-icon fm-folder-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>@name</span>
                   </a>
                   @if (matching is not null) { <small class="explorer-share-mark" title="SMB shared">Shared</small> }
@@ -255,7 +255,7 @@
                     </button>
                     <a class="fm-folder-entry" data-fm-inline-folder role="link" tabindex="0"
                        data-fm-href="@Url.Page("/Files", new { path = child, hidden = Model.Hidden })"
-                       title="Double-click to open">
+                       title="@item.Name">
                       <svg class="ui-icon fm-folder-icon" aria-hidden="true"><use href="#i-folder"/></svg><span>@item.Name</span>
                     </a>
                   }

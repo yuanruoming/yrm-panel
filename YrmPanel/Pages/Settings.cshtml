@@ -706,10 +706,49 @@
     }
     else if (activeTab == "about")
     {
+      var updatePhase = Model.UpdateStatus.State == "running" ? "Updating"
+        : Model.LastUpdateCheck?.HasUpdate == true ? "Update Available"
+        : Model.UpdateStatus.State == "failed" ? "Update Failed"
+        : Model.LastUpdateCheck?.Available == true ? "Up to Date"
+        : "Not Checked";
+      var badgeClass = Model.UpdateStatus.State == "running" ? "badge-idle"
+        : Model.UpdateStatus.State == "failed" ? "badge-failed"
+        : Model.LastUpdateCheck?.HasUpdate == true ? "badge-available"
+        : Model.LastUpdateCheck?.Available == true ? "badge-ok"
+        : "badge-idle";
+      var statusMsg = Model.UpdateStatus.State == "running" ? "Updating YRM Panel…"
+        : Model.LastUpdateCheck?.HasUpdate == true ? (Model.LastUpdateCheck.Message ?? "A new version is available.")
+        : Model.LastUpdateCheck?.Available == true ? "Your installed build is up to date."
+        : (Model.UpdateStatus.Message ?? "Updates have not been checked yet.");
 
       <section class="yrm-flat-panel settings-update-card">
         <div class="settings-row-top"><h3>Updates</h3></div>
-        <div class="yrm-updates-current"><span>Current Version</span><strong>@info.PanelVersion.Split('+')[0]</strong></div>
+
+        @* Hero card: icon + version + status badge *@
+        <div class="yrm-update-hero">
+          <div class="yrm-update-hero-icon">
+            <svg class="ui-icon"><use href="#i-grid"/></svg>
+          </div>
+          <div class="yrm-update-hero-body">
+            <span class="yrm-update-hero-name">YRMPanel</span>
+            <span class="yrm-update-hero-version">@info.PanelVersion.Split('+')[0]</span>
+          </div>
+          <span class="yrm-update-status-badge @badgeClass">
+            <span class="yrm-update-status-dot"></span>
+            @updatePhase
+          </span>
+        </div>
+
+        @* Build hash pill (dev channel only) *@
+        @if (Model.UpdateChannel == "dev" && latestBuild.Length >= 8)
+        {
+          <div class="yrm-update-build-row">
+            <span class="yrm-update-build-label">Build</span>
+            <code class="yrm-update-build-pill" title="@latestBuild">@(latestBuild[..8])</code>
+          </div>
+        }
+
+        @* Available version row *@
         @if (Model.LastUpdateCheck?.HasUpdate == true)
         {
           <div class="yrm-update-available">
@@ -717,27 +756,29 @@
             <strong>@(Model.LastUpdateCheck.Tag ?? "New development build")</strong>
           </div>
         }
-        @if (Model.UpdateChannel == "dev" && latestBuild.Length >= 8)
-        { <details class="yrm-update-technical"><summary>Build details</summary><code>@(latestBuild[..8])</code></details> }
+
+        @* Progress tracker (live update) *@
         <div class="yrm-update-tracker" id="v1-update-progress" role="status" aria-live="polite">
-          <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@(Model.UpdateStatus.State == "running" ? "Updating" : Model.LastUpdateCheck?.HasUpdate == true ? "Update Available" : Model.UpdateStatus.State == "failed" ? "Update Failed" : Model.LastUpdateCheck?.Available == true ? "Up to Date" : "Not Checked")</strong><span id="yrm-update-percent"></span></div>
+          <div class="yrm-update-tracker-head"><strong id="yrm-update-phase">@updatePhase</strong><span id="yrm-update-percent"></span></div>
           <div id="yrm-update-bar" class="yrm-update-bar" role="progressbar" aria-label="Update download progress" hidden><span id="yrm-update-bar-fill"></span></div>
-          <p id="yrm-update-message" class="muted">@(Model.UpdateStatus.State == "running" ? "Updating YRM PANEL." : Model.LastUpdateCheck?.HasUpdate == true ? Model.LastUpdateCheck.Message : Model.LastUpdateCheck?.Available == true ? "Your installed build is up to date." : Model.UpdateStatus.Message)</p>
+          <p id="yrm-update-message" class="muted">@statusMsg</p>
           <button type="button" id="yrm-update-reload" class="button button-primary" hidden>Reload Panel</button>
         </div>
 
-        <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel/releases" target="_blank" rel="noopener noreferrer">View release notes ↗</a>
         @if (!string.IsNullOrWhiteSpace(Model.Notice)) { <p class="muted">@Model.Notice</p> }
+
+        @* Action toolbar *@
         <div class="settings-button-row">
           <form method="post" asp-page-handler="CheckUpdate" asp-route-tab="about"><button class="button button-secondary" type="submit">Check Updates</button></form>
           @if (OperatingSystem.IsLinux())
           {
             @if (Model.UpdateStatus.State == "running")
-            { <button class="button button-primary" disabled type="button">Updating...</button> }
+            { <button class="button button-primary" disabled type="button">Updating…</button> }
             else if (Model.LastUpdateCheck?.HasUpdate == true)
-            { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" data-v1-update type="submit">Update</button></form> }
-            else { <button class="button button-primary" disabled type="button" title="Check for updates first">Update</button> }
+            { <form method="post" asp-page-handler="Update" asp-route-tab="about" data-requires-admin="Install the latest YRM Panel release"><button class="button button-primary" data-v1-update type="submit">Update Now</button></form> }
+            else { <button class="button button-primary" disabled type="button" title="Check for updates first">Update Now</button> }
           }
+          <a class="settings-text-link" href="https://github.com/yuanruoming/yrm-panel/releases" target="_blank" rel="noopener noreferrer" style="margin-left:auto;">View release notes ↗</a>
         </div>
 
       </section>
