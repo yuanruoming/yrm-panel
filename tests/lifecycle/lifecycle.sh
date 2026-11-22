@@ -29,7 +29,11 @@ sudoers_valid() { visudo -c >/dev/null 2>&1; }
 # Build a release tarball exactly like the release workflow lays it out.
 # mode: normal | broken-binary | broken-samba-bootstrap
 make_release() {
-  local name=$1 mode=$2 dir="$WORK/release-$name" out="$WORK/assets-$name"
+  # Separate statements: one "local" line cannot use a variable it declares.
+  local name=$1
+  local mode=$2
+  local dir="$WORK/release-$name"
+  local out="$WORK/assets-$name"
   rm -rf "$dir" "$out"; mkdir -p "$dir/deployment" "$out"
   cp -a "$PUBLISH/." "$dir/"
   cp "$REPO_ROOT"/packaging/yrm-panel.service "$REPO_ROOT"/packaging/yrm-panel-firewall-restore.service "$dir/deployment/"
