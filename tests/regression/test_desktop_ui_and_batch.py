@@ -28,7 +28,11 @@ class DesktopUiAndBatch(unittest.TestCase):
         self.assertIn('oldDirectory.replaceChildren(',shell)
         self.assertIn('oldRoot.dataset.filesCurrentPath = newRoot.dataset.filesCurrentPath',shell)
         self.assertIn("if (incoming !== '/Files' || !reconcileFilesContent(oldContent,newContent))",shell)
-        self.assertIn('oldContent.replaceWith(document.importNode(newContent,true))',shell)
+        self.assertIn('const freshContent=document.importNode(newContent,true);',shell)
+        self.assertIn('oldContent.replaceWith(freshContent);',shell)
+        # Settings tab swaps must carry already-loaded Recently Used thumbnails over.
+        self.assertIn('function adoptUnchangedImages(oldContent, freshContent)',shell)
+        self.assertIn("if (incoming === '/Settings') adoptUnchangedImages(oldContent,freshContent);",shell)
         self.assertIn('fetchWorkspacePage(url,refresh)',shell)
         self.assertIn('filesPageCache.clear()',shell)
         self.assertIn('if (!reconcileWorkspaceView(remotePage,url)) page.replaceChildren(fragment);',shell)

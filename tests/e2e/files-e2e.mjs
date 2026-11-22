@@ -127,6 +127,44 @@ await check('large folder lists the alphabetically first 1000 rows', async () =>
   assert(names[0] === 'f0000.txt' && names[999] === 'f0999.txt', 'rows are not the first 1000 in order');
 });
 
+// ---------- Layout: windows fit their content area, no stray scrollbars --
+await check('My Files sidebar never shows a horizontal scrollbar, even for very long folder names', async () => {
+  await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
+  await page.waitForSelector('.fm-explorer');
+  const m = await page.evaluate(() => {
+    const box = document.getElementById('yrm-my-files-children');
+    box.hidden = false;
+    for (let i = 0; i < 3; i++) {
+      const link = document.createElement('a');
+      link.className = 'fm-location-link fm-location-child';
+      link.innerHTML = '<svg class="ui-icon"><use href="#i-folder"/></svg><span></span>';
+      link.querySelector('span').textContent = 'a-very-long-folder-name-'.repeat(8) + i;
+      box.append(link);
+    }
+    return { scrollWidth: box.scrollWidth, clientWidth: box.clientWidth, overflowX: getComputedStyle(box).overflowX };
+  });
+  assert(m.overflowX !== 'auto' && m.overflowX !== 'scroll', 'sidebar folder list may scroll sideways (overflow-x: ' + m.overflowX + ')');
+  assert(m.scrollWidth <= m.clientWidth, `sidebar folder list is wider than its box (${m.scrollWidth} > ${m.clientWidth})`);
+});
+for (const tab of ['overview', 'network', 'appearance', 'about']) {
+  await check(`Settings ${tab} tab fits its window: sidebar pinned, no outer scrollbar`, async () => {
+    await page.goto(BASE + '/Settings?tab=' + tab);
+    await page.waitForSelector('.server-settings-layout');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    const m = await page.evaluate(() => {
+      const scroller = document.getElementById('window-scroll');
+      const pane = document.getElementById('window-page');
+      const nav = document.querySelector('.server-settings-nav');
+      return {
+        scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight,
+        pageHeight: pane.getBoundingClientRect().height, navHeight: nav.getBoundingClientRect().height
+      };
+    });
+    assert(m.scrollHeight <= m.clientHeight + 1, `outer window scrolls (${m.scrollHeight} > ${m.clientHeight})`);
+    assert(Math.abs(m.navHeight - m.pageHeight) <= 1, `sidebar is not pinned to the window height (${m.navHeight} vs ${m.pageHeight})`);
+  });
+}
+
 // ---------- HTTP behaviour with the logged-in session -------------------
 await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
 await page.waitForSelector('.fm-explorer');

@@ -354,7 +354,7 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
    Do not wrap grids, tables, or sections in additional decorative cards. */
 /* Two-tone desktop settings: fixed dark navigation, gray working area. */
 .window-page:has(.settings-rc41){padding:0!important;}
-.settings-rc41{display:grid;grid-template-columns:196px minmax(0,1fr);gap:0;min-height:100%;}
+.settings-rc41{display:grid;grid-template-columns:196px minmax(0,1fr);gap:0;}
 .settings-rc41 .server-settings-nav{background:#181a1d;border-right:1px solid #383b41;padding:15px 10px;align-self:stretch;position:relative;top:auto;}
 .settings-rc41 .settings-nav-link{border-radius:7px;min-height:36px;padding:9px 11px;color:#c5c7ce;}
 .settings-rc41 .settings-nav-link.is-active{background:#343e4c;color:#e6eef8;}
@@ -465,7 +465,7 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .fm-my-files-header>.fm-location-link{flex:1;min-width:0;}
 .fm-my-files-toggle{background:transparent;color:#b9c7d7;border:0;cursor:pointer;display:grid;place-items:center;width:23px;height:31px;flex:none;border-radius:5px;}
 .fm-my-files-toggle:hover{background:#363b44;}
-.fm-my-files-children{padding-left:12px;max-height:min(400px,42vh);overflow:auto;}
+.fm-my-files-children{padding-left:12px;max-height:min(400px,42vh);overflow-x:hidden;overflow-y:auto;}
 .fm-my-files-children[hidden]{display:none!important;}
 .fm-location-crumb{font-weight:600;font-size:14px;color:#e6e8ec;}
 .fm-page-title{margin-bottom:12px;}
@@ -789,9 +789,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 }
 
 /* Integrated desktop views: persistent two-column settings & quiet compact UI. */
-.settings-rc41{height:100%;min-height:100%;align-items:stretch;}
-.settings-rc41 .server-settings-nav{height:100%;min-height:100%;align-self:stretch;}
-.settings-rc41 .server-settings-content{min-height:100%;}
+.settings-rc41{align-items:stretch;}
 .yrm-overview-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;align-content:start;}
 .yrm-overview-card{min-width:0;min-height:155px;padding:18px;background:#24272c;border:1px solid #393e46;border-radius:9px;display:flex;flex-direction:column;gap:9px;}
 .yrm-overview-card>h3,.yrm-overview-card-head h3{font-size:14px;font-weight:600;margin:0;color:#e8ebef;}
@@ -868,13 +866,13 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-wallpaper-lightbox>button{display:block;margin:0 0 8px auto;background:#313842;color:#fff;border:1px solid #4b535e;border-radius:6px;cursor:pointer;font-size:19px;min-width:30px;}
 
 /* BETA12.2 interaction refinements: fill the complete window height. */
-#window-scroll:has(.settings-rc41){display:flex;flex-direction:column;overflow-y:auto;}
-#window-page:has(.settings-rc41){box-sizing:border-box;display:flex;flex:1 0 auto;min-height:100%;padding:0!important;}
-#window-page:has(.settings-rc41)>.server-settings-layout{display:grid;flex:1;min-height:100%;width:100%;align-items:stretch;gap:0;grid-template-columns:205px minmax(0,1fr);}
+#window-scroll:has(.settings-rc41){display:flex;flex-direction:column;overflow:hidden;container:yrm-settings-window/size;}
+#window-page:has(.settings-rc41){box-sizing:border-box;display:flex;flex:1 1 0;min-height:0;padding:0!important;}
+#window-page:has(.settings-rc41)>.server-settings-layout{display:grid;flex:1;min-height:0;min-width:0;width:100%;align-items:stretch;gap:0;grid-template-columns:205px minmax(0,1fr);grid-template-rows:minmax(0,1fr);}
 /* Sidebar is pinned to 100% window height. Only the content area scrolls internally.
    This prevents the bottom avatar/update dock from jumping when tabs change height. */
-#window-page:has(.settings-rc41) .server-settings-nav{height:100%;min-height:100%;align-self:stretch;position:relative;top:auto;box-sizing:border-box;background:#181a1e;padding:12px 9px;display:flex;flex-direction:column;}
-#window-page:has(.settings-rc41) .server-settings-content{min-width:0;padding:14px 18px 14px;overflow-y:auto;}
+#window-page:has(.settings-rc41) .server-settings-nav{height:auto;min-height:0;align-self:stretch;position:relative;top:auto;box-sizing:border-box;background:#181a1e;padding:12px 9px;display:flex;flex-direction:column;}
+#window-page:has(.settings-rc41) .server-settings-content{flex:1 1 0;min-width:0;min-height:0;padding:14px 18px 14px;overflow-y:auto;scrollbar-color:rgba(140,170,205,.4) transparent;}
 .yrm-network-interface-head{justify-content:flex-start;}
 .yrm-network-interface-details dl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
 .yrm-network-interface-details dl>div{display:flex;flex-direction:column;gap:7px;padding:0;border-top:0;}
@@ -899,7 +897,7 @@ body.is-desktop .workspace-stage{display:none!important;}
 .yrm-flat-files .explorer-name .explorer-share-mark{vertical-align:middle;margin-left:8px;display:inline-flex;align-items:center;}
 @media(max-width:760px){
  #window-page:has(.settings-rc41)>.server-settings-layout{display:flex;flex-direction:column;}
- #window-page:has(.settings-rc41) .server-settings-nav{min-height:0;height:auto;flex-direction:row;flex-wrap:wrap;}
+ #window-page:has(.settings-rc41) .server-settings-nav{flex:none;min-height:0;height:auto;flex-direction:row;flex-wrap:wrap;}
  #window-page:has(.settings-rc41) .server-settings-content{padding:14px;}
  .yrm-network-interface-details dl{grid-template-columns:1fr;}
  .yrm-network-interface-details dl>div{display:grid;grid-template-columns:130px 1fr;}
@@ -931,11 +929,10 @@ body.is-desktop .workspace-stage{display:none!important;}
 /* Resize responds to the actual *window* width, not the browser viewport. */
 #window-page:has(.settings-rc41),#window-page:has(.fm-explorer){container-type:inline-size;}
 @container (max-width: 699px){
-  .server-settings-layout.settings-rc41{display:flex!important;flex-direction:column!important;min-height:100%!important;}
-  .server-settings-layout.settings-rc41 .server-settings-nav{height:auto!important;min-height:0!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;position:static!important;padding:9px!important;border-bottom:1px solid #3b424c;gap:4px;}
+  .server-settings-layout.settings-rc41{display:flex!important;flex-direction:column!important;min-height:0!important;}
+  .server-settings-layout.settings-rc41 .server-settings-nav{flex:none!important;height:auto!important;min-height:0!important;display:flex!important;flex-direction:row!important;flex-wrap:wrap!important;position:static!important;padding:9px!important;border-bottom:1px solid #3b424c;gap:4px;}
   .server-settings-layout.settings-rc41 .settings-nav-link{flex:0 0 auto;}
   .yrm-overview-grid{grid-template-columns:1fr!important;}
-  .fm-my-files-children{width:100%;}
   .yrm-network-family dl>div{grid-template-columns:110px minmax(0,1fr);}
 }
 /* Maintain desktop window integrity and 2-column layout when DevTools opens or window is resized */
@@ -995,6 +992,14 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
 .yrm-network-interface-head{padding:0 0 2px;}
 .yrm-network-interface-details{padding-top:11px;padding-bottom:11px;}
 .yrm-network-interface-details dl>div{gap:4px;}
+/* Short windows: tighten vertical rhythm so typical Settings pages fit without a scrollbar. */
+@container yrm-settings-window (max-height:800px){
+  .yrm-flat-panel{margin-bottom:16px;}
+  .yrm-network-family{padding-top:8px;padding-bottom:8px;}
+  .yrm-network-family dl>div{padding-top:5px;padding-bottom:5px;}
+  .yrm-network-interface-details dl>div{padding:0;}
+  .yrm-network-row{padding:11px 0;}
+}
 /* File browser: consistent full-width selection/hover and natural inline chevrons. */
 .fm-explorer .explorer-table tbody tr[data-b10-file-row]:hover>td,
 .fm-explorer .explorer-table tbody tr[data-b10-file-row]:focus-within>td{background:rgba(100,146,199,.12);}
@@ -1009,7 +1014,7 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
 .fm-explorer .fm-history-back[disabled]{opacity:.45;cursor:default;}
 .fm-explorer .fm-my-files-header{display:flex;align-items:center;min-width:0;}
 .fm-explorer .fm-my-files-header .fm-location-link{flex:1;min-width:0;}
-.fm-explorer .fm-my-files-children>.fm-location-link{display:flex;width:100%;align-items:center;padding-left:29px;}
+.fm-explorer .fm-my-files-children>.fm-location-link{display:flex;min-width:0;align-items:center;padding-left:29px;}
 .fm-explorer .fm-my-files-children>.fm-location-link:hover{background:#303d4f;}
 .fm-explorer .fm-compact-toolbar{display:flex;flex-wrap:wrap;align-items:center;min-height:43px;gap:7px;}
 .fm-explorer .fm-compact-toolbar .yrm-b10-file-selection{display:flex;flex-wrap:wrap;gap:7px;}

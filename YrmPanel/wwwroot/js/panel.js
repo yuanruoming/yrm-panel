@@ -1049,6 +1049,26 @@
     });
   }
 
+  // Replacing a Settings pane recreates every <img>, so thumbnails that were
+  // already decoded (Appearance > Recently Used) flash while they load again.
+  // Carry the existing, fully loaded elements over whenever their src is unchanged.
+  function adoptUnchangedImages(oldContent, freshContent) {
+    const selector = '.yrm-wallpaper-recent-grid img';
+    const loaded = new Map();
+    oldContent.querySelectorAll(selector).forEach(img => {
+      const src = img.getAttribute('src');
+      if (src && img.complete && img.naturalWidth > 0 && !loaded.has(src)) loaded.set(src, img);
+    });
+    if (!loaded.size) return;
+    freshContent.querySelectorAll(selector).forEach(img => {
+      const src = img.getAttribute('src');
+      const existing = loaded.get(src);
+      if (!existing) return;
+      loaded.delete(src);
+      img.replaceWith(existing);
+    });
+  }
+
   // Preserve Files/Settings navigation DOM when loading an inner view.
   // The server may return a full Razor document, but only the working pane
   // changes. This avoids collapsing and rebuilding the sidebar on every click.
@@ -1102,8 +1122,11 @@
       link.classList.toggle('is-active',selected.has(link.getAttribute('href'))||
         (requestedPath!==null&&requestedPath!=='@folders'&&linkPath===requestedPath));
     });
-    if (incoming !== '/Files' || !reconcileFilesContent(oldContent,newContent))
-      oldContent.replaceWith(document.importNode(newContent,true));
+    if (incoming !== '/Files' || !reconcileFilesContent(oldContent,newContent)) {
+      const freshContent=document.importNode(newContent,true);
+      if (incoming === '/Settings') adoptUnchangedImages(oldContent,freshContent);
+      oldContent.replaceWith(freshContent);
+    }
     // Replace route-sensitive dialogs and notices, keeping the original sidebar.
     for (const child of Array.from(page.children)) if (child !== oldRoot) child.remove();
     for (const child of Array.from(remotePage.children)) {
