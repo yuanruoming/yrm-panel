@@ -914,18 +914,22 @@ body.is-desktop .workspace-stage{display:none!important;}
 .fm-crumb-chevron{width:12px;height:12px;flex-shrink:0;opacity:.55;}
 .fm-history-back{white-space:nowrap;min-width:52px;font-size:12px;}
 .fm-history-back:disabled{opacity:.35;cursor:default;}
-.fm-tree-node{min-width:0;}
-.fm-tree-node-header{display:flex;align-items:center;min-width:0;}
-.fm-tree-node-header>.fm-location-link{flex:1;min-width:0;}
-.fm-tree-descendants{padding-left:15px;border-left:1px solid #343c46;margin-left:10px;}
-.fm-tree-descendants[hidden]{display:none;}
+.fm-explorer .fm-tree-preview-row[hidden]{display:none!important;}
 .fm-tree-preview-row>td{padding:0!important;background:transparent!important;border-bottom:0!important;}
-.fm-inline-preview{padding:5px 12px 7px 34px;display:flex;flex-direction:column;gap:2px;background:transparent;}
-.fm-inline-preview .fm-tree-node-header{min-height:29px;}
-.fm-inline-preview .fm-location-link{font-size:12px;text-decoration:none;color:#d1e0ef;display:inline-flex;align-items:center;gap:8px;min-height:29px;}
-.fm-inline-preview .fm-location-link:hover{color:#fff;}
-.fm-inline-preview .fm-location-link .ui-icon{width:14px;height:14px;}
-.fm-inline-preview .fm-tree-descendants{margin-left:11px;padding-left:10px;}
+/* Expanded sub-folders (the inline preview under a folder row): this block owns their whole look.
+   Each level steps in by one chevron width; no guide lines. A click highlights a sub-folder, a
+   double-click or Enter opens it; it is a navigation shortcut, not a file-selection row. */
+.fm-inline-preview{display:flex;flex-direction:column;gap:2px;padding:4px 12px 6px 24px;background:transparent;}
+.fm-tree-node{min-width:0;}
+.fm-tree-descendants{display:flex;flex-direction:column;gap:2px;padding-left:21px;}
+.fm-tree-descendants[hidden]{display:none;}
+.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-width:0;min-height:38px;border-radius:5px;}
+.fm-explorer .fm-tree-node-header>.fm-folder-expand{margin:0 6px 0 10px;}
+.fm-explorer .fm-tree-node-header>.fm-tree-folder,.fm-explorer .fm-tree-node-header>.fm-tree-folder:hover{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:38px;padding:4px 10px 4px 0;box-sizing:border-box;border-radius:5px;background:transparent;font-size:12px;color:#d1e0ef;text-decoration:none;}
+.fm-explorer .fm-tree-node-header>.fm-tree-folder .fm-folder-icon{width:16px;height:16px;flex:0 0 16px;transition:none;transform:none;}
+.fm-explorer .fm-tree-node-header:hover{background:rgba(120,157,198,.12);}
+.fm-explorer .fm-tree-node-header:hover>.fm-tree-folder,.fm-explorer .fm-tree-node-header.is-selected>.fm-tree-folder{color:#fff;}
+.fm-explorer .fm-tree-node-header.is-selected{background:#334155;}
 .fm-tree-empty,.fm-tree-loading{font-size:12px;color:#97a6b6;padding:7px 0;}
 
 /* Resize responds to the actual *window* width, not the browser viewport. */
@@ -1000,9 +1004,6 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
 .fm-explorer .explorer-table tbody tr[data-b10-file-row]:focus-within>td{background:rgba(100,146,199,.12);}
 .fm-explorer .explorer-table tbody tr[data-b10-file-row].is-selected>td{background:#334155!important;}
 .fm-explorer .explorer-table td.explorer-name>a{vertical-align:middle;}
-.fm-explorer .fm-tree-node-header{border-radius:5px;min-height:30px;}
-.fm-explorer .fm-tree-node-header:hover{background:transparent;}
-.fm-explorer .fm-tree-node-header>.fm-location-link{width:100%;min-height:29px;}
 .fm-explorer .fm-history-back,.fm-explorer .fm-history-refresh{display:inline-grid;place-items:center;flex-shrink:0;
   padding:5px;width:30px;min-width:30px;height:30px;text-decoration:none;border-radius:6px;}
 .fm-explorer .fm-history-back .ui-icon,.fm-explorer .fm-history-refresh .ui-icon{width:17px;height:17px;}
@@ -1090,7 +1091,6 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
 .fm-explorer [data-fm-href] {
   cursor: pointer;
 }
-.fm-explorer .fm-tree-preview-row[hidden]{display:none!important;}
 /* File upload modal uses the existing design language, not native file/select widgets. */
 .fm-root-upload-dialog{width:min(520px,calc(100vw - 32px));padding:0;overflow:hidden;border-radius:11px;}
 .fm-root-upload-dialog .panel-modal-head{padding:18px 22px 16px;border-bottom:1px solid #3b4654;}
@@ -1197,11 +1197,6 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
 .fm-explorer .fm-folder-chevron-spacer{vertical-align:middle;margin-right:8px;}
 .fm-explorer .explorer-table tr[data-fm-inline-root]:not([data-fm-inline-root=""]){cursor:pointer;}
 .fm-explorer .explorer-table tr[data-fm-inline-root]:not([data-fm-inline-root=""]):focus-visible{outline:1px solid #79addd;outline-offset:-1px;}
-.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-height:32px;padding:0;border-radius:5px;}
-.fm-explorer .fm-tree-node-header>.fm-tree-folder{display:flex;align-items:center;gap:9px;flex:1;min-width:0;min-height:32px;padding:4px 10px 4px 0;border-radius:5px;box-sizing:border-box;}
-.fm-explorer .fm-tree-node-header>.fm-tree-folder:hover{background:#344052;color:#fff;}
-.fm-explorer .fm-tree-node-header>.fm-tree-folder .fm-folder-icon{width:16px;height:16px;flex:0 0 16px;transition:none;transform:none;}
-.fm-explorer .fm-tree-preview-row[hidden]{display:none!important;}
 
 
 .fm-explorer .fm-folder-expand{display:inline-flex;vertical-align:middle;align-items:center;justify-content:center;
@@ -1209,11 +1204,6 @@ body.os-shell .yrm-flat-files .fm-locations{display:flex!important;flex-directio
   border:0;background:transparent;color:#99bdd8;cursor:pointer;border-radius:5px;}
 .fm-explorer .fm-folder-expand:hover{background:rgba(120,157,198,.16);color:#e6f2ff;}
 .fm-explorer .fm-folder-expand:focus-visible{outline:1px solid #89bcf0;outline-offset:0;}
-.fm-explorer .fm-tree-node-header{display:flex;align-items:center;}
-.fm-explorer .fm-tree-node-header>.fm-folder-expand{margin-left:10px;margin-right:8px;}
-.fm-explorer .fm-tree-node-header:hover>.fm-tree-folder,
-.fm-explorer .fm-tree-node-header:hover>.fm-folder-expand{background:transparent;}
-.fm-explorer .fm-tree-node-header:hover{background:#344052;}
 .fm-explorer .fm-folder-entry .fm-folder-icon{transform:none!important;transition:none!important;}
 
 /* DDNS: balanced column proportions in the existing five-column table. */

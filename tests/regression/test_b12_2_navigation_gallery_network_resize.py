@@ -254,7 +254,8 @@ class RoundTwoContracts(unittest.TestCase):
         # Only a folder-label link cancels native single-click navigation.
         # Other links and the rest of the Panel must reach the shell untouched.
         self.assertNotIn('function navigationTarget(', tree)
-        self.assertIn("if (!target?.closest('.fm-explorer')) return;", tree)
+        # Outside the explorer the click only clears the sub-folder highlight; it is never intercepted.
+        self.assertIn("if (!target?.closest('.fm-explorer')) { selectNode(null); return; }", tree)
         self.assertIn("const folderLink = target.closest('a[data-fm-inline-folder],a[data-fm-tree-folder]')", tree)
         self.assertIn("if (folderLink && folderLink.dataset.fmNavigate !== '1'", tree)
         self.assertIn("if (!anchor || event.defaultPrevented", shell)

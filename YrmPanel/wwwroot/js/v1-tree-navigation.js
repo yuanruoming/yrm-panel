@@ -83,6 +83,20 @@
       host.append(folderNode(childPath, item.name, library));
     }
   }
+  // A sub-folder of an expanded folder is highlighted by a single click; a double-click or
+  // Enter opens it. It is a navigation shortcut only: the server acts on direct children of
+  // the current folder, so a sub-folder never joins the file selection behind the toolbar.
+  let selectedNode = null;
+  function selectNode(header) {
+    if (selectedNode && selectedNode !== header) {
+      selectedNode.classList.remove('is-selected');
+      selectedNode.querySelector('[data-fm-tree-folder]')?.removeAttribute('aria-current');
+    }
+    selectedNode = header;
+    if (!header) return;
+    header.classList.add('is-selected');
+    header.querySelector('[data-fm-tree-folder]')?.setAttribute('aria-current', 'true');
+  }
   async function toggleInline(row) {
     const path = row.dataset.fmInlineRoot;
     if (!path) return;
@@ -91,7 +105,10 @@
     row.querySelector(':scope > .explorer-name [data-fm-expand]')?.setAttribute('aria-expanded', String(expanding));
     let preview = row.nextElementSibling;
     if (!expanding) {
-      if (preview?.classList.contains('fm-tree-preview-row')) preview.hidden = true;
+      if (preview?.classList.contains('fm-tree-preview-row')) {
+        if (selectedNode && preview.contains(selectedNode)) selectNode(null);
+        preview.hidden = true;
+      }
       return;
     }
     if (preview?.classList.contains('fm-tree-preview-row') && preview.dataset.loaded === '1') {
@@ -151,7 +168,10 @@
   // existing desktop shell and Files selection handler already own them.
   document.addEventListener('click', event => {
     const target = event.target instanceof Element ? event.target : null;
-    if (!target?.closest('.fm-explorer')) return;
+    if (!target?.closest('.fm-explorer')) { selectNode(null); return; }
+    const header = target.closest('.fm-inline-preview .fm-tree-node-header');
+    if (header && event.button === 0 && !target.closest('[data-fm-expand]')) selectNode(header);
+    else if (!header) selectNode(null);
     const expand = target.closest('[data-fm-expand]');
     if (expand) {
       if (event.button !== 0) return;
@@ -186,6 +206,16 @@
       if (!navigateFolder(anchor)) anchor.click();
     } finally {
       delete anchor.dataset.fmNavigate;
+    }
+  }, true);
+  // Keyboard: Space highlights the focused sub-folder, Escape clears the highlight.
+  document.addEventListener('keydown', event => {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (event.key === 'Escape') selectNode(null);
+    else if (event.key === ' ' && target?.matches('.fm-inline-preview a[data-fm-tree-folder]')) {
+      event.preventDefault();
+      selectNode(target.closest('.fm-tree-node-header'));
     }
   }, true);
   // Keyboard parity with the removed href: Enter opens the selected folder.
