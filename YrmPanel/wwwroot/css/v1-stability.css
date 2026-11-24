@@ -916,20 +916,30 @@ body.is-desktop .workspace-stage{display:none!important;}
 .fm-history-back:disabled{opacity:.35;cursor:default;}
 .fm-explorer .fm-tree-preview-row[hidden]{display:none!important;}
 .fm-tree-preview-row>td{padding:0!important;background:transparent!important;border-bottom:0!important;}
-/* Expanded sub-folders (the inline preview under a folder row): this block owns their whole look.
-   Each level steps in by one chevron width; no guide lines. A click highlights a sub-folder, a
-   double-click or Enter opens it; it is a navigation shortcut, not a file-selection row. */
-.fm-inline-preview{display:flex;flex-direction:column;gap:2px;padding:4px 12px 6px 24px;background:transparent;}
+/* Expanded folders (the inline preview under a folder row): this block owns their whole look.
+   Each level is indented inside its own row (--tree-indent, about half a folder icon), so the hover
+   and highlight band always spans the full table width, like a normal row; no guide lines.
+   A click highlights an entry, a double-click or Enter opens it; they are shortcuts, not
+   file-selection rows. */
+.fm-inline-preview{--tree-pad:13px;--tree-indent:10px;display:flex;flex-direction:column;padding:0 0 2px;background:transparent;}
 .fm-tree-node{min-width:0;}
-.fm-tree-descendants{display:flex;flex-direction:column;gap:2px;padding-left:21px;}
+.fm-tree-descendants{display:flex;flex-direction:column;}
 .fm-tree-descendants[hidden]{display:none;}
-.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-width:0;min-height:38px;border-radius:5px;}
-.fm-explorer .fm-tree-node-header>.fm-folder-expand{margin:0 6px 0 10px;}
-.fm-explorer .fm-tree-node-header>.fm-tree-folder,.fm-explorer .fm-tree-node-header>.fm-tree-folder:hover{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:38px;padding:4px 10px 4px 0;box-sizing:border-box;border-radius:5px;background:transparent;font-size:12px;color:#d1e0ef;text-decoration:none;}
-.fm-explorer .fm-tree-node-header>.fm-tree-folder .fm-folder-icon{width:16px;height:16px;flex:0 0 16px;transition:none;transform:none;}
+.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-width:0;min-height:40px;padding-left:calc(var(--tree-pad) + var(--tree-depth,1) * var(--tree-indent));-webkit-user-select:none;user-select:none;}
+.fm-explorer .fm-tree-node-header>.fm-folder-expand{margin:0 6px 0 0;}
+.fm-explorer .fm-tree-node-header>.fm-tree-spacer{flex:0 0 22px;margin-right:6px;}
+.fm-explorer .fm-tree-node-header>.fm-tree-folder,
+.fm-explorer .fm-tree-node-header>.fm-tree-folder:hover,
+.fm-explorer .fm-tree-node-header>.fm-tree-file,
+.fm-explorer .fm-tree-node-header>.fm-tree-file:hover{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:40px;margin:0;padding:0 12px 0 0;box-sizing:border-box;border:0;border-radius:0;background:transparent;font:inherit;font-size:12px;color:#d1e0ef;text-align:left;text-decoration:none;cursor:pointer;}
+.fm-explorer .fm-tree-node-header .fm-folder-icon{width:16px;height:16px;flex:0 0 16px;transition:none;transform:none;}
+.fm-explorer .fm-tree-node-header .explorer-file-icon{flex:0 0 16px;text-align:center;}
+.fm-explorer .fm-tree-node-header :is(.fm-tree-folder,.fm-tree-file)>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .fm-explorer .fm-tree-node-header:hover{background:rgba(120,157,198,.12);}
-.fm-explorer .fm-tree-node-header:hover>.fm-tree-folder,.fm-explorer .fm-tree-node-header.is-selected>.fm-tree-folder{color:#fff;}
+.fm-explorer .fm-tree-node-header:hover :is(.fm-tree-folder,.fm-tree-file),.fm-explorer .fm-tree-node-header.is-selected :is(.fm-tree-folder,.fm-tree-file){color:#fff;}
 .fm-explorer .fm-tree-node-header.is-selected{background:#334155;}
+.fm-explorer .fm-tree-node-header>:is(.fm-tree-folder,.fm-tree-file):focus-visible{outline:none;}
+.fm-explorer .fm-tree-node-header:has(:focus-visible){outline:2px solid #7bb4e7;outline-offset:-2px;}
 .fm-tree-empty,.fm-tree-loading{font-size:12px;color:#97a6b6;padding:7px 0;}
 
 /* Resize responds to the actual *window* width, not the browser viewport. */

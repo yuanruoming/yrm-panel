@@ -226,6 +226,9 @@ public sealed class FilesModel : PageModel
             // A folder always has a chevron. Loading its children is lazy, so
             // we do not scan each directory just to decide whether to draw one.
             folderNodes = view.Items.Where(x => x.IsDirectory).Select(x => new { name = x.Name }),
+            // Names only: the expanded tree lists a folder's files so they can be highlighted
+            // and opened. Nothing here changes what the server lets the user do with them.
+            files = view.Items.Where(x => !x.IsDirectory).Select(x => x.Name),
             canManage = view.CanWrite,
             canEnable = view.CanEnable
         });

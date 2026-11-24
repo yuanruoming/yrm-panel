@@ -320,6 +320,13 @@ await check('file download returns the exact bytes', async () => {
   const response = await api.get(BASE + q('Download', { name: 'notes.txt' }));
   assert(response.status() === 200 && (await response.text()) === 'hello notes', 'download mismatch');
 });
+await check('Tree listing returns sub-folders and the names of the files', async () => {
+  const response = await api.get(BASE + q('Tree'));
+  assert(response.status() === 200, 'status ' + response.status());
+  const data = await response.json();
+  assert(Array.isArray(data.folders) && Array.isArray(data.files), 'folders/files arrays missing');
+  assert(data.files.includes('notes.txt') && data.files.includes('pic.png'), 'files missing: ' + data.files.join(','));
+});
 await check('ZIP download streams a valid archive with folders preserved', async () => {
   assert(token, 'no antiforgery token on the Files page');
   const body = new URLSearchParams();

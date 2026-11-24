@@ -100,12 +100,13 @@
     return wrapper;
   }
 
-  async function showFile(name) {
+  async function showFile(name, dir = null) {
     // The desktop shell intentionally keeps the address bar at /.
-    // Use the current rendered Files pane, not the browser location.
+    // Use the current rendered Files pane, not the browser location; a file inside an
+    // expanded sub-folder passes the folder it lives in.
     const explorer = document.querySelector('.fm-explorer[data-files-current-path]');
     if (!explorer) return;
-    const path = explorer.dataset.filesCurrentPath || '';
+    const path = dir === null ? (explorer.dataset.filesCurrentPath || '') : dir;
     const params = new URLSearchParams({handler:'Preview',path,name});
     const url = `/Files?${params}`;
     if (!supported.test(name)) {
@@ -159,7 +160,7 @@
 
   document.addEventListener('dblclick', event => {
     const target = event.target instanceof Element ? event.target.closest('[data-open-file]') : null;
-    if (target) { event.preventDefault(); void showFile(target.getAttribute('data-open-file') || ''); }
+    if (target) { event.preventDefault(); void showFile(target.getAttribute('data-open-file') || '', target.getAttribute('data-open-dir')); }
   },true);
 
   document.addEventListener('change', async event => {

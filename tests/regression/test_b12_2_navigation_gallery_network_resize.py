@@ -162,7 +162,8 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertIn('createFolderTreeNode(', shell)
         self.assertIn('revealFolderTree(', shell)
         self.assertIn("listFolders('')", shell)
-        self.assertIn('!folders.length', tree)
+        # An empty folder (no sub-folders and no files) expands to nothing.
+        self.assertIn('!(children.folders.length || children.files.length)', tree)
         self.assertNotIn("No subfolders", tree)
 
     def test_compact_certificates_ddns_avatar_and_overview_alignment(self):
@@ -183,7 +184,8 @@ class RoundTwoContracts(unittest.TestCase):
         csharp = content('YrmPanel/Pages/Files.cshtml.cs')
         self.assertIn('data-files-current-path="@currentRoute"', view)
         self.assertIn("document.querySelector('.fm-explorer[data-files-current-path]')", js)
-        self.assertIn('const path = explorer.dataset.filesCurrentPath', js)
+        # A file inside an expanded sub-folder passes its own folder; otherwise the rendered pane decides.
+        self.assertIn("const path = dir === null ? (explorer.dataset.filesCurrentPath || '') : dir;", js)
         self.assertNotIn("route.searchParams.get('path')", js)
         self.assertIn("handler:'Preview',path,name", js)
         self.assertIn("handler:'Download',path,name", js)

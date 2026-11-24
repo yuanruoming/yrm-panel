@@ -1,5 +1,6 @@
 /* Files folder navigation: immediate chevron expand, static folder icon.
-   Clicking a folder selects it; double-click navigates without a fixed delay.
+   Clicking a folder or file in an expanded folder highlights it; double-click opens it
+   without a fixed delay (folders navigate, files preview or download).
    Folder labels carry data-fm-href instead of href, so hovering never shows a
    browser status-bar URL; the desktop shell performs the navigation. */
 (() => {
@@ -12,9 +13,10 @@
     if (library) url.searchParams.set('nav', 'library');
     return url.pathname + url.search;
   };
-  async function loadFolders(path) {
+  // The children of a folder: its sub-folders and the names of its files.
+  async function loadChildren(path) {
     const cached = cache.get(path);
-    if (cached && Date.now() - cached.at < 6000) return cached.folders;
+    if (cached && Date.now() - cached.at < 6000) return cached.children;
     if (pendingLoads.has(path)) return pendingLoads.get(path);
     const task = (async () => {
       const url = new URL('/Files', location.origin);
@@ -24,21 +26,27 @@
       if (!response.ok || response.redirected) throw new Error(`Could not read folder (HTTP ${response.status}).`);
       const data = await response.json();
       if (!Array.isArray(data?.folders)) throw new Error('Invalid folder response.');
+      const usable = name => typeof name === 'string' && name !== '' && name !== '.' && name !== '..';
       const folders = (Array.isArray(data.folderNodes) ? data.folderNodes : data.folders.map(name => ({name})))
-        .filter(item => item && typeof item.name === 'string' && item.name && item.name !== '.' && item.name !== '..');
-      cache.set(path, {folders, at:Date.now()});
+        .filter(item => item && usable(item.name));
+      const files = (Array.isArray(data.files) ? data.files : []).filter(usable);
+      const children = {folders, files};
+      cache.set(path, {children, at:Date.now()});
       if (cache.size > 64) cache.delete(cache.keys().next().value);
-      return folders;
+      return children;
     })();
     pendingLoads.set(path, task);
     try {return await task;} finally {if(pendingLoads.get(path) === task) pendingLoads.delete(path);}
   }
-  function folderNode(path, name, library) {
+  // depth 1 = directly below the expanded folder row; the CSS indents each level inside the row,
+  // so the hover/selection band always spans the full width of the table.
+  function folderNode(path, name, library, depth) {
     const wrapper = document.createElement('div');
     wrapper.className = 'fm-tree-node';
     wrapper.dataset.fmTreeRoot = path;
     const header = document.createElement('div');
     header.className = 'fm-tree-node-header';
+    header.style.setProperty('--tree-depth', String(depth));
     const link = document.createElement('a');
     link.className = 'fm-location-link fm-tree-folder';
     link.dataset.fmHref = route(path, library);
@@ -76,26 +84,52 @@
     wrapper.append(header, descendants);
     return wrapper;
   }
-  function renderChildren(host, folders, path, library) {
-    host.replaceChildren();
-    for (const item of folders) {
-      const childPath = path ? path.replace(/\/$/, '') + '/' + item.name : item.name;
-      host.append(folderNode(childPath, item.name, library));
-    }
+  // A file has no arrow; a spacer keeps its icon aligned with the folders around it.
+  // Opening is owned by the Files preview script (double-click on [data-open-file]).
+  function fileNode(dir, name, depth) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'fm-tree-node';
+    const header = document.createElement('div');
+    header.className = 'fm-tree-node-header';
+    header.style.setProperty('--tree-depth', String(depth));
+    const spacer = document.createElement('span');
+    spacer.className = 'fm-tree-spacer';
+    spacer.setAttribute('aria-hidden', 'true');
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'fm-file-open fm-tree-file';
+    open.dataset.openFile = name;
+    open.dataset.openDir = dir;
+    const icon = document.createElement('span');
+    icon.className = 'explorer-file-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '\u25A4';
+    const label = document.createElement('span');
+    label.textContent = name;
+    open.append(icon, label);
+    header.append(spacer, open);
+    wrapper.append(header);
+    return wrapper;
   }
-  // A sub-folder of an expanded folder is highlighted by a single click; a double-click or
-  // Enter opens it. It is a navigation shortcut only: the server acts on direct children of
-  // the current folder, so a sub-folder never joins the file selection behind the toolbar.
+  function renderChildren(host, children, path, library, depth) {
+    host.replaceChildren();
+    const base = path ? path.replace(/\/$/, '') + '/' : '';
+    for (const item of children.folders) host.append(folderNode(base + item.name, item.name, library, depth));
+    for (const name of children.files) host.append(fileNode(path, name, depth));
+  }
+  // A sub-folder or file of an expanded folder is highlighted by a single click; a double-click or
+  // Enter opens it. It is a shortcut only: the server acts on direct children of the current
+  // folder, so these entries never join the file selection behind the toolbar.
   let selectedNode = null;
   function selectNode(header) {
     if (selectedNode && selectedNode !== header) {
       selectedNode.classList.remove('is-selected');
-      selectedNode.querySelector('[data-fm-tree-folder]')?.removeAttribute('aria-current');
+      selectedNode.querySelector('[data-fm-tree-folder],[data-open-file]')?.removeAttribute('aria-current');
     }
     selectedNode = header;
     if (!header) return;
     header.classList.add('is-selected');
-    header.querySelector('[data-fm-tree-folder]')?.setAttribute('aria-current', 'true');
+    header.querySelector('[data-fm-tree-folder],[data-open-file]')?.setAttribute('aria-current', 'true');
   }
   async function toggleInline(row) {
     const path = row.dataset.fmInlineRoot;
@@ -116,8 +150,9 @@
       return;
     }
     try {
-      const folders = await loadFolders(path);
-      if (!row.isConnected || row.getAttribute('aria-expanded') !== 'true' || !folders.length) return;
+      const children = await loadChildren(path);
+      if (!row.isConnected || row.getAttribute('aria-expanded') !== 'true' ||
+          !(children.folders.length || children.files.length)) return;
       preview = row.nextElementSibling;
       if (!preview?.classList.contains('fm-tree-preview-row')) {
         preview = document.createElement('tr');
@@ -130,7 +165,7 @@
         preview.append(td);
         row.after(preview);
       }
-      renderChildren(preview.querySelector('.fm-inline-preview'), folders, path, false);
+      renderChildren(preview.querySelector('.fm-inline-preview'), children, path, false, 1);
       preview.dataset.loaded = '1';
       preview.hidden = false;
     } catch (error) {
@@ -151,12 +186,14 @@
       return;
     }
     try {
-      const folders = await loadFolders(expand.dataset.fmTreePath || '');
+      const loaded = await loadChildren(expand.dataset.fmTreePath || '');
       if (!children.isConnected || expand.getAttribute('aria-expanded') !== 'true') return;
-      renderChildren(children, folders, expand.dataset.fmTreePath || '', false);
-      children.dataset.hasChildren = folders.length ? '1' : '0';
+      const depth = Number(wrapper.querySelector(':scope > .fm-tree-node-header')?.style.getPropertyValue('--tree-depth') || 1) + 1;
+      renderChildren(children, loaded, expand.dataset.fmTreePath || '', false, depth);
+      const any = loaded.folders.length > 0 || loaded.files.length > 0;
+      children.dataset.hasChildren = any ? '1' : '0';
       children.dataset.loaded = '1';
-      children.hidden = !folders.length;
+      children.hidden = !any;
     } catch (error) {
       expand.setAttribute('aria-expanded', 'false');
       children.hidden = true;
@@ -218,10 +255,17 @@
       selectNode(target.closest('.fm-tree-node-header'));
     }
   }, true);
-  // Keyboard parity with the removed href: Enter opens the selected folder.
+  // Keyboard parity with the removed href: Enter opens the selected folder or file.
   document.addEventListener('keydown', event => {
     if (event.key !== 'Enter' || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
     const target = event.target instanceof Element ? event.target : null;
+    const file = target?.closest('.fm-inline-preview [data-open-file]');
+    if (file) {
+      // The Files preview script owns opening; Enter asks it exactly like a double-click does.
+      event.preventDefault();
+      file.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true, view: window}));
+      return;
+    }
     const anchor = target?.closest('[data-fm-href]');
     if (!anchor || !anchor.closest('.fm-explorer')) return;
     event.preventDefault();
@@ -239,7 +283,7 @@
     if (hoverTimer !== null) clearTimeout(hoverTimer);
     hoverTimer = setTimeout(() => {
       hoverTimer = null;
-      void loadFolders(path).catch(() => {});
+      void loadChildren(path).catch(() => {});
     }, 110);
   }, true);
   document.addEventListener('pointerout', event => {
