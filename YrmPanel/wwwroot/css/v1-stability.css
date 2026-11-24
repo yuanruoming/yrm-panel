@@ -921,17 +921,17 @@ body.is-desktop .workspace-stage{display:none!important;}
    and highlight band always spans the full table width, like a normal row; no guide lines.
    A click highlights an entry, a double-click or Enter opens it; they are shortcuts, not
    file-selection rows. */
-.fm-inline-preview{--tree-pad:13px;--tree-indent:10px;display:flex;flex-direction:column;padding:0 0 2px;background:transparent;}
+.fm-inline-preview{--tree-pad:13px;--tree-indent:10px;display:flex;flex-direction:column;padding:0;background:transparent;}
 .fm-tree-node{min-width:0;}
 .fm-tree-descendants{display:flex;flex-direction:column;}
 .fm-tree-descendants[hidden]{display:none;}
-.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-width:0;min-height:40px;padding-left:calc(var(--tree-pad) + var(--tree-depth,1) * var(--tree-indent));-webkit-user-select:none;user-select:none;}
+.fm-explorer .fm-tree-node-header{display:flex;align-items:center;min-width:0;min-height:var(--fm-row-height);padding-left:calc(var(--tree-pad) + var(--tree-depth,1) * var(--tree-indent));-webkit-user-select:none;user-select:none;}
 .fm-explorer .fm-tree-node-header>.fm-folder-expand{margin:0 6px 0 0;}
 .fm-explorer .fm-tree-node-header>.fm-tree-spacer{flex:0 0 22px;margin-right:6px;}
 .fm-explorer .fm-tree-node-header>.fm-tree-folder,
 .fm-explorer .fm-tree-node-header>.fm-tree-folder:hover,
 .fm-explorer .fm-tree-node-header>.fm-tree-file,
-.fm-explorer .fm-tree-node-header>.fm-tree-file:hover{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:40px;margin:0;padding:0 12px 0 0;box-sizing:border-box;border:0;border-radius:0;background:transparent;font:inherit;font-size:12px;color:#d1e0ef;text-align:left;text-decoration:none;cursor:pointer;}
+.fm-explorer .fm-tree-node-header>.fm-tree-file:hover{display:flex;align-items:center;gap:8px;flex:1;min-width:0;min-height:var(--fm-row-height);margin:0;padding:0 12px 0 0;box-sizing:border-box;border:0;border-radius:0;background:transparent;font:inherit;font-size:12px;color:#d1e0ef;text-align:left;text-decoration:none;cursor:pointer;}
 .fm-explorer .fm-tree-node-header .fm-folder-icon{width:16px;height:16px;flex:0 0 16px;transition:none;transform:none;}
 .fm-explorer .fm-tree-node-header .explorer-file-icon{flex:0 0 16px;text-align:center;}
 .fm-explorer .fm-tree-node-header :is(.fm-tree-folder,.fm-tree-file)>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}

@@ -267,6 +267,16 @@ await check('Settings > About does not offer a disabled Update Now button', asyn
     .filter(b => b.textContent.trim() === 'Update Now' && b.disabled).length);
   assert(disabled === 0, 'a disabled Update Now button is rendered');
 });
+await check('File rows all share the one row height (--fm-row-height)', async () => {
+  await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
+  await page.waitForSelector('.fm-explorer tbody tr[data-b10-file-row]');
+  const m = await page.evaluate(() => ({
+    height: parseFloat(getComputedStyle(document.querySelector('.fm-explorer')).getPropertyValue('--fm-row-height')),
+    rows: Array.from(document.querySelectorAll('.fm-explorer tbody tr[data-b10-file-row]')).slice(0, 30).map(r => r.getBoundingClientRect().height)
+  }));
+  assert(m.height > 0, 'the row height variable is missing');
+  assert(m.rows.length > 0 && m.rows.every(h => Math.abs(h - m.height) <= 1), `rows differ from ${m.height}px: ${m.rows.join(',')}`);
+});
 await check('Appearance wallpaper preview keeps its size when the viewport gets shorter (DevTools)', async () => {
   await page.goto(BASE + '/Settings?tab=appearance');
   await page.waitForSelector('#wallpaper-preview');

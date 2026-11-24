@@ -138,7 +138,10 @@ body.login-rc4 {
 .fm-hidden-toggle:hover {text-decoration:underline;}
 .fm-compact-toolbar .button {margin:0;}
 .fm-explorer .explorer-table th {font-size:10px;letter-spacing:.08em;}
-.fm-explorer .explorer-table td {font-size:12px;padding-top:11px;padding-bottom:11px;}
+/* One row height for file rows and the expanded folders under them (a row's tallest content, the 31px
+   actions button, fits with room to spare, so this number alone sets the density). */
+.fm-explorer {--fm-row-height:53px;}
+.fm-explorer .explorer-table td {font-size:12px;padding-top:0;padding-bottom:0;height:var(--fm-row-height);}
 .fm-explorer .explorer-path-row {padding-bottom:10px;}
 .fm-explorer .explorer-address {font-size:12px;min-width:0;overflow-wrap:anywhere;}
 .fm-small-dialog {width:min(520px,calc(100vw - 32px))!important;max-width:520px!important;}

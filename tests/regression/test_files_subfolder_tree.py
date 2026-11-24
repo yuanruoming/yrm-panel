@@ -17,6 +17,14 @@ class ExpandedFolderTree(unittest.TestCase):
         self.assertNotIn('padding-left:21px',css.split('.fm-inline-preview{--tree-pad')[1].split('.fm-tree-empty')[0])
         self.assertIn('.fm-explorer .fm-tree-node-header.is-selected{background:#334155;}',css)
         self.assertIn(':has(:focus-visible){outline:2px solid #7bb4e7;outline-offset:-2px;}',css)
+    def test_main_rows_and_expanded_rows_share_one_row_height(self):
+        base=source('YrmPanel/wwwroot/css/v1.css')
+        css=source('YrmPanel/wwwroot/css/v1-stability.css')
+        self.assertIn('.fm-explorer {--fm-row-height:53px;}',base)
+        self.assertIn('padding-top:0;padding-bottom:0;height:var(--fm-row-height);}',base)
+        self.assertNotIn('padding-top:11px;padding-bottom:11px;}',base.split('.fm-explorer {--fm-row-height')[1].split('\n')[1])
+        self.assertEqual(css.count('min-height:var(--fm-row-height)'),2)
+        self.assertNotIn('min-height:40px',css.split('.fm-inline-preview{--tree-pad')[1].split('.fm-tree-empty')[0])
     def test_icons_share_the_main_row_colour_rule(self):
         panel=source('YrmPanel/wwwroot/css/panel.css')
         self.assertIn('.explorer-name .ui-icon, .fm-tree-node-header .ui-icon {color:#6db9ec;',panel)
