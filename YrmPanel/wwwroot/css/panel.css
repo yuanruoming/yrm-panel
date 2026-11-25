@@ -1333,10 +1333,10 @@ strong {
 
 /* RC3 — file manager with contextual actions, unified applications, settings */
 .fm-explorer { padding: 16px 18px; overflow: visible; }
-.explorer-path-row { display:flex;align-items:center;gap:8px;padding-bottom:12px;border-bottom:1px solid var(--border); }
+.explorer-path-row { display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border); }
 .explorer-address { flex:1; padding:10px 13px; border:1px solid var(--border);border-radius:9px;background:#14191f;color:var(--text);min-width:0;word-break:break-all; }
 .explorer-address strong { margin-right:2px;color:var(--mint); }
-.explorer-toolbar {display:flex; align-items:center; gap:10px;flex-wrap:wrap;padding:15px 0; }
+.explorer-toolbar { display:flex; align-items:center; gap:10px;flex-wrap:wrap; }
 .explorer-toolbar form {margin:0;}
 .explorer-upload {display:inline-flex;align-items:center;gap:8px;max-width:100%;}
 .explorer-upload input[type=file]{max-width:205px;font-size:12px;}

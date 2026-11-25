@@ -277,6 +277,22 @@ await check('File rows all share the one row height (--fm-row-height)', async ()
   assert(m.height > 0, 'the row height variable is missing');
   assert(m.rows.length > 0 && m.rows.every(h => Math.abs(h - m.height) <= 1), `rows differ from ${m.height}px: ${m.rows.join(',')}`);
 });
+await check('Files controls and table head follow the shared control and head heights', async () => {
+  await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
+  await page.waitForSelector('.fm-explorer .fm-compact-toolbar .button');
+  const m = await page.evaluate(() => {
+    const cs = getComputedStyle(document.querySelector('.fm-explorer'));
+    const h = el => el.getBoundingClientRect().height;
+    return { control: parseFloat(cs.getPropertyValue('--fm-control-height')), head: parseFloat(cs.getPropertyValue('--fm-head-height')),
+      back: h(document.querySelector('.fm-history-back')), refresh: h(document.querySelector('.fm-history-refresh')),
+      buttons: Array.from(document.querySelectorAll('.fm-compact-toolbar .button')).map(h),
+      thead: h(document.querySelector('.explorer-table thead th')) };
+  });
+  const near = (a, b) => Math.abs(a - b) <= 1;
+  assert(near(m.back, m.control) && near(m.refresh, m.control), `back/refresh ${m.back}/${m.refresh} vs ${m.control}`);
+  assert(m.buttons.length > 0 && m.buttons.every(b => near(b, m.control)), `toolbar buttons ${m.buttons.join(',')} vs ${m.control}`);
+  assert(near(m.thead, m.head), `table head ${m.thead} vs ${m.head}`);
+});
 await check('Appearance wallpaper preview keeps its size when the viewport gets shorter (DevTools)', async () => {
   await page.goto(BASE + '/Settings?tab=appearance');
   await page.waitForSelector('#wallpaper-preview');

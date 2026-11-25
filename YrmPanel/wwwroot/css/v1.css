@@ -130,19 +130,19 @@ body.login-rc4 {
 .fm-library-empty>.ui-icon {width:40px;height:40px;color:#7badce;}
 .fm-library-empty h3 {margin:0;font-size:17px;}
 .fm-library-empty p {max-width:355px;font-size:12px;color:#9db1c4;line-height:1.6;margin:0 0 6px;}
-.fm-compact-toolbar {display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:11px 0 13px;}
+.fm-compact-toolbar {display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:var(--fm-space) 0;min-height:var(--fm-control-height);}
 .fm-upload-form {display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0;min-width:0;}
 .fm-upload-name {font-size:11px;color:#a4bacb;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .fm-visually-hidden {position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;}
 .fm-hidden-toggle {margin-left:auto;color:#a8cce8;font-size:11px;text-decoration:none;}
 .fm-hidden-toggle:hover {text-decoration:underline;}
-.fm-compact-toolbar .button {margin:0;}
-.fm-explorer .explorer-table th {font-size:10px;letter-spacing:.08em;}
-/* One row height for file rows and the expanded folders under them (a row's tallest content, the 31px
-   actions button, fits with room to spare, so this number alone sets the density). */
-.fm-explorer {--fm-row-height:53px;}
-.fm-explorer .explorer-table td {font-size:12px;padding-top:0;padding-bottom:0;height:var(--fm-row-height);}
-.fm-explorer .explorer-path-row {padding-bottom:10px;}
+.fm-compact-toolbar .button {margin:0;min-height:var(--fm-control-height);padding-top:0;padding-bottom:0;}
+.fm-explorer .explorer-table th {font-size:11px;letter-spacing:.08em;height:var(--fm-head-height);padding-top:0;padding-bottom:0;}
+/* Files density: one set of numbers for rows, controls and gaps. Change a value and every part of the Files
+   window follows (file rows, expanded folders, buttons, path row, table head). Fingers get roomier rows. */
+.fm-explorer {--fm-row-height:40px;--fm-head-height:32px;--fm-control-height:32px;--rc-control-h:var(--fm-control-height);--fm-space:10px;--fm-pad:12px;--fm-font:13px;--fm-icon:18px;--fm-row-line:rgba(143,170,200,.12);}
+@media (pointer:coarse) {.fm-explorer {--fm-row-height:48px;--fm-control-height:40px;}}
+.fm-explorer .explorer-table td {font-size:var(--fm-font);padding-top:0;padding-bottom:0;height:var(--fm-row-height);border-bottom:1px solid var(--fm-row-line);}
 .fm-explorer .explorer-address {font-size:12px;min-width:0;overflow-wrap:anywhere;}
 .fm-small-dialog {width:min(520px,calc(100vw - 32px))!important;max-width:520px!important;}
 .fm-dialog-form {padding:18px 20px 0;display:flex;flex-direction:column;gap:12px;}
