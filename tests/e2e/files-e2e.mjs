@@ -346,6 +346,15 @@ await check('file download returns the exact bytes', async () => {
   const response = await api.get(BASE + q('Download', { name: 'notes.txt' }));
   assert(response.status() === 200 && (await response.text()) === 'hello notes', 'download mismatch');
 });
+await check('Hidden (dot) files are never listed and there is no toggle for them', async () => {
+  for (const extra of ['', '&hidden=true']) {
+    const html = await (await api.get(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL) + extra)).text();
+    assert(!html.includes('.dotfile-never-listed'), 'a dot file was listed' + (extra ? ' with ?hidden=true' : ''));
+    assert(!/hidden files/i.test(html), 'a hidden-files toggle is rendered');
+  }
+  const tree = await (await api.get(BASE + q('Tree', { hidden: 'true' }))).json();
+  assert(!tree.files.includes('.dotfile-never-listed'), 'the tree listed a dot file');
+});
 await check('Tree listing returns sub-folders and the names of the files', async () => {
   const response = await api.get(BASE + q('Tree'));
   assert(response.status() === 200, 'status ' + response.status());

@@ -28,7 +28,6 @@ public sealed class FilesModel : PageModel
     }
 
     [BindProperty(SupportsGet = true)] public string Path { get; set; } = "";
-    [BindProperty(SupportsGet = true)] public bool Hidden { get; set; }
     public bool IsMyFolders => Path == FolderHome;
     private string CurrentRelative => Path == "/" ? "" : Path;
     public FileView View { get; private set; } = new("system", "", false, "Not loaded", []);
@@ -114,7 +113,7 @@ public sealed class FilesModel : PageModel
         }
         else
         {
-            View = _files.Browse("system", CurrentRelative, Hidden);
+            View = _files.Browse("system", CurrentRelative);
             // Hide known YRMPanel installation leftovers from top-level Linux home
             // folders (including the selected file user, not only the service HOME).
             // This is presentation-only: never delete, move, or alter these files.
@@ -216,7 +215,7 @@ public sealed class FilesModel : PageModel
 
     public IActionResult OnGetTree(string path = "")
     {
-        var view = _files.Browse("system", path, Hidden);
+        var view = _files.Browse("system", path);
         if (!view.Available) return BadRequest(new { error = view.Error });
         return new JsonResult(new
         {
@@ -727,7 +726,7 @@ public sealed class FilesModel : PageModel
 
     private IActionResult Back() => RedirectToPage(new
     {
-        path = IsMyFolders ? FolderHome : (string.IsNullOrEmpty(Path) ? "/" : Path), hidden = Hidden
+        path = IsMyFolders ? FolderHome : (string.IsNullOrEmpty(Path) ? "/" : Path)
     });
 
     private static string Act(Action action, string success)

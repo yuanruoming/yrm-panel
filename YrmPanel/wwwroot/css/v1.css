@@ -134,8 +134,6 @@ body.login-rc4 {
 .fm-upload-form {display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:0;min-width:0;}
 .fm-upload-name {font-size:11px;color:#a4bacb;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .fm-visually-hidden {position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;}
-.fm-hidden-toggle {margin-left:auto;color:#a8cce8;font-size:11px;text-decoration:none;}
-.fm-hidden-toggle:hover {text-decoration:underline;}
 .fm-compact-toolbar .button {margin:0;min-height:var(--fm-control-height);padding-top:0;padding-bottom:0;}
 .fm-explorer .explorer-table th {font-size:11px;letter-spacing:.08em;height:var(--fm-head-height);padding-top:0;padding-bottom:0;}
 /* Files density: one set of numbers for rows, controls and gaps. Change a value and every part of the Files
@@ -251,8 +249,7 @@ body:has(.pinned-monitor:not([hidden])) .desktop-pins {right:255px;}
   .settings-summary-grid {grid-template-columns:1fr;}
   .settings-address-row {grid-template-columns:70px minmax(0,1fr) 34px;}
   .fm-page-title {flex-wrap:wrap;}
-  .fm-hidden-toggle {margin-left:0;}
-  .settings-wallpaper-card .wallpaper-actions {align-items:stretch!important;}
+    .settings-wallpaper-card .wallpaper-actions {align-items:stretch!important;}
 }
 
 

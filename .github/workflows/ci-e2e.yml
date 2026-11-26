@@ -58,6 +58,7 @@ jobs:
             F=/home/'"$E2E_USER"'/e2e-fixture
             mkdir -p "$F/alpha" "$F/beta/inner-folder" "$F/many"
             printf "hello notes" > "$F/notes.txt"
+            printf "secret" > "$F/.dotfile-never-listed"
             printf "inside alpha" > "$F/alpha/inner.txt"
             printf "inside beta" > "$F/beta/b.txt"
             base64 -d > "$F/pic.png" <<< "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="

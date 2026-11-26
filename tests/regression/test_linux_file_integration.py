@@ -42,7 +42,8 @@ class FileAndUiIntegrationContracts(TestCase):
         self.assertIn('My Files', view)
         self.assertNotIn('My Folders', view)
         self.assertIn('DiscoverMyFiles()', page)
-        self.assertIn('Show hidden files', view)
+        # Hidden (dot) files are never listed; there is no toggle for them.
+        self.assertNotIn('hidden files', view)
         self.assertNotIn('data-open-add-folder', view)
         self.assertIn('data-share-folder=', view)
         self.assertIn('data-share-absolute=', view)
