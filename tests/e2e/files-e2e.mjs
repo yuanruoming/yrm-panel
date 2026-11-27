@@ -22,6 +22,7 @@ async function check(name, action) {
     failures.push(name);
     console.log('FAIL:', name, '\n      ', String(error?.message ?? error).split('\n')[0]);
     try { await page?.screenshot({ path: path.join(OUT, name.replace(/\W+/g, '_') + '.png') }); } catch { /* best effort */ }
+    try { await page?.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); } catch { /* best effort */ }
   }
 }
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
@@ -363,7 +364,7 @@ await check('Properties and Rename open their dialogs from the menu', async () =
   await page.locator('.fm-menu [data-fm-action="props"]').click();
   await page.waitForSelector('#yrm-b12-file-properties[open]');
   assert((await page.locator('#yrm-b12-prop-name').textContent()).trim() === 'notes.txt', 'properties show another name');
-  await page.locator('[data-b12-props-close]').click();
+  await page.locator('#yrm-b12-file-properties .panel-modal-actions [data-b12-props-close]').click();
   await rowFor('alpha').click({ button: 'right' });
   await page.locator('.fm-menu [data-fm-action="rename"]').click();
   await page.waitForSelector('#file-action-dialog[open]');
