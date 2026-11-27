@@ -45,8 +45,8 @@ class FileAndUiIntegrationContracts(TestCase):
         # Hidden (dot) files are never listed; there is no toggle for them.
         self.assertNotIn('hidden files', view)
         self.assertNotIn('data-open-add-folder', view)
-        self.assertIn('data-share-folder=', view)
-        self.assertIn('data-share-absolute=', view)
+        self.assertIn('data-fm-can-share=', view)
+        self.assertIn('data-fm-abs=', view)
         self.assertNotIn('Share via SMB', view)
 
     def test_wallpaper_has_explicit_apply_and_prevent_old_autosubmit(self):

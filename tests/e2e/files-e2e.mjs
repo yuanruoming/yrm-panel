@@ -325,6 +325,63 @@ await check('My Files list is capped by the window height and scrolls inside its
   assert(m.height <= m.windowHeight * 0.45 + 1 && m.height <= 401, `folder list is ${m.height}px in a ${m.windowHeight}px window`);
 });
 
+// ---------- Files actions: one menu for right-click and More, no per-row menus ----------
+const menuItems = () => page.locator('.fm-menu [role="menuitem"]').allTextContents();
+await check('Rows render no menu of their own; right-click and More share one action list', async () => {
+  await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
+  await page.waitForSelector('tr[data-b10-file-row]');
+  assert(await page.locator('tbody .explorer-item-menu, .explorer-menu-cell').count() === 0, 'rows still render their own menu');
+  await rowFor('alpha').click({ button: 'right' });
+  const context = await menuItems();
+  for (const need of ['Open', 'Download', 'Copy To...', 'Move To...', 'Rename', 'Copy path', 'Delete', 'Properties'])
+    assert(context.includes(need), `right-click menu lacks ${need}: ${context.join(', ')}`);
+  await page.keyboard.press('Escape');
+  assert(await page.locator('.fm-menu').count() === 0, 'Escape did not close the menu');
+  await rowFor('alpha').click();
+  assert(await page.locator('[data-fm-more]').isEnabled(), 'More stays disabled with a selection');
+  await page.locator('[data-fm-more]').click();
+  const more = await menuItems();
+  assert(more.includes('Properties') && !more.includes('Rename') && !more.includes('Delete'), `More lists ${more.join(', ')}`);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape'); // the second Escape clears the selection
+  assert(await page.locator('[data-fm-more]').isDisabled(), 'More stays enabled without a selection');
+});
+await check('A file offers Download but never Pin or Share; several rows offer only the shared actions', async () => {
+  await rowFor('notes.txt').click({ button: 'right' });
+  const file = await menuItems();
+  assert(file.includes('Download') && !file.some(x => /pin|share/i.test(x)), `file menu: ${file.join(', ')}`);
+  await page.keyboard.press('Escape');
+  await rowFor('alpha').click();
+  await rowFor('beta').click({ modifiers: ['Control'] });
+  await rowFor('beta').click({ button: 'right' });
+  const many = await menuItems();
+  assert(many.includes('Delete') && !many.includes('Rename') && !many.includes('Properties'), `multi menu: ${many.join(', ')}`);
+  await page.keyboard.press('Escape');
+});
+await check('Properties and Rename open their dialogs from the menu', async () => {
+  await rowFor('notes.txt').click({ button: 'right' });
+  await page.locator('.fm-menu [data-fm-action="props"]').click();
+  await page.waitForSelector('#yrm-b12-file-properties[open]');
+  assert((await page.locator('#yrm-b12-prop-name').textContent()).trim() === 'notes.txt', 'properties show another name');
+  await page.locator('[data-b12-props-close]').click();
+  await rowFor('alpha').click({ button: 'right' });
+  await page.locator('.fm-menu [data-fm-action="rename"]').click();
+  await page.waitForSelector('#file-action-dialog[open]');
+  assert((await page.locator('#file-action-title').textContent()).trim() === 'Rename alpha', 'rename dialog title');
+  await page.keyboard.press('Escape');
+});
+await check('Pin to Quick Access from the menu reaches the server and Unpin undoes it', async () => {
+  await rowFor('alpha').click({ button: 'right' });
+  const first = await menuItems();
+  if (!first.includes('Pin to Quick Access')) { await page.keyboard.press('Escape'); return; } // not managed in this environment
+  await page.locator('.fm-menu [data-fm-action="pin"]').click();
+  await page.waitForFunction(() => document.querySelector('.yrm-b10-quick-links')?.textContent.includes('alpha'), null, { timeout: 8000 });
+  await rowFor('alpha').click({ button: 'right' });
+  assert((await menuItems()).includes('Unpin shortcut'), 'the pinned folder does not offer Unpin');
+  await page.locator('.fm-menu [data-fm-action="pin"]').click();
+  await page.waitForFunction(() => !(document.querySelector('.yrm-b10-quick-links')?.textContent.includes('alpha')), null, { timeout: 8000 });
+});
+
 // ---------- HTTP behaviour with the logged-in session -------------------
 await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
 await page.waitForSelector('.fm-explorer');

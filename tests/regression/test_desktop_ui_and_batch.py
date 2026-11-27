@@ -41,11 +41,14 @@ class DesktopUiAndBatch(unittest.TestCase):
         self.assertNotIn('class="window-title-dot"',layout)
         self.assertNotIn('asp-page="/Applications"',layout)
     def test_files_multiselect_and_real_server_batch_handlers(self):
-        js=source('YrmPanel/wwwroot/js/v1-stability.js')
+        js=source('YrmPanel/wwwroot/js/files-actions.js')
+        shell=source('YrmPanel/wwwroot/js/panel.js')
         model=source('YrmPanel/Pages/Files.cshtml.cs')
         view=source('YrmPanel/Pages/Files.cshtml')
-        for phrase in ['selectedFileRows = new Set()',"event.shiftKey", "event.ctrlKey", 'BulkCopy','BulkMove', 'selectedRows()']:
+        for phrase in ['const chosen = new Set()',"event.shiftKey", "event.ctrlKey", 'selectedRows()','yrm-panel:file-action']:
             self.assertIn(phrase,js)
+        for phrase in ['BulkCopy','BulkMove']:
+            self.assertIn(phrase,shell)
         for phrase in ['OnPostBulkDeleteAsync','OnPostBulkCopyAsync','OnPostBulkMove','smb.Shares.Any']:
             self.assertIn(phrase,model)
         self.assertIn('asp-page-handler="BulkDelete"',view)

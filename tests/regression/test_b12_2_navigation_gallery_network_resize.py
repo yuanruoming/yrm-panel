@@ -69,7 +69,7 @@ class RoundTwoContracts(unittest.TestCase):
     def test_multi_item_zip_is_streamed_with_guards(self):
         model = content('YrmPanel/Pages/Files.cshtml.cs')
         service = content('YrmPanel/Services/FileManagerService.cs')
-        js = content('YrmPanel/wwwroot/js/v1-stability.js')
+        js = content('YrmPanel/wwwroot/js/files-actions.js')
         self.assertIn('OnPostBulkDownloadAsync(string[] names)', model)
         self.assertIn('Response.Body', model)
         self.assertIn('new ZipArchive(output, ZipArchiveMode.Create', service)

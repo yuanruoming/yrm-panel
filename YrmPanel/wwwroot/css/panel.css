@@ -1351,7 +1351,6 @@ strong {
 .explorer-name .ui-icon, .fm-tree-node-header .ui-icon {color:#6db9ec;width:20px;height:20px;fill:rgba(93,159,212,.23);}
 .explorer-file-icon {color:#94a6ba;font-size:20px;}
 .explorer-share-mark {border:1px solid #365f57;border-radius:5px;color:#80dfc0;padding:1px 5px;font-size:9px;}
-.explorer-menu-cell {text-align:right; width:42px;}
 .explorer-item-menu {position:relative;}
 .explorer-item-menu summary {cursor:pointer;list-style:none;display:inline-flex;align-items:center;justify-content:center;
   width:31px;height:30px;border-radius:8px;background:#343b46;font-size:20px;}

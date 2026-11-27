@@ -546,8 +546,6 @@ body>.explorer-actions-popover{position:fixed!important;right:auto!important;top
 .yrm-b11-quick-menu>summary:hover,.yrm-b11-quick-menu[open]>summary{color:#fff;background:#35465b;border-color:#526984;}
 .yrm-b11-quick-menu .explorer-actions-popover{width:212px;}
 .fm-locations .fm-location-link{min-height:35px;box-sizing:border-box;}
-.fm-explorer .explorer-table td.explorer-menu-cell{padding-left:8px!important;padding-right:9px!important;}
-.fm-explorer .explorer-table .explorer-item-menu>summary{min-width:31px;min-height:31px;}
 body>.explorer-actions-popover{width:212px;min-width:212px;padding:7px;border-radius:10px;background:#1c2a3b;border-color:#526781;}
 body>.explorer-actions-popover button,body>.explorer-actions-popover a{font-size:12px;line-height:1.4;padding:10px 11px;border-radius:6px;}
 body>.explorer-actions-popover button+button{margin-top:2px;}
@@ -935,6 +933,8 @@ body.is-desktop .workspace-stage{display:none!important;}
 .fm-explorer .fm-tree-node-header:hover{background:rgba(120,157,198,.12);}
 .fm-explorer .fm-tree-node-header:hover :is(.fm-tree-folder,.fm-tree-file),.fm-explorer .fm-tree-node-header.is-selected :is(.fm-tree-folder,.fm-tree-file){color:#fff;}
 .fm-explorer .fm-tree-node-header.is-selected{background:#334155;}
+/* Files menu (More and right-click): items are as tall as the other Files controls. */
+body>.explorer-actions-popover.fm-menu button{min-height:var(--fm-control-height,32px);padding-top:0;padding-bottom:0;}
 .fm-explorer .fm-tree-node-header>:is(.fm-tree-folder,.fm-tree-file):focus-visible{outline:none;}
 .fm-explorer .fm-tree-node-header:has(:focus-visible){outline:2px solid #7bb4e7;outline-offset:-2px;}
 .fm-tree-empty,.fm-tree-loading{font-size:12px;color:#97a6b6;padding:7px 0;}

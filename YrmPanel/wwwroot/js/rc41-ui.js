@@ -86,14 +86,6 @@
       }
       return;
     }
-    const shareButton = element.closest('[data-share-folder]');
-    if (shareButton) {
-      // The original RC4 launcher sets the display name; this additional field
-      // points to a managed folder selected from My Folders, with no path guessing.
-      const full = id('share-absolute-folder');
-      if (full) full.value = shareButton.getAttribute('data-share-absolute') || '';
-      return;
-    }
     const copy = element.closest('[data-copy-address]');
     if (copy) {
       const address = copy.getAttribute('data-copy-address') || '';

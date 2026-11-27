@@ -854,6 +854,55 @@
     } catch(error){host.textContent=error.message;}
   }
   function openDialog(id) { const node = $(id); if (node && !node.open) node.showModal(); }
+  // Rename / copy / move / share dialogs are opened by files-actions.js through one event,
+  // so they are not tied to per-row buttons. `names` is the whole selection for a bulk copy/move.
+  window.addEventListener("yrm-panel:file-action", event => {
+    const {kind, name = "", source = "", names = [], absolute = ""} = event.detail || {};
+    if (kind === "share") {
+      const full = $("share-absolute-folder");
+      if (full) full.value = absolute;
+      $("share-folder-name").value = name;
+      $("share-folder-alias").value = name;
+      $("share-folder-target").textContent = `Folder: ${name}`;
+      openDialog("share-folder-dialog");
+      return;
+    }
+    const rename = kind === "rename", copy = kind === "copy";
+    if (!rename && !copy && kind !== "move") return;
+    const form = $("file-action-form");
+    if (!form) return;
+    const path = form.dataset.currentRoute || "";
+    const bulk = !rename && (names.length > 1 || !!source);
+    const handler = rename ? "Rename" : bulk ? (copy ? "BulkCopy" : "BulkMove") : (copy ? "Copy" : "Move");
+    form.action = `/Files?handler=${handler}&path=${encodeURIComponent(path)}`;
+    form.querySelectorAll("[data-bulk-selected-name]").forEach(field => field.remove());
+    if (bulk) for (const selected of names) {
+      const field = document.createElement("input");
+      field.type = "hidden"; field.name = "names"; field.value = selected; field.dataset.bulkSelectedName = "1";
+      form.append(field);
+    }
+    $("file-action-name").value = name;
+    const sourceField = $("file-action-source");
+    if (sourceField) sourceField.value = source;
+    const input = $("file-action-value");
+    input.name = rename ? "newName" : "destination";
+    input.type = rename ? "text" : "hidden";
+    input.required = rename;
+    input.value = rename ? name : "";
+    $("yrm-b121-action-input-row")?.toggleAttribute("hidden", !rename);
+    $("file-action-title").textContent = rename ? `Rename ${name}`
+      : bulk && names.length > 1 ? `${copy ? "Copy" : "Move"} ${names.length} items to...`
+      : `${copy ? "Copy" : "Move"} ${name} to...`;
+    const chooser = $("yrm-b12-action-picker");
+    if (chooser) chooser.hidden = rename;
+    input.maxLength = rename ? 255 : 1024;
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.disabled = !rename;
+    $("file-action-label").textContent = "New name";
+    if (submit) submit.textContent = rename ? "Rename" : copy ? "Copy" : "Move";
+    openDialog("file-action-dialog");
+    if (!rename) void listActionFolders(path === "@folders" ? (form.dataset.defaultActionFolder || "") : path);
+  });
   document.addEventListener("input", event=>{
     if (event.target?.id!=="file-action-value")return;
     const form=$("file-action-form");
@@ -869,44 +918,6 @@
       const initial = document.querySelector("#new-folder-tree")?.dataset.initialFolder || "";
       resetFolderTree();
       void listFolders(initial);
-      return;
-    }
-    if (button.dataset.renameItem || button.dataset.moveItem || button.dataset.copyItem) {
-      const rename = button.hasAttribute("data-rename-item");
-      const copy = button.hasAttribute("data-copy-item");
-      const form = $("file-action-form");
-      if (!form) return;
-      const item = rename ? button.dataset.renameItem : copy ? button.dataset.copyItem : button.dataset.moveItem;
-      const path = form.dataset.currentRoute || "";
-      form.action = `/Files?handler=${rename ? "Rename" : copy ? "Copy" : "Move"}&path=${encodeURIComponent(path)}`;
-      $("file-action-name").value = item;
-      const sourceRow = button.closest('[data-b10-file-row]');
-      const sourceField = $("file-action-source");
-      if (sourceField) sourceField.value = sourceRow?.dataset.b10Absolute || '';
-      const input = $("file-action-value");
-      input.name = rename ? "newName" : "destination";
-      input.type = rename ? "text" : "hidden";
-      input.required = rename;
-      input.value = rename ? item : "";
-      $("yrm-b121-action-input-row")?.toggleAttribute("hidden", !rename);
-      $("file-action-title").textContent = rename ? `Rename ${item}` : `${copy ? "Copy" : "Move"} ${item} to...`;
-      const chooser = $("yrm-b12-action-picker");
-      if (chooser) chooser.hidden=rename;
-      input.maxLength=rename?255:1024;
-      const submit=form.querySelector('button[type="submit"]');
-      if (submit)submit.disabled=!rename;
-      $("file-action-label").textContent = "New name";
-      if (submit)submit.textContent = rename ? "Rename" : copy ? "Copy" : "Move";
-      openDialog("file-action-dialog");
-      if (!rename)void listActionFolders(path === "@folders" ? (form.dataset.defaultActionFolder || "") : path);
-      return;
-    }
-    if (button.hasAttribute("data-share-folder")) {
-      const name = button.dataset.shareFolder;
-      $("share-folder-name").value = name;
-      $("share-folder-alias").value = name;
-      $("share-folder-target").textContent = `Folder: ${name}`;
-      openDialog("share-folder-dialog");
       return;
     }
     if (button.hasAttribute("data-open-add-app") || button.hasAttribute("data-edit-app-index")) {

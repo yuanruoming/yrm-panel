@@ -20,7 +20,10 @@ class MyFilesContracts(unittest.TestCase):
         handler=source('YrmPanel/Pages/Files.cshtml.cs')
         view=source('YrmPanel/Pages/Files.cshtml')
         self.assertIn('asp-route-path="@relative"',view)
-        self.assertIn('asp-page-handler="DeleteLibrary"',view)
+        # One bulk delete serves My Files entries too (library selection, SMB check, library delete).
+        self.assertIn('asp-page-handler="BulkDelete"',view)
+        self.assertIn('await ResolveLibrarySelectionAsync(selected)',handler)
+        self.assertIn('_files.DeleteLibraryFolder(full)',handler)
         self.assertIn('asp-page-handler="Unshare"',view)
         self.assertIn('asp-page-handler="PinFolder"',view)
         self.assertIn('IsMyFilesEntryAsync(absolute)',handler)

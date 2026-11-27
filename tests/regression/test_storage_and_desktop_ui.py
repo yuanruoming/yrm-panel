@@ -38,7 +38,7 @@ class ProductContracts(unittest.TestCase):
         handler = source('YrmPanel/Pages/Files.cshtml.cs')
         store = source('YrmPanel/Services/MyFoldersStore.cs')
         manager = source('YrmPanel/Services/FileManagerService.cs')
-        self.assertIn('asp-page-handler="DeleteLibrary"', view)
+        self.assertIn('asp-page-handler="BulkDelete"', view)
         self.assertIn('asp-page-handler="UnpinFolder"', view)
         self.assertIn('QuickAccess', handler)
         self.assertIn('_files.DeleteLibraryFolder(absolute)', handler)

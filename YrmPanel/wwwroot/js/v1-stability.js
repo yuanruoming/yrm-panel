@@ -104,11 +104,11 @@
     // Preserve browser text editing and form controls, but use the same
     // existing menu for both More and right-click on folder/file entries.
     if (target.closest('input,textarea,select,[contenteditable="true"]'))return;
-    const item=target.closest('[data-b10-file-row],.fm-library-row,.yrm-b11-quick-item');
+    if (target.closest('[data-b10-file-row]'))return; // files-actions.js owns the file rows
+    const item=target.closest('.yrm-b11-quick-item');
     const summary=item?.querySelector('.explorer-item-menu > summary');
     if (!summary){event.preventDefault();return;}
     event.preventDefault();
-    if (item?.matches('[data-b10-file-row]'))setFileSelection(item);
     closeFloatingMenu();
     contextMenuAnchor={x:event.clientX,y:event.clientY};
     summary.click();
@@ -118,7 +118,7 @@
     if (event.key==='Escape' && floatingMenu){closeFloatingMenu();event.preventDefault();return;}
     if (!(event.key==='ContextMenu' || (event.shiftKey && event.key==='F10')))return;
     const target=event.target instanceof Element?event.target:null;
-    const item=target?.closest('[data-b10-file-row],.fm-library-row,.yrm-b11-quick-item');
+    const item=target?.closest('.yrm-b11-quick-item');
     const summary=item?.querySelector('.explorer-item-menu > summary');
     if (summary){event.preventDefault();summary.click();}
   },true);
@@ -184,166 +184,6 @@
       if (name instanceof HTMLInputElement && /^(Dynu IPv4|Cloudflare IPv4|Custom DDNS)$/.test(name.value))
         name.value=node.value==='dynu4'?'Dynu':node.value==='cloudflare4'?'Cloudflare':'Custom DDNS';
     }
-  },true);
-  // Native desktop selection: one row = one item, not independent cells.
-  // Ctrl toggles, Shift selects a range, Ctrl+A selects the current folder.
-  const selectedFileRows = new Set();
-  let selectionAnchor = null;
-  const fileRows = () => Array.from(document.querySelectorAll('.fm-explorer [data-b10-file-row]'));
-  function selectedRows(){
-    for (const row of selectedFileRows) if(!row.isConnected)selectedFileRows.delete(row);
-    return fileRows().filter(row=>selectedFileRows.has(row));
-  }
-  function updateFileSelection(){
-    const current = selectedRows();
-    for (const row of fileRows()){
-      const chosen=selectedFileRows.has(row);
-      row.classList.toggle('is-selected',chosen);
-      row.setAttribute('aria-selected',String(chosen));
-    }
-    const toolbar=get('yrm-b10-file-selection');
-    if(!toolbar)return;
-    toolbar.classList.toggle('has-selection',current.length>0);
-    const writable=current.length>0&&current.every(row=>row.querySelector('[data-b10-row-delete]'));
-    for(const attr of ['data-b10-file-delete','data-b10-file-move']){
-      const button=toolbar.querySelector(`[${attr}]`);if(button)button.disabled=!writable;
-    }
-    const copy=toolbar.querySelector('[data-b12-file-copy]');
-    if(copy)copy.disabled=current.length===0;
-    const rename=toolbar.querySelector('[data-b10-file-rename]');
-    if(rename)rename.disabled=current.length!==1||!writable;
-    const download=toolbar.querySelector('[data-b12-file-download]');
-    if(download)download.disabled=current.length===0;
-  }
-  function setFileSelection(row,{toggle=false,range=false,add=false}={}){
-    const rows=fileRows();
-    if(!row||!rows.includes(row)){selectedFileRows.clear();selectionAnchor=null;updateFileSelection();return;}
-    if(range&&selectionAnchor&&rows.includes(selectionAnchor)){
-      if(!add)selectedFileRows.clear();
-      const a=rows.indexOf(selectionAnchor),b=rows.indexOf(row);
-      for(let i=Math.min(a,b);i<=Math.max(a,b);i++)selectedFileRows.add(rows[i]);
-    } else if(toggle){
-      if(selectedFileRows.has(row))selectedFileRows.delete(row);else selectedFileRows.add(row);
-      selectionAnchor=row;
-    } else {selectedFileRows.clear();selectedFileRows.add(row);selectionAnchor=row;}
-    updateFileSelection();
-  }
-  function bulkNames(){return selectedRows().map(row=>row.dataset.b10Filename).filter(Boolean);}
-  document.addEventListener('click',event=>{
-    const target=event.target;
-    if (!(target instanceof Element))return;
-    const row=target.closest('[data-b10-file-row]');
-    if(row&&!target.closest('.explorer-item-menu,form,details,summary,input,textarea,select,[data-fm-expand]')){
-      setFileSelection(row,{toggle:event.ctrlKey||event.metaKey,range:event.shiftKey,add:event.ctrlKey||event.metaKey});
-      return;
-    }
-    if(target.closest('.explorer-table tbody')&&!row)setFileSelection(null);
-    const action=target.closest('[data-b10-file-rename],[data-b10-file-move],[data-b10-file-delete],[data-b12-file-copy],[data-b12-file-download]');
-    const selected=selectedRows();
-    if(!action||!selected.length)return;
-    const first=selected[0];
-    if(action.matches('[data-b12-file-download]')){
-      if(selected.length===1&&first.querySelector('a[data-native-download]')){
-        first.querySelector('a[data-native-download]').click();
-      }else{
-        const form=document.querySelector('[data-bulk-download-form]');
-        if(form instanceof HTMLFormElement){
-          form.querySelectorAll('input[name="names"]').forEach(node=>node.remove());
-          for(const name of bulkNames()){
-            const input=document.createElement('input');input.type='hidden';input.name='names';input.value=name;form.append(input);
-          }
-          form.requestSubmit();
-        }
-      }
-      return;
-    }
-    if(action.matches('[data-b10-file-rename]')&&selected.length===1)first.querySelector('[data-rename-item]')?.click();
-    if(action.matches('[data-b10-file-delete]')){
-      const form=document.querySelector('[data-bulk-delete-form]');
-      if(!(form instanceof HTMLFormElement))return;
-      form.querySelectorAll('input[name="names"]').forEach(node=>node.remove());
-      for(const name of bulkNames()){
-        const field=document.createElement('input');field.type='hidden';field.name='names';field.value=name;form.append(field);
-      }
-      form.dataset.confirm=`Permanently delete ${selected.length} selected item${selected.length===1?'':'s'}? This cannot be undone.`;
-      form.requestSubmit();
-    }
-    if(action.matches('[data-b12-file-copy],[data-b10-file-move]')){
-      const copy=action.matches('[data-b12-file-copy]');
-      const origin=first.querySelector(copy?'[data-copy-item]':'[data-move-item]');
-      origin?.click();
-      if(selected.length>1 || first.dataset.b10Absolute){
-        const form=get('file-action-form');
-        if(!(form instanceof HTMLFormElement))return;
-        const url=new URL(form.action,location.origin);url.searchParams.set('handler',copy?'BulkCopy':'BulkMove');
-        form.action=url.pathname+url.search;
-        form.querySelectorAll('[data-bulk-selected-name]').forEach(field=>field.remove());
-        for(const name of bulkNames()){
-          const field=document.createElement('input');field.type='hidden';field.name='names';field.value=name;
-          field.dataset.bulkSelectedName='1';form.append(field);
-        }
-        const title=get('file-action-title');if(title)title.textContent=`${copy?'Copy':'Move'} ${selected.length} items to...`;
-      }
-    }
-  },true);
-  document.addEventListener('keydown',event=>{
-    if(!document.querySelector('.fm-explorer')||document.querySelector('dialog[open]'))return;
-    const target=event.target;
-    if(target instanceof Element && target.closest('input,textarea,select,[contenteditable="true"]'))return;
-    if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='a'){
-      const rows=fileRows();if(!rows.length)return;
-      event.preventDefault();selectedFileRows.clear();rows.forEach(row=>selectedFileRows.add(row));
-      selectionAnchor=rows[0];updateFileSelection();
-    } else if(event.key==='Escape'){setFileSelection(null);}
-    else if(event.key==='Delete'&&selectedRows().length){
-      event.preventDefault();get('yrm-b10-file-selection')?.querySelector('[data-b10-file-delete]:not(:disabled)')?.click();
-    } else if(target instanceof Element&&target.matches('[data-b10-file-row]')&&event.key===' '){
-      event.preventDefault();setFileSelection(target,{toggle:event.ctrlKey||event.metaKey,range:event.shiftKey});
-    }
-  },true);
-  const selectionObserver=new MutationObserver(()=>{
-    if(Array.from(selectedFileRows).some(row=>!row.isConnected)){
-      for(const row of selectedFileRows)if(!row.isConnected)selectedFileRows.delete(row);
-      if(selectionAnchor&&!selectionAnchor.isConnected)selectionAnchor=null;
-      updateFileSelection();
-    }
-  });
-  selectionObserver.observe(document.body,{childList:true,subtree:true});
-
-  // Folder click and double-click are handled only by v1-tree-navigation.js.
-  // File selection, row actions, and their existing controls remain here.
-
-  // Native Files context and More share the existing source action buttons.
-  // Properties are read-only; they do not request administrator privileges.
-  document.addEventListener('click',event=>{
-    const node=event.target instanceof Element?event.target:null;
-    if (!node)return;
-    if (node.closest('[data-b12-props-close]')){
-      get('yrm-b12-file-properties')?.close();return;
-    }
-    const props=node.closest('[data-b12-properties]');
-    if (props){
-      for(const key of ['name','path','type','size','modified']){
-        const cell=get('yrm-b12-prop-'+key);
-        if(cell)cell.textContent=props.getAttribute('data-b12-prop-'+key)||'—';
-      }
-      const dialog=get('yrm-b12-file-properties');
-      if(dialog instanceof HTMLDialogElement && !dialog.open)dialog.showModal();
-    }
-    const open=node.closest('[data-b12-open-file]');
-    if(open){
-      const tableRow=open.closest('[data-b10-file-row]');
-      tableRow?.querySelector('[data-open-file]')?.dispatchEvent(new MouseEvent('dblclick',{
-        bubbles:true,cancelable:true}));
-    }
-  },true);
-
-  // Read-only folders still expose More; copying a path requires no sudo.
-  document.addEventListener('click',event=>{
-    const button=event.target instanceof Element ? event.target.closest('[data-b10-copy-path]') : null;
-    if (!button)return;
-    const path=button.dataset.b10CopyPath||'';
-    if (path)void navigator.clipboard?.writeText(path).catch(()=>{});
   },true);
 
   function showDdnsDetail(element) {

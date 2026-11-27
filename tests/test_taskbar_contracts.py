@@ -23,9 +23,9 @@ class TaskbarAndCopyContracts(unittest.TestCase):
         self.assertIn('EnsureNoNestedMounts(source)',manager)
         self.assertIn('FileAttributes.ReparsePoint',manager)
         self.assertIn('FileMode.CreateNew',manager)
-        view=read('YrmPanel/Pages/Files.cshtml')
         handler=read('YrmPanel/Pages/Files.cshtml.cs')
-        self.assertIn('data-copy-item',view)
+        actions=read('YrmPanel/wwwroot/js/files-actions.js')
+        self.assertIn("{id: 'copy'",actions)
         self.assertIn('OnPostCopyAsync',handler)
     def test_ddns_error_is_details_only(self):
         view=read('YrmPanel/Pages/Settings.cshtml')
