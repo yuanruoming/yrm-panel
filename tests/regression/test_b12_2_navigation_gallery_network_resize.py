@@ -27,7 +27,7 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertIn('data-fm-tree-folder', tree)
         self.assertNotIn('data-fm-tree-toggle', tree)
         self.assertIn("url.searchParams.set('handler', 'Tree')", tree)
-        self.assertIn('public IActionResult OnGetTree(', model)
+        self.assertIn('public async Task<IActionResult> OnGetTreeAsync(', model)
         self.assertIn('v1-tree-navigation.js', layout)
     def test_my_files_has_complete_toolbar_and_real_path_operations(self):
         view = content('YrmPanel/Pages/Files.cshtml')
@@ -45,7 +45,7 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertIn('ResolveLibrarySelectionAsync(', model)
         self.assertIn('WriteDownloadZipFromPathsAsync(', model)
         self.assertNotIn('data-fm-tree-toggle', view)
-        self.assertIn('folderNodes', tree)
+        self.assertIn('data.entries', tree)
 
     def test_profile_and_ddns_forms_use_current_backends(self):
         settings = content('YrmPanel/Pages/Settings.cshtml')
@@ -163,7 +163,7 @@ class RoundTwoContracts(unittest.TestCase):
         self.assertIn('revealFolderTree(', shell)
         self.assertIn("listFolders('')", shell)
         # An empty folder (no sub-folders and no files) expands to nothing.
-        self.assertIn('!(children.folders.length || children.files.length)', tree)
+        self.assertIn('!children.entries.length', tree)
         self.assertNotIn("No subfolders", tree)
 
     def test_compact_certificates_ddns_avatar_and_overview_alignment(self):
@@ -257,7 +257,7 @@ class RoundTwoContracts(unittest.TestCase):
         # Other links and the rest of the Panel must reach the shell untouched.
         self.assertNotIn('function navigationTarget(', tree)
         # Outside the explorer the click only clears the sub-folder highlight; it is never intercepted.
-        self.assertIn("if (!target?.closest('.fm-explorer')) { selectNode(null); return; }", tree)
+        self.assertIn("if (!target?.closest('.fm-explorer')) return;", tree)
         self.assertIn("const folderLink = target.closest('a[data-fm-inline-folder],a[data-fm-tree-folder]')", tree)
         self.assertIn("if (folderLink && folderLink.dataset.fmNavigate !== '1'", tree)
         self.assertIn("if (!anchor || event.defaultPrevented", shell)

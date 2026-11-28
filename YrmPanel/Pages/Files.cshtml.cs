@@ -28,6 +28,9 @@ public sealed class FilesModel : PageModel
     }
 
     [BindProperty(SupportsGet = true)] public string Path { get; set; } = "";
+    // The view the user was in. An action on an entry of an expanded folder runs with that folder as
+    // Path, then returns here instead of landing inside the nested folder.
+    [BindProperty(SupportsGet = true)] public string? Return { get; set; }
     public bool IsMyFolders => Path == FolderHome;
     private string CurrentRelative => Path == "/" ? "" : Path;
     public FileView View { get; private set; } = new("system", "", false, "Not loaded", []);
@@ -213,10 +216,40 @@ public sealed class FilesModel : PageModel
         return selected;
     }
 
-    public IActionResult OnGetTree(string path = "")
+    public async Task<IActionResult> OnGetTreeAsync(string path = "")
     {
         var view = _files.Browse("system", path);
         if (!view.Available) return BadRequest(new { error = view.Error });
+        // Everything the actions need to know about an entry, so an expanded entry offers the same menu
+        // as a row of the list. Shares come from the same short-lived snapshot the page itself uses.
+        var (_, samba) = await _navigation.GetAsync(HttpContext.RequestAborted, false);
+        var pins = _folders.ListPins();
+        var parent = view.Relative.Trim('/');
+        var entries = view.Items.Select(item =>
+        {
+            var child = parent.Length == 0 ? item.Name : parent + "/" + item.Name;
+            var absolute = FileManagerService.Absolute(child);
+            var matching = item.IsDirectory
+                ? samba.Shares.FirstOrDefault(share => string.Equals(share.Path, absolute, StringComparison.Ordinal))
+                : null;
+            var pinned = item.IsDirectory && pins.Contains(absolute, StringComparer.Ordinal);
+            var managed = item.IsDirectory && _files.IsManaged(absolute);
+            return new
+            {
+                name = item.Name,
+                isDirectory = item.IsDirectory,
+                relative = child,
+                absolute,
+                size = item.IsDirectory ? "—" : FormatSize(item.Size),
+                modified = item.ModifiedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                writable = view.CanWrite,
+                pinned,
+                canPin = managed && !pinned,
+                shareName = matching is not null && matching.Managed ? matching.Name : "",
+                canShare = matching is null && managed,
+                canEnable = item.IsDirectory && _files.CanEnable(absolute) && !managed
+            };
+        }).ToArray();
         return new JsonResult(new
         {
             path = view.Relative,
@@ -228,6 +261,7 @@ public sealed class FilesModel : PageModel
             // Names only: the expanded tree lists a folder's files so they can be highlighted
             // and opened. Nothing here changes what the server lets the user do with them.
             files = view.Items.Where(x => !x.IsDirectory).Select(x => x.Name),
+            entries,
             canManage = view.CanWrite,
             canEnable = view.CanEnable
         });
@@ -726,7 +760,8 @@ public sealed class FilesModel : PageModel
 
     private IActionResult Back() => RedirectToPage(new
     {
-        path = IsMyFolders ? FolderHome : (string.IsNullOrEmpty(Path) ? "/" : Path)
+        path = !string.IsNullOrEmpty(Return) ? Return
+            : IsMyFolders ? FolderHome : (string.IsNullOrEmpty(Path) ? "/" : Path)
     });
 
     private static string Act(Action action, string success)

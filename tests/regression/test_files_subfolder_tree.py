@@ -45,23 +45,44 @@ class ExpandedFolderTree(unittest.TestCase):
     def test_icons_share_the_main_row_colour_rule(self):
         panel=source('YrmPanel/wwwroot/css/panel.css')
         self.assertIn('.explorer-name .ui-icon, .fm-tree-node-header .ui-icon {color:#6db9ec;',panel)
-    def test_a_click_highlights_but_never_joins_the_file_selection(self):
+    def test_entries_of_an_expanded_folder_are_rows_for_files_actions(self):
         js=source('YrmPanel/wwwroot/js/v1-tree-navigation.js')
-        self.assertIn('function selectNode(header)',js)
-        self.assertIn("target.closest('.fm-inline-preview .fm-tree-node-header')",js)
-        self.assertIn("event.key === 'Escape'",js)
-        self.assertIn("matches('.fm-inline-preview a[data-fm-tree-folder]')",js)
-        # Highlight only: file operations act on direct children of the current folder.
+        self.assertIn('function describeRow(header, entry, parent)',js)
+        for needed in ('b10FileRow:','fmKind:','fmParent: parent','fmWritable:','fmPinned:','fmShare:','fmCanShare:'):
+            self.assertIn(needed,js)
+        # selection is files-actions.js's job; the tree keeps no selection of its own
+        self.assertNotIn('selectNode',js)
         self.assertNotIn('setFileSelection',js)
-        self.assertNotIn('data-b10-file-row',js)
+        actions=source('YrmPanel/wwwroot/js/files-actions.js')
+        self.assertIn('const parentOf = row => row.dataset.fmParent ?? currentRoute();',actions)
+        self.assertIn('// A selection never spans two folders',actions)
+        self.assertIn("url.searchParams.set('path', parent);",actions)
+        self.assertIn("url.searchParams.set('return', currentRoute());",actions)
+    def test_server_describes_entries_and_returns_to_the_view_the_user_was_in(self):
+        model=source('YrmPanel/Pages/Files.cshtml.cs')
+        self.assertIn('public async Task<IActionResult> OnGetTreeAsync(string path = "")',model)
+        for needed in ('entries,','canPin = managed && !pinned,','shareName = matching is not null && matching.Managed ? matching.Name : "",',
+                       'canShare = matching is null && managed,','writable = view.CanWrite,'):
+            self.assertIn(needed,model)
+        self.assertIn('[BindProperty(SupportsGet = true)] public string? Return { get; set; }',model)
+        self.assertIn('path = !string.IsNullOrEmpty(Return) ? Return',model)
+        shell=source('YrmPanel/wwwroot/js/panel.js')
+        self.assertIn('`&return=${encodeURIComponent(returnTo ??',shell)
+    def test_expanded_folders_survive_a_refresh_of_the_same_folder(self):
+        tree=source('YrmPanel/wwwroot/js/v1-tree-navigation.js')
+        for needed in ('const openPaths = new Set();','async function restoreOpen()','async function restoreNested(host)',
+                       "window.addEventListener('yrm-panel:files-view-updated'"):
+            self.assertIn(needed,tree)
+        shell=source('YrmPanel/wwwroot/js/panel.js')
+        self.assertEqual(shell.count("new Event('yrm-panel:files-view-updated')"),2)  # GET navigation and POST actions
     def test_files_are_listed_and_opened_by_the_existing_preview_script(self):
         model=source('YrmPanel/Pages/Files.cshtml.cs')
         self.assertIn('files = view.Items.Where(x => !x.IsDirectory).Select(x => x.Name),',model)
         tree=source('YrmPanel/wwwroot/js/v1-tree-navigation.js')
-        self.assertIn('function fileNode(dir, name, depth)',tree)
+        self.assertIn('function fileNode(entry, parent, depth)',tree)
         self.assertIn('async function loadChildren(path)',tree)
         self.assertNotIn('loadFolders',tree)
-        self.assertIn("open.dataset.openDir = dir;",tree)
+        self.assertIn("open.dataset.openDir = parent;",tree)
         files=source('YrmPanel/wwwroot/js/v1-files.js')
         self.assertIn('async function showFile(name, dir = null)',files)
         self.assertIn("target.getAttribute('data-open-dir')",files)

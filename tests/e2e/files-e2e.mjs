@@ -22,6 +22,7 @@ async function check(name, action) {
     failures.push(name);
     console.log('FAIL:', name, '\n      ', String(error?.message ?? error).split('\n')[0]);
     try { await page?.screenshot({ path: path.join(OUT, name.replace(/\W+/g, '_') + '.png') }); } catch { /* best effort */ }
+    // A failed check must not leave a modal open: it would block every check that follows.
     try { await page?.evaluate(() => document.querySelectorAll('dialog[open]').forEach(d => d.close())); } catch { /* best effort */ }
   }
 }
@@ -371,16 +372,65 @@ await check('Properties and Rename open their dialogs from the menu', async () =
   assert((await page.locator('#file-action-title').textContent()).trim() === 'Rename alpha', 'rename dialog title');
   await page.keyboard.press('Escape');
 });
-await check('Pin to Quick Access from the menu reaches the server and Unpin undoes it', async () => {
+const entryOf = name => page.locator(`.fm-tree-node-header[data-fm-name="${name}"]`);
+const expand = async name => {
+  const row = rowFor(name);
+  if ((await row.getAttribute('aria-expanded')) !== 'true') await row.locator('[data-fm-expand]').first().click();
+  await page.waitForSelector(`tr[data-b10-filename="${name}"][aria-expanded="true"] + tr.fm-tree-preview-row .fm-tree-node-header`);
+};
+await check('Pin to Quick Access from the menu reaches the server, keeps expanded folders open, and Unpin undoes it', async () => {
+  await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
+  await page.waitForSelector('tr[data-b10-file-row]');
+  await expand('beta');
   await rowFor('alpha').click({ button: 'right' });
   const first = await menuItems();
   if (!first.includes('Pin to Quick Access')) { await page.keyboard.press('Escape'); return; } // not managed in this environment
   await page.locator('.fm-menu [data-fm-action="pin"]').click();
   await page.waitForFunction(() => document.querySelector('.yrm-b10-quick-links')?.textContent.includes('alpha'), null, { timeout: 8000 });
+  // the refresh must not collapse what the user had opened
+  await page.waitForSelector('tr[data-b10-filename="beta"][aria-expanded="true"] + tr.fm-tree-preview-row .fm-tree-node-header[data-fm-name="b.txt"]', { timeout: 8000 });
   await rowFor('alpha').click({ button: 'right' });
   assert((await menuItems()).includes('Unpin shortcut'), 'the pinned folder does not offer Unpin');
   await page.locator('.fm-menu [data-fm-action="pin"]').click();
   await page.waitForFunction(() => !(document.querySelector('.yrm-b10-quick-links')?.textContent.includes('alpha')), null, { timeout: 8000 });
+});
+
+await check('Entries of an expanded folder are rows with the same menu as the list', async () => {
+  await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
+  await page.waitForSelector('tr[data-b10-file-row]');
+  await expand('beta');
+  await entryOf('b.txt').click({ button: 'right' });
+  const file = await menuItems();
+  for (const need of ['Open', 'Download', 'Copy To...', 'Move To...', 'Rename', 'Copy path', 'Delete', 'Properties'])
+    assert(file.includes(need), `an expanded file's menu lacks ${need}: ${file.join(', ')}`);
+  await page.keyboard.press('Escape');
+  await entryOf('inner-folder').click({ button: 'right' });
+  const folder = await menuItems();
+  for (const need of ['Open', 'Rename', 'Move To...', 'Delete', 'Properties'])
+    assert(folder.includes(need), `an expanded folder's menu lacks ${need}: ${folder.join(', ')}`);
+  await page.keyboard.press('Escape');
+  // a selection never spans two folders: choosing a list row after an expanded entry starts over
+  await entryOf('b.txt').click();
+  await rowFor('alpha').click({ modifiers: ['Control'] });
+  assert(await page.locator('.is-selected').count() === 1, 'a selection spans two folders');
+});
+await check('Renaming an entry inside an expanded folder acts in that folder, returns here and keeps it expanded', async () => {
+  await page.goto(BASE + '/Files?path=' + encodeURIComponent(FIXTURE_REL));
+  await page.waitForSelector('tr[data-b10-file-row]');
+  await expand('beta');
+  const here = await page.locator('.fm-explorer').getAttribute('data-files-current-path');
+  const rename = async (from, to) => {
+    await entryOf(from).click({ button: 'right' });
+    await page.locator('.fm-menu [data-fm-action="rename"]').click();
+    await page.waitForSelector('#file-action-dialog[open]');
+    await page.locator('#file-action-value').fill(to);
+    await page.locator('#file-action-form button[type="submit"]').click();
+    await page.waitForSelector(`.fm-tree-node-header[data-fm-name="${to}"]`, { timeout: 8000 });
+  };
+  await rename('b.txt', 'b-renamed.txt');
+  assert((await page.locator('.fm-explorer').getAttribute('data-files-current-path')) === here, 'the view moved into the nested folder');
+  assert((await rowFor('beta').getAttribute('aria-expanded')) === 'true', 'the folder collapsed after the action');
+  await rename('b-renamed.txt', 'b.txt');
 });
 
 // ---------- HTTP behaviour with the logged-in session -------------------

@@ -1,8 +1,9 @@
-/* Files folder navigation: immediate chevron expand, static folder icon.
-   Clicking a folder or file in an expanded folder highlights it; double-click opens it
-   without a fixed delay (folders navigate, files preview or download).
-   Folder labels carry data-fm-href instead of href, so hovering never shows a
-   browser status-bar URL; the desktop shell performs the navigation. */
+/* Files folder tree: immediate chevron expand, static folder icon.
+   Entries of an expanded folder are rows like any other: they carry the same data-fm-* state, so
+   files-actions.js selects them and offers the same actions. Double-click opens them without a fixed
+   delay (folders navigate, files preview or download). Folder labels carry data-fm-href instead of
+   href, so hovering never shows a browser status-bar URL; the desktop shell performs the navigation.
+   Expanded folders stay expanded when the same folder is refreshed (an action ran, or a reload). */
 (() => {
   'use strict';
   const cache = new Map();
@@ -13,7 +14,7 @@
     if (library) url.searchParams.set('nav', 'library');
     return url.pathname + url.search;
   };
-  // The children of a folder: its sub-folders and the names of its files.
+  // The children of a folder: entries (folders first) with everything the actions need to know.
   async function loadChildren(path) {
     const cached = cache.get(path);
     if (cached && Date.now() - cached.at < 6000) return cached.children;
@@ -27,10 +28,14 @@
       const data = await response.json();
       if (!Array.isArray(data?.folders)) throw new Error('Invalid folder response.');
       const usable = name => typeof name === 'string' && name !== '' && name !== '.' && name !== '..';
-      const folders = (Array.isArray(data.folderNodes) ? data.folderNodes : data.folders.map(name => ({name})))
-        .filter(item => item && usable(item.name));
-      const files = (Array.isArray(data.files) ? data.files : []).filter(usable);
-      const children = {folders, files};
+      const base = path ? path.replace(/\/$/, '') + '/' : '';
+      const entries = (Array.isArray(data.entries) ? data.entries : [
+        ...data.folders.map(name => ({name, isDirectory: true})),
+        ...(Array.isArray(data.files) ? data.files : []).map(name => ({name, isDirectory: false}))])
+        .filter(entry => entry && usable(entry.name))
+        .map(entry => ({relative: base + entry.name, absolute: '', size: '', modified: '', writable: false,
+          pinned: false, canPin: false, shareName: '', canShare: false, canEnable: false, ...entry}));
+      const children = {entries};
       cache.set(path, {children, at:Date.now()});
       if (cache.size > 64) cache.delete(cache.keys().next().value);
       return children;
@@ -38,15 +43,32 @@
     pendingLoads.set(path, task);
     try {return await task;} finally {if(pendingLoads.get(path) === task) pendingLoads.delete(path);}
   }
+  // The state files-actions.js reads from a row, for an entry of an expanded folder. `parent` is the
+  // folder the entry lives in: every action runs with it as the working folder.
+  function describeRow(header, entry, parent) {
+    const flag = value => value ? '1' : '0';
+    Object.assign(header.dataset, {
+      b10FileRow: '', b10Filename: entry.name, fmKind: entry.isDirectory ? 'dir' : 'file', fmName: entry.name,
+      fmRel: entry.relative, fmAbs: entry.absolute, fmParent: parent,
+      fmType: entry.isDirectory ? 'Folder' : 'File', fmSize: entry.size || '—', fmModified: entry.modified || '—',
+      fmCopy: '1', fmWritable: flag(entry.writable), fmDeletable: flag(entry.writable),
+      fmPinned: flag(entry.pinned), fmCanPin: flag(entry.canPin), fmShare: entry.shareName || '',
+      fmCanShare: flag(entry.canShare), fmCanEnable: flag(entry.canEnable)
+    });
+    header.setAttribute('aria-selected', 'false');
+  }
   // depth 1 = directly below the expanded folder row; the CSS indents each level inside the row,
   // so the hover/selection band always spans the full width of the table.
-  function folderNode(path, name, library, depth) {
+  function folderNode(entry, parent, library, depth) {
+    const path = entry.relative;
+    const name = entry.name;
     const wrapper = document.createElement('div');
     wrapper.className = 'fm-tree-node';
     wrapper.dataset.fmTreeRoot = path;
     const header = document.createElement('div');
     header.className = 'fm-tree-node-header';
     header.style.setProperty('--tree-depth', String(depth));
+    describeRow(header, entry, parent);
     const link = document.createElement('a');
     link.className = 'fm-location-link fm-tree-folder';
     link.dataset.fmHref = route(path, library);
@@ -86,12 +108,14 @@
   }
   // A file has no arrow; a spacer keeps its icon aligned with the folders around it.
   // Opening is owned by the Files preview script (double-click on [data-open-file]).
-  function fileNode(dir, name, depth) {
+  function fileNode(entry, parent, depth) {
+    const name = entry.name;
     const wrapper = document.createElement('div');
     wrapper.className = 'fm-tree-node';
     const header = document.createElement('div');
     header.className = 'fm-tree-node-header';
     header.style.setProperty('--tree-depth', String(depth));
+    describeRow(header, entry, parent);
     const spacer = document.createElement('span');
     spacer.className = 'fm-tree-spacer';
     spacer.setAttribute('aria-hidden', 'true');
@@ -99,7 +123,7 @@
     open.type = 'button';
     open.className = 'fm-file-open fm-tree-file';
     open.dataset.openFile = name;
-    open.dataset.openDir = dir;
+    open.dataset.openDir = parent;
     const icon = document.createElement('span');
     icon.className = 'explorer-file-icon';
     icon.setAttribute('aria-hidden', 'true');
@@ -113,23 +137,33 @@
   }
   function renderChildren(host, children, path, library, depth) {
     host.replaceChildren();
-    const base = path ? path.replace(/\/$/, '') + '/' : '';
-    for (const item of children.folders) host.append(folderNode(base + item.name, item.name, library, depth));
-    for (const name of children.files) host.append(fileNode(path, name, depth));
+    for (const entry of children.entries.filter(item => item.isDirectory)) host.append(folderNode(entry, path, library, depth));
+    for (const entry of children.entries.filter(item => !item.isDirectory)) host.append(fileNode(entry, path, depth));
   }
-  // A sub-folder or file of an expanded folder is highlighted by a single click; a double-click or
-  // Enter opens it. It is a shortcut only: the server acts on direct children of the current
-  // folder, so these entries never join the file selection behind the toolbar.
-  let selectedNode = null;
-  function selectNode(header) {
-    if (selectedNode && selectedNode !== header) {
-      selectedNode.classList.remove('is-selected');
-      selectedNode.querySelector('[data-fm-tree-folder],[data-open-file]')?.removeAttribute('aria-current');
+  // Expanded folders survive a refresh of the same folder. The set holds the paths that are open
+  // under the folder being shown; moving to another folder starts it over.
+  const openPaths = new Set();
+  let openFor = null;
+  const currentFolder = () => document.querySelector('.fm-explorer')?.dataset.filesCurrentPath ?? '';
+  function remember(path, open) {
+    if (openFor === null) openFor = currentFolder();
+    if (open) { openPaths.add(path); return; }
+    for (const known of Array.from(openPaths)) if (known === path || known.startsWith(path + '/')) openPaths.delete(known);
+  }
+  async function restoreNested(host) {
+    for (const expand of host.querySelectorAll(':scope > .fm-tree-node > .fm-tree-node-header [data-fm-expand]')) {
+      if (openPaths.has(expand.dataset.fmTreePath || '') && expand.getAttribute('aria-expanded') !== 'true')
+        await toggleNested(expand);
     }
-    selectedNode = header;
-    if (!header) return;
-    header.classList.add('is-selected');
-    header.querySelector('[data-fm-tree-folder],[data-open-file]')?.setAttribute('aria-current', 'true');
+  }
+  async function restoreOpen() {
+    const here = currentFolder();
+    if (openFor !== here) { openPaths.clear(); openFor = here; return; }
+    if (!openPaths.size) return;
+    cache.clear(); // the folder just changed on disk; listings from before may be stale
+    for (const row of document.querySelectorAll('tr[data-fm-inline-root]')) {
+      if (openPaths.has(row.dataset.fmInlineRoot) && row.getAttribute('aria-expanded') !== 'true') await toggleInline(row);
+    }
   }
   async function toggleInline(row) {
     const path = row.dataset.fmInlineRoot;
@@ -137,12 +171,10 @@
     const expanding = row.getAttribute('aria-expanded') !== 'true';
     row.setAttribute('aria-expanded', String(expanding));
     row.querySelector(':scope > .explorer-name [data-fm-expand]')?.setAttribute('aria-expanded', String(expanding));
+    remember(path, expanding);
     let preview = row.nextElementSibling;
     if (!expanding) {
-      if (preview?.classList.contains('fm-tree-preview-row')) {
-        if (selectedNode && preview.contains(selectedNode)) selectNode(null);
-        preview.hidden = true;
-      }
+      if (preview?.classList.contains('fm-tree-preview-row')) preview.hidden = true;
       return;
     }
     if (preview?.classList.contains('fm-tree-preview-row') && preview.dataset.loaded === '1') {
@@ -151,8 +183,7 @@
     }
     try {
       const children = await loadChildren(path);
-      if (!row.isConnected || row.getAttribute('aria-expanded') !== 'true' ||
-          !(children.folders.length || children.files.length)) return;
+      if (!row.isConnected || row.getAttribute('aria-expanded') !== 'true' || !children.entries.length) return;
       preview = row.nextElementSibling;
       if (!preview?.classList.contains('fm-tree-preview-row')) {
         preview = document.createElement('tr');
@@ -168,6 +199,7 @@
       renderChildren(preview.querySelector('.fm-inline-preview'), children, path, false, 1);
       preview.dataset.loaded = '1';
       preview.hidden = false;
+      await restoreNested(preview.querySelector('.fm-inline-preview'));
     } catch (error) {
       row.setAttribute('aria-expanded', 'false');
       row.querySelector(':scope > .explorer-name [data-fm-expand]')?.setAttribute('aria-expanded', 'false');
@@ -180,6 +212,7 @@
     if (!children) return;
     const expanding = expand.getAttribute('aria-expanded') !== 'true';
     expand.setAttribute('aria-expanded', String(expanding));
+    remember(expand.dataset.fmTreePath || '', expanding);
     children.hidden = !expanding;
     if (!expanding || children.dataset.loaded === '1') {
       if (expanding && children.dataset.hasChildren === '0') children.hidden = true;
@@ -190,10 +223,11 @@
       if (!children.isConnected || expand.getAttribute('aria-expanded') !== 'true') return;
       const depth = Number(wrapper.querySelector(':scope > .fm-tree-node-header')?.style.getPropertyValue('--tree-depth') || 1) + 1;
       renderChildren(children, loaded, expand.dataset.fmTreePath || '', false, depth);
-      const any = loaded.folders.length > 0 || loaded.files.length > 0;
+      const any = loaded.entries.length > 0;
       children.dataset.hasChildren = any ? '1' : '0';
       children.dataset.loaded = '1';
       children.hidden = !any;
+      await restoreNested(children);
     } catch (error) {
       expand.setAttribute('aria-expanded', 'false');
       children.hidden = true;
@@ -205,10 +239,7 @@
   // existing desktop shell and Files selection handler already own them.
   document.addEventListener('click', event => {
     const target = event.target instanceof Element ? event.target : null;
-    if (!target?.closest('.fm-explorer')) { selectNode(null); return; }
-    const header = target.closest('.fm-inline-preview .fm-tree-node-header');
-    if (header && event.button === 0 && !target.closest('[data-fm-expand]')) selectNode(header);
-    else if (!header) selectNode(null);
+    if (!target?.closest('.fm-explorer')) return;
     const expand = target.closest('[data-fm-expand]');
     if (expand) {
       if (event.button !== 0) return;
@@ -243,16 +274,6 @@
       if (!navigateFolder(anchor)) anchor.click();
     } finally {
       delete anchor.dataset.fmNavigate;
-    }
-  }, true);
-  // Keyboard: Space highlights the focused sub-folder, Escape clears the highlight.
-  document.addEventListener('keydown', event => {
-    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return;
-    const target = event.target instanceof Element ? event.target : null;
-    if (event.key === 'Escape') selectNode(null);
-    else if (event.key === ' ' && target?.matches('.fm-inline-preview a[data-fm-tree-folder]')) {
-      event.preventDefault();
-      selectNode(target.closest('.fm-tree-node-header'));
     }
   }, true);
   // Keyboard parity with the removed href: Enter opens the selected folder or file.
@@ -294,6 +315,7 @@
     }
   }, true);
   window.addEventListener('yrm-panel:files-data-changed', () => cache.clear());
+  window.addEventListener('yrm-panel:files-view-updated', () => { void restoreOpen(); });
   document.addEventListener('click', event => {
     if (event.target instanceof Element && event.target.closest('.fm-history-refresh')) cache.clear();
   });

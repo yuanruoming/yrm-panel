@@ -857,7 +857,7 @@
   // Rename / copy / move / share dialogs are opened by files-actions.js through one event,
   // so they are not tied to per-row buttons. `names` is the whole selection for a bulk copy/move.
   window.addEventListener("yrm-panel:file-action", event => {
-    const {kind, name = "", source = "", names = [], absolute = ""} = event.detail || {};
+    const {kind, name = "", source = "", names = [], absolute = "", path: workFolder, returnTo} = event.detail || {};
     if (kind === "share") {
       const full = $("share-absolute-folder");
       if (full) full.value = absolute;
@@ -871,10 +871,13 @@
     if (!rename && !copy && kind !== "move") return;
     const form = $("file-action-form");
     if (!form) return;
-    const path = form.dataset.currentRoute || "";
+    // The entries live in workFolder (an expanded folder may differ from the one on screen); the
+    // server returns to the view the user was in.
+    const path = workFolder ?? (form.dataset.currentRoute || "");
     const bulk = !rename && (names.length > 1 || !!source);
     const handler = rename ? "Rename" : bulk ? (copy ? "BulkCopy" : "BulkMove") : (copy ? "Copy" : "Move");
-    form.action = `/Files?handler=${handler}&path=${encodeURIComponent(path)}`;
+    form.action = `/Files?handler=${handler}&path=${encodeURIComponent(path)}` +
+      `&return=${encodeURIComponent(returnTo ?? (form.dataset.currentRoute || ""))}`;
     form.querySelectorAll("[data-bulk-selected-name]").forEach(field => field.remove());
     if (bulk) for (const selected of names) {
       const field = document.createElement("input");
@@ -1238,6 +1241,7 @@
       activeUrl = url;
       saveWorkspaceRoute(url);
       if (!reconcileWorkspaceView(remotePage,url)) page.replaceChildren(fragment);
+      if (canonicalPath(url.split('?')[0]) === '/Files') window.dispatchEvent(new Event('yrm-panel:files-view-updated'));
       harvestNotices(page);
       scanDdnsFailures();
       if (!sameWorkspace) windowScroll.scrollTop = 0;
@@ -1449,8 +1453,10 @@
       const fragment = document.createDocumentFragment();
       for (const node of Array.from(remotePage.childNodes)) fragment.append(document.importNode(node, true));
       if (!reconcileWorkspaceView(remotePage,targetUrl)) page.replaceChildren(fragment);
-      if (canonicalPath(submittedUrl.split('?')[0]) === '/Files')
+      if (canonicalPath(submittedUrl.split('?')[0]) === '/Files') {
         window.dispatchEvent(new Event('yrm-panel:files-data-changed'));
+        window.dispatchEvent(new Event('yrm-panel:files-view-updated'));
+      }
       harvestNotices(page);
       scanDdnsFailures();
       // Refresh Files on next opening after any disk mount-state change.

@@ -1,8 +1,11 @@
 /* Files actions: one selection model and one action list, used in three places.
    The same actions are toolbar buttons, the toolbar's More menu and the right-click menu.
    Rows render no menu of their own; they only carry data-fm-* attributes (kind, path, rights,
-   share and pin state) that this script reads. Dialogs that already exist (rename/copy/move,
-   share) are opened through the yrm-panel:file-action event owned by panel.js. */
+   share and pin state) that this script reads. That holds for the rows of the list and for the
+   entries of an expanded folder alike: an entry's data-fm-parent is the folder it lives in, and
+   every action runs with that folder as its working folder. A selection never spans two folders.
+   Dialogs that already exist (rename/copy/move, share) are opened through the yrm-panel:file-action
+   event owned by panel.js. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -11,6 +14,9 @@
   const rows = () => Array.from(document.querySelectorAll('.fm-explorer [data-b10-file-row]'));
   const flag = (row, key) => row.dataset[key] === '1';
   const currentRoute = () => explorer()?.dataset.filesCurrentPath || '';
+  // The folder a row lives in: the one on screen for the list, data-fm-parent for expanded entries.
+  const parentOf = row => row.dataset.fmParent ?? currentRoute();
+  const sameFolder = (a, b) => parentOf(a) === parentOf(b);
 
   // ---- selection: one row = one item. Ctrl toggles, Shift selects a range, Ctrl+A selects all.
   const chosen = new Set();
@@ -41,11 +47,12 @@
     {id: 'copypath', group: 3, label: 'Copy path', when: one,
       run: list => { const path = list[0].dataset.fmAbs || ''; if (path) void navigator.clipboard?.writeText(path).catch(() => {}); }},
     {id: 'share', group: 3, label: 'Share', when: list => one(list) && flag(list[0], 'fmCanShare'),
-      run: list => window.dispatchEvent(new CustomEvent('yrm-panel:file-action', {detail: {kind: 'share', name: list[0].dataset.fmName, absolute: list[0].dataset.b10Absolute || ''}}))},
+      run: list => window.dispatchEvent(new CustomEvent('yrm-panel:file-action', {detail: {kind: 'share', name: list[0].dataset.fmName,
+        absolute: list[0].dataset.b10Absolute || (list[0].dataset.fmParent !== undefined ? list[0].dataset.fmAbs : '')}}))},
     {id: 'unshare', group: 3, label: 'Stop sharing', when: list => one(list) && !!list[0].dataset.fmShare,
       run: list => submitWith('[data-fm-unshare-form]', 'name', list[0].dataset.fmShare)},
     {id: 'enable', group: 3, label: 'Request management', when: list => one(list) && flag(list[0], 'fmCanEnable'),
-      run: list => submitWith('[data-fm-enable-form]', 'name', list[0].dataset.fmName)},
+      run: list => submitWith('[data-fm-enable-form]', 'name', list[0].dataset.fmName, parentOf(list[0]))},
     {id: 'delete', group: 4, label: 'Delete', danger: true, button: '[data-b10-file-delete]',
       when: list => all(list, row => flag(row, 'fmDeletable')), run: deleteSelection},
     {id: 'props', group: 5, label: 'Properties', when: one, run: list => showProperties(list[0])}
@@ -63,9 +70,17 @@
       row.querySelector('[data-open-file]')?.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true, view: window}));
     }
   }
-  function submitWith(selector, field, value) {
+  // A form posts to the folder the entries live in and comes back to the view on screen.
+  function workIn(form, parent) {
+    const url = new URL(form.getAttribute('action') || location.pathname, location.origin);
+    url.searchParams.set('path', parent);
+    url.searchParams.set('return', currentRoute());
+    form.setAttribute('action', url.pathname + url.search);
+  }
+  function submitWith(selector, field, value, parent = null) {
     const form = document.querySelector(selector);
     if (!(form instanceof HTMLFormElement)) return;
+    if (parent !== null) workIn(form, parent);
     const input = form.elements.namedItem(field);
     if (input instanceof HTMLInputElement) input.value = value || '';
     form.requestSubmit();
@@ -87,7 +102,7 @@
       link.hidden = true;
       link.setAttribute('data-yrm-transient', '');
       link.download = '';
-      link.href = '/Files?handler=Download&path=' + encodeURIComponent(currentRoute()) +
+      link.href = '/Files?handler=Download&path=' + encodeURIComponent(parentOf(file)) +
         '&name=' + encodeURIComponent(file.dataset.b10Filename || '');
       document.body.append(link);
       link.click();
@@ -96,12 +111,14 @@
     }
     const form = document.querySelector('[data-bulk-download-form]');
     if (!(form instanceof HTMLFormElement)) return;
+    workIn(form, parentOf(list[0]));
     addNames(form, list);
     form.requestSubmit();
   }
   function deleteSelection(list) {
     const form = document.querySelector('[data-bulk-delete-form]');
     if (!(form instanceof HTMLFormElement)) return;
+    workIn(form, parentOf(list[0]));
     addNames(form, list);
     form.dataset.confirm = `Permanently delete ${list.length} selected item${list.length === 1 ? '' : 's'}? This cannot be undone.`;
     form.requestSubmit();
@@ -109,7 +126,8 @@
   function fileDialog(kind, list) {
     const first = list[0];
     window.dispatchEvent(new CustomEvent('yrm-panel:file-action', {detail: {
-      kind, name: first.dataset.fmName || '', source: first.dataset.b10Absolute || '', names: bulkNames(list)}}));
+      kind, name: first.dataset.fmName || '', source: first.dataset.b10Absolute || '', names: bulkNames(list),
+      path: parentOf(first), returnTo: currentRoute()}}));
   }
   function showProperties(row) {
     const values = {name: row.dataset.fmName, path: row.dataset.fmAbs, type: row.dataset.fmType,
@@ -142,8 +160,12 @@
     if (menu && current.length === 0) closeMenu();
   }
   function select(row, {toggle = false, range = false, add = false} = {}) {
-    const list = rows();
-    if (!row || !list.includes(row)) { chosen.clear(); anchor = null; refresh(); return; }
+    const everything = rows();
+    if (!row || !everything.includes(row)) { chosen.clear(); anchor = null; refresh(); return; }
+    // A selection never spans two folders: choosing an entry of another folder starts over.
+    const held = selectedRows();
+    if (held.length && !sameFolder(held[0], row)) { chosen.clear(); anchor = null; }
+    const list = everything.filter(candidate => sameFolder(candidate, row));
     if (range && anchor && list.includes(anchor)) {
       if (!add) chosen.clear();
       const a = list.indexOf(anchor), b = list.indexOf(row);
@@ -281,7 +303,7 @@
     }
     if (target?.closest('input,textarea,select,[contenteditable="true"]')) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a') {
-      const list = rows();
+      const list = rows().filter(row => row.dataset.fmParent === undefined); // the list, not expanded entries
       if (!list.length) return;
       event.preventDefault();
       chosen.clear();
